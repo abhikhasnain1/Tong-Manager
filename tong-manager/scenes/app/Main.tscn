@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://buis2hblj1jby"]
+
+[ext_resource type="Script" uid="uid://cwqltcaf47scn" path="res://scripts/app/main.gd" id="1_idqxm"]
+
+[node name="Main" type="Node" unique_id=673229563]
+script = ExtResource("1_idqxm")
+
+[node name="AutoloadBootVerifier" type="Node" parent="." unique_id=800658645]
+
+[node name="SceneRoot" type="Node" parent="." unique_id=1289770434]
+
+[node name="CurrentScreen" type="Node" parent="SceneRoot" unique_id=1667474581]
