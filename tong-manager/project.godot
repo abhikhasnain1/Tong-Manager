@@ -15,6 +15,16 @@ run/main_scene="uid://buis2hblj1jby"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
+[autoload]
+
+GameState="*uid://bydwygjcwbl50"
+EventBus="*uid://dhf7eltoufsbj"
+SceneRouter="*uid://r0rvd4m6v0yo"
+Catalog="*uid://bm62jpv08gbl3"
+AudioBus="*uid://cf1eo6ks7wc16"
+SaveService="*uid://cx2mahcp8byxp"
+CursorService="*uid://38r3mthc8i8m"
+
 [display]
 
 window/stretch/mode="canvas_items"
