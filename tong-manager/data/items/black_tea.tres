@@ -1,0 +1,13 @@
+[gd_resource type="Resource" format=3 uid="uid://bh64kthgjakob"]
+
+[ext_resource type="Script" uid="uid://davlrsy31k3cs" path="res://scripts/data/item_def.gd" id="1_item_def"]
+
+[resource]
+script = ExtResource("1_item_def")
+id = &"black_tea"
+display_name_key = "item.black_tea.name"
+category = &"kettle_base"
+unit = &"g"
+stack_size = 999
+cost = 1
+sell_price = 0

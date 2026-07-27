@@ -1,0 +1,13 @@
+[gd_resource type="Resource" format=3 uid="uid://b2kg6o5awfc1t"]
+
+[ext_resource type="Script" uid="uid://davlrsy31k3cs" path="res://scripts/data/item_def.gd" id="1_item_def"]
+
+[resource]
+script = ExtResource("1_item_def")
+id = &"sugar"
+display_name_key = "item.sugar.name"
+category = &"cup_relish"
+unit = &"portion"
+stack_size = 999
+cost = 1
+sell_price = 0

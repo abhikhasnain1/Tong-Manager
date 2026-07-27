@@ -1,0 +1,13 @@
+[gd_resource type="Resource" format=3 uid="uid://dlccwmvsw3dqu"]
+
+[ext_resource type="Script" uid="uid://davlrsy31k3cs" path="res://scripts/data/item_def.gd" id="1_item_def"]
+
+[resource]
+script = ExtResource("1_item_def")
+id = &"biscuits"
+display_name_key = "item.biscuits.name"
+category = &"ready_item"
+unit = &"piece"
+stack_size = 99
+cost = 2
+sell_price = 4

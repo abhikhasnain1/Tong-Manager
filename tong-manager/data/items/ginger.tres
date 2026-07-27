@@ -1,0 +1,13 @@
+[gd_resource type="Resource" format=3 uid="uid://cibaxrow6qaxr"]
+
+[ext_resource type="Script" uid="uid://davlrsy31k3cs" path="res://scripts/data/item_def.gd" id="1_item_def"]
+
+[resource]
+script = ExtResource("1_item_def")
+id = &"ginger"
+display_name_key = "item.ginger.name"
+category = &"cup_relish"
+unit = &"piece"
+stack_size = 999
+cost = 2
+sell_price = 0
