@@ -1,0 +1,13 @@
+[gd_resource type="Resource" format=3 uid="uid://bf675np6v2fpa"]
+
+[ext_resource type="Script" uid="uid://cv5j6hlbhwudx" path="res://scripts/data/tool_def.gd" id="1_tool_def"]
+
+[resource]
+script = ExtResource("1_tool_def")
+tray_capacity = 6
+bucket_capacity = 6
+kettle_capacity_ml = 1500
+cup_volume_ml = 250
+burner_count = 2
+tray_grid_size = Vector2i(3, 2)
+tray_table_footprint = Vector2i(3, 2)
