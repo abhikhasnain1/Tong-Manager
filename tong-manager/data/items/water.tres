@@ -9,5 +9,3 @@ display_name_key = "item.water.name"
 category = &"kettle_base"
 unit = &"ml"
 stack_size = 999
-cost = 0
-sell_price = 0
