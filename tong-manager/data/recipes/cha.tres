@@ -1,0 +1,13 @@
+[gd_resource type="Resource" format=3 uid="uid://q4ebow7jmwkx"]
+
+[ext_resource type="Script" uid="uid://b3psweqn5km2p" path="res://scripts/data/recipe_def.gd" id="1_recipe_def"]
+
+[resource]
+script = ExtResource("1_recipe_def")
+id = &"cha"
+display_name_key = "recipe.cha.name"
+base_item_ids = Array[StringName]([&"water", &"black_tea"])
+relish_item_ids = Array[StringName]([&"sugar"])
+output_item_id = &"cha"
+price = 6
+unlocked_by_default = true

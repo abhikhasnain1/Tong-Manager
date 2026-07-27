@@ -1,0 +1,13 @@
+[gd_resource type="Resource" format=3 uid="uid://dgsd4vhh7brs7"]
+
+[ext_resource type="Script" uid="uid://b3psweqn5km2p" path="res://scripts/data/recipe_def.gd" id="1_recipe_def"]
+
+[resource]
+script = ExtResource("1_recipe_def")
+id = &"dudh_cha"
+display_name_key = "recipe.dudh_cha.name"
+base_item_ids = Array[StringName]([&"water", &"black_tea"])
+relish_item_ids = Array[StringName]([&"condensed_milk", &"sugar"])
+output_item_id = &"dudh_cha"
+price = 8
+unlocked_by_default = true
