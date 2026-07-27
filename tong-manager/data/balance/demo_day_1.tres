@@ -10,13 +10,13 @@ customer_count_min = 4
 customer_count_max = 5
 starting_cash = 100
 starting_inventory = {
-&"water": 1500,
+&"banana": 4,
+&"biscuits": 6,
 &"black_tea": 12,
-&"sugar": 12,
 &"condensed_milk": 8,
 &"ginger": 4,
-&"lemon": 4,
 &"honey": 4,
-&"banana": 4,
-&"biscuits": 6
+&"lemon": 4,
+&"sugar": 12,
+&"water": 1500
 }
