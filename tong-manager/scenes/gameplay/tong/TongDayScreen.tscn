@@ -1,0 +1,329 @@
+[gd_scene load_steps=21 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/tong/tong_day_screen.gd" id="1_screen"]
+[ext_resource type="Script" path="res://scripts/gameplay/tong/composition_guides.gd" id="2_guides"]
+[ext_resource type="Resource" path="res://data/balance/tool_level_1.tres" id="3_tools"]
+[ext_resource type="Resource" path="res://data/balance/demo_day_1.tres" id="4_day"]
+[ext_resource type="Texture2D" path="res://assets/art/backgrounds/tong_backdrop.png" id="5_backdrop"]
+[ext_resource type="Texture2D" path="res://assets/art/backgrounds/tong_frame_back.png" id="6_frame_back"]
+[ext_resource type="Texture2D" path="res://assets/art/backgrounds/tong_frame_front.png" id="7_frame_front"]
+[ext_resource type="Texture2D" path="res://assets/art/customers/customer_female_provisional.png" id="8_female"]
+[ext_resource type="Texture2D" path="res://assets/art/customers/customer_male_provisional.png" id="9_male"]
+[ext_resource type="Texture2D" path="res://assets/art/toolkit/stove.png" id="10_stove"]
+[ext_resource type="Texture2D" path="res://assets/art/toolkit/tray.png" id="11_tray"]
+[ext_resource type="Texture2D" path="res://assets/art/toolkit/kettle_side_provisional.png" id="12_kettle"]
+[ext_resource type="Texture2D" path="res://assets/art/toolkit/bucket_clean_provisional.png" id="13_bucket"]
+[ext_resource type="Texture2D" path="res://assets/art/toolkit/radio_front_provisional.png" id="14_radio"]
+[ext_resource type="Texture2D" path="res://assets/art/icons/banana_ready_provisional.png" id="15_banana"]
+[ext_resource type="Texture2D" path="res://assets/art/icons/biscuits_ready_provisional.png" id="16_biscuits"]
+[ext_resource type="Texture2D" path="res://assets/art/icons/condensed_milk_can_ready_provisional.png" id="17_milk"]
+[ext_resource type="Texture2D" path="res://assets/art/icons/sugar_can_ready_provisional.png" id="18_sugar"]
+[ext_resource type="Texture2D" path="res://assets/art/icons/tea_box_ready_provisional.png" id="19_tea_box"]
+[ext_resource type="Shader" path="res://assets/shaders/world_color_grade.gdshader" id="20_grade"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_grade"]
+shader = ExtResource("20_grade")
+
+[node name="TongDayScreen" type="Node2D"]
+script = ExtResource("1_screen")
+tool_def = ExtResource("3_tools")
+day_config = ExtResource("4_day")
+
+[node name="WorldRoot" type="Node2D" parent="."]
+unique_name_in_owner = true
+
+[node name="Backdrop" type="Sprite2D" parent="WorldRoot"]
+texture = ExtResource("5_backdrop")
+centered = false
+
+[node name="NeutralWorldTint" type="CanvasModulate" parent="WorldRoot"]
+color = Color(1, 1, 1, 1)
+
+[node name="FrameBack" type="Sprite2D" parent="WorldRoot"]
+z_index = 5
+texture = ExtResource("6_frame_back")
+centered = false
+
+[node name="CustomerLayer" type="Node2D" parent="WorldRoot"]
+z_index = 10
+
+[node name="CustomerQueueSlots" type="Node2D" parent="WorldRoot/CustomerLayer"]
+
+[node name="CustomerSlotLeft" type="Marker2D" parent="WorldRoot/CustomerLayer/CustomerQueueSlots" groups=["critical_interaction_anchor"]]
+position = Vector2(610, 510)
+
+[node name="CustomerSlotCenter" type="Marker2D" parent="WorldRoot/CustomerLayer/CustomerQueueSlots" groups=["critical_interaction_anchor"]]
+position = Vector2(960, 500)
+
+[node name="CustomerSlotRight" type="Marker2D" parent="WorldRoot/CustomerLayer/CustomerQueueSlots" groups=["critical_interaction_anchor"]]
+position = Vector2(1310, 510)
+
+[node name="CustomerFemaleProvisional" type="Sprite2D" parent="WorldRoot/CustomerLayer"]
+position = Vector2(720, 445)
+scale = Vector2(0.65, 0.65)
+texture = ExtResource("8_female")
+
+[node name="CustomerMaleProvisional" type="Sprite2D" parent="WorldRoot/CustomerLayer"]
+position = Vector2(1280, 445)
+scale = Vector2(0.62, 0.62)
+texture = ExtResource("9_male")
+
+[node name="FrameFront" type="Sprite2D" parent="WorldRoot"]
+z_index = 20
+texture = ExtResource("7_frame_front")
+centered = false
+
+[node name="ToolLayer" type="Node2D" parent="WorldRoot"]
+z_index = 30
+
+[node name="RadioStation" type="Node2D" parent="WorldRoot/ToolLayer"]
+position = Vector2(175, 350)
+
+[node name="Sprite" type="Sprite2D" parent="WorldRoot/ToolLayer/RadioStation"]
+scale = Vector2(0.32, 0.32)
+texture = ExtResource("14_radio")
+
+[node name="InteractionAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/RadioStation" groups=["critical_interaction_anchor"]]
+
+[node name="ReadyItemRail" type="Node2D" parent="WorldRoot/ToolLayer"]
+
+[node name="Banana" type="Sprite2D" parent="WorldRoot/ToolLayer/ReadyItemRail"]
+position = Vector2(350, 520)
+scale = Vector2(0.62, 0.62)
+texture = ExtResource("15_banana")
+
+[node name="BananaAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/ReadyItemRail" groups=["critical_interaction_anchor"]]
+position = Vector2(350, 520)
+
+[node name="TeaBox" type="Sprite2D" parent="WorldRoot/ToolLayer/ReadyItemRail"]
+position = Vector2(1590, 640)
+scale = Vector2(0.16, 0.16)
+texture = ExtResource("19_tea_box")
+
+[node name="TeaBoxAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/ReadyItemRail" groups=["critical_interaction_anchor"]]
+position = Vector2(1590, 640)
+
+[node name="SugarCan" type="Sprite2D" parent="WorldRoot/ToolLayer/ReadyItemRail"]
+position = Vector2(1735, 685)
+scale = Vector2(0.15, 0.15)
+texture = ExtResource("18_sugar")
+
+[node name="SugarAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/ReadyItemRail" groups=["critical_interaction_anchor"]]
+position = Vector2(1735, 685)
+
+[node name="CondensedMilkCan" type="Sprite2D" parent="WorldRoot/ToolLayer/ReadyItemRail"]
+position = Vector2(1645, 805)
+scale = Vector2(0.18, 0.18)
+texture = ExtResource("17_milk")
+
+[node name="CondensedMilkAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/ReadyItemRail" groups=["critical_interaction_anchor"]]
+position = Vector2(1645, 805)
+
+[node name="Biscuits" type="Sprite2D" parent="WorldRoot/ToolLayer/ReadyItemRail"]
+position = Vector2(1780, 800)
+scale = Vector2(0.16, 0.16)
+texture = ExtResource("16_biscuits")
+
+[node name="BiscuitsAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/ReadyItemRail" groups=["critical_interaction_anchor"]]
+position = Vector2(1780, 800)
+
+[node name="StoveStation" type="Node2D" parent="WorldRoot/ToolLayer"]
+position = Vector2(380, 925)
+
+[node name="Sprite" type="Sprite2D" parent="WorldRoot/ToolLayer/StoveStation"]
+scale = Vector2(0.457, 0.457)
+texture = ExtResource("10_stove")
+
+[node name="BurnerLeftAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/StoveStation" groups=["critical_interaction_anchor"]]
+position = Vector2(-155, -58)
+
+[node name="BurnerRightAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/StoveStation" groups=["critical_interaction_anchor"]]
+position = Vector2(155, -58)
+
+[node name="DialLeftAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/StoveStation" groups=["critical_interaction_anchor"]]
+position = Vector2(-65, 90)
+
+[node name="DialRightAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/StoveStation" groups=["critical_interaction_anchor"]]
+position = Vector2(65, 90)
+
+[node name="KettleStation" type="Node2D" parent="WorldRoot/ToolLayer"]
+position = Vector2(285, 800)
+z_index = 2
+
+[node name="Sprite" type="Sprite2D" parent="WorldRoot/ToolLayer/KettleStation"]
+scale = Vector2(0.48, 0.48)
+texture = ExtResource("12_kettle")
+
+[node name="InteractionAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/KettleStation" groups=["critical_interaction_anchor"]]
+
+[node name="SteamAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/KettleStation"]
+position = Vector2(5, -158)
+
+[node name="TrayStation" type="Node2D" parent="WorldRoot/ToolLayer"]
+position = Vector2(1210, 885)
+
+[node name="Sprite" type="Sprite2D" parent="WorldRoot/ToolLayer/TrayStation"]
+scale = Vector2(0.46, 0.46)
+texture = ExtResource("11_tray")
+
+[node name="InteractionAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/TrayStation" groups=["critical_interaction_anchor"]]
+
+[node name="InternalGrid3x2" type="Node2D" parent="WorldRoot/ToolLayer/TrayStation"]
+
+[node name="CupSlot0" type="Marker2D" parent="WorldRoot/ToolLayer/TrayStation/InternalGrid3x2" groups=["critical_interaction_anchor"]]
+position = Vector2(-142, -38)
+
+[node name="CupSlot1" type="Marker2D" parent="WorldRoot/ToolLayer/TrayStation/InternalGrid3x2" groups=["critical_interaction_anchor"]]
+position = Vector2(0, -38)
+
+[node name="CupSlot2" type="Marker2D" parent="WorldRoot/ToolLayer/TrayStation/InternalGrid3x2" groups=["critical_interaction_anchor"]]
+position = Vector2(142, -38)
+
+[node name="CupSlot3" type="Marker2D" parent="WorldRoot/ToolLayer/TrayStation/InternalGrid3x2" groups=["critical_interaction_anchor"]]
+position = Vector2(-142, 48)
+
+[node name="CupSlot4" type="Marker2D" parent="WorldRoot/ToolLayer/TrayStation/InternalGrid3x2" groups=["critical_interaction_anchor"]]
+position = Vector2(0, 48)
+
+[node name="CupSlot5" type="Marker2D" parent="WorldRoot/ToolLayer/TrayStation/InternalGrid3x2" groups=["critical_interaction_anchor"]]
+position = Vector2(142, 48)
+
+[node name="TableFootprint4x3" type="Node2D" parent="WorldRoot/ToolLayer/TrayStation"]
+
+[node name="TopLeft" type="Marker2D" parent="WorldRoot/ToolLayer/TrayStation/TableFootprint4x3"]
+position = Vector2(-220, -105)
+
+[node name="BottomRight" type="Marker2D" parent="WorldRoot/ToolLayer/TrayStation/TableFootprint4x3"]
+position = Vector2(220, 105)
+
+[node name="BucketStation" type="Node2D" parent="WorldRoot/ToolLayer"]
+position = Vector2(1745, 980)
+
+[node name="Sprite" type="Sprite2D" parent="WorldRoot/ToolLayer/BucketStation"]
+scale = Vector2(0.43, 0.43)
+texture = ExtResource("13_bucket")
+
+[node name="InteractionAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/BucketStation" groups=["critical_interaction_anchor"]]
+
+[node name="DragLayer" type="Node2D" parent="WorldRoot"]
+z_index = 40
+
+[node name="DropZoneRoot" type="Node2D" parent="WorldRoot"]
+z_index = 35
+
+[node name="StoveDropZoneAnchor" type="Marker2D" parent="WorldRoot/DropZoneRoot" groups=["critical_interaction_anchor"]]
+position = Vector2(380, 875)
+
+[node name="TrayDropZoneAnchor" type="Marker2D" parent="WorldRoot/DropZoneRoot" groups=["critical_interaction_anchor"]]
+position = Vector2(1210, 885)
+
+[node name="BucketDropZoneAnchor" type="Marker2D" parent="WorldRoot/DropZoneRoot" groups=["critical_interaction_anchor"]]
+position = Vector2(1745, 980)
+
+[node name="CustomerHandoffLeftAnchor" type="Marker2D" parent="WorldRoot/DropZoneRoot" groups=["critical_interaction_anchor"]]
+position = Vector2(720, 625)
+
+[node name="CustomerHandoffRightAnchor" type="Marker2D" parent="WorldRoot/DropZoneRoot" groups=["critical_interaction_anchor"]]
+position = Vector2(1280, 625)
+
+[node name="StatusBadgeAnchors" type="Node2D" parent="WorldRoot"]
+z_index = 45
+
+[node name="KettleStatus" type="Marker2D" parent="WorldRoot/StatusBadgeAnchors"]
+position = Vector2(285, 615)
+
+[node name="TrayStatus" type="Marker2D" parent="WorldRoot/StatusBadgeAnchors"]
+position = Vector2(1210, 735)
+
+[node name="BucketStatus" type="Marker2D" parent="WorldRoot/StatusBadgeAnchors"]
+position = Vector2(1745, 835)
+
+[node name="WorldEffects" type="Node2D" parent="WorldRoot"]
+z_index = 50
+
+[node name="CompositionGuides" type="Node2D" parent="WorldRoot"]
+unique_name_in_owner = true
+visible = false
+z_index = 100
+script = ExtResource("2_guides")
+
+[node name="WorldPostFX" type="CanvasLayer" parent="."]
+layer = 50
+
+[node name="ColorGrade" type="ColorRect" parent="WorldPostFX"]
+material = SubResource("ShaderMaterial_grade")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(1, 1, 1, 1)
+
+[node name="HUDLayer" type="CanvasLayer" parent="."]
+layer = 100
+
+[node name="RootUI" type="Control" parent="HUDLayer"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TopBar" type="HBoxContainer" parent="HUDLayer/RootUI"]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 20.0
+offset_right = 760.0
+offset_bottom = 72.0
+theme_override_constants/separation = 14
+
+[node name="ClockPanel" type="PanelContainer" parent="HUDLayer/RootUI/TopBar"]
+custom_minimum_size = Vector2(150, 48)
+layout_mode = 2
+
+[node name="Clock" type="Label" parent="HUDLayer/RootUI/TopBar/ClockPanel"]
+layout_mode = 2
+text = "08:00"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="CashPanel" type="PanelContainer" parent="HUDLayer/RootUI/TopBar"]
+custom_minimum_size = Vector2(170, 48)
+layout_mode = 2
+
+[node name="Cash" type="Label" parent="HUDLayer/RootUI/TopBar/CashPanel"]
+layout_mode = 2
+text = "৳ 100"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ModePanel" type="PanelContainer" parent="HUDLayer/RootUI/TopBar"]
+custom_minimum_size = Vector2(270, 48)
+layout_mode = 2
+
+[node name="Mode" type="Label" parent="HUDLayer/RootUI/TopBar/ModePanel"]
+layout_mode = 2
+text = "INTERACT  |  ORGANIZE"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="EndDayButton" type="Button" parent="HUDLayer/RootUI"]
+layout_mode = 0
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -190.0
+offset_top = 20.0
+offset_right = -24.0
+offset_bottom = 68.0
+text = "End Day"
+disabled = true
+tooltip_text = "Provisional engineering control; final HUD art is pending."
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+
+[node name="WorldSfx" type="AudioStreamPlayer" parent="."]
+
+[node name="UISfx" type="AudioStreamPlayer" parent="."]
