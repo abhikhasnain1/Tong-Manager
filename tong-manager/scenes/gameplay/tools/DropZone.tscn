@@ -1,0 +1,26 @@
+[gd_scene load_steps=5 format=3 uid="uid://d1drjvnu6hcm1"]
+
+[ext_resource type="Script" uid="uid://bf4nn5j35v461" path="res://scripts/gameplay/interactions/drop_zone.gd" id="1_drop_zone"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_drop_zone"]
+size = Vector2(128, 128)
+
+[sub_resource type="Gradient" id="Gradient_drop_zone"]
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 1)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_drop_zone"]
+gradient = SubResource("Gradient_drop_zone")
+width = 128
+height = 128
+fill_from = Vector2(0, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[node name="DropZone" type="Area2D"]
+script = ExtResource("1_drop_zone")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_drop_zone")
+
+[node name="DebugPreview" type="Sprite2D" parent="."]
+visible = false
+texture = SubResource("GradientTexture2D_drop_zone")
