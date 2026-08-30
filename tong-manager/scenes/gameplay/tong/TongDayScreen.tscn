@@ -15,11 +15,15 @@
 [ext_resource type="Texture2D" uid="uid://nfxyjvf8sp4v" path="res://assets/art/toolkit/bucket_clean_provisional.png" id="13_bucket"]
 [ext_resource type="Texture2D" uid="uid://1y2dfab013y" path="res://assets/art/toolkit/radio_front_provisional.png" id="14_radio"]
 [ext_resource type="Texture2D" uid="uid://bsrrhf3c6lkxy" path="res://assets/art/icons/banana_ready_provisional.png" id="15_banana"]
+[ext_resource type="Texture2D" uid="uid://bnxwivvf6uofx" path="res://assets/art/toolkit/khata_closed.png" id="15_yysul"]
 [ext_resource type="Texture2D" uid="uid://ckv1p2025t7c1" path="res://assets/art/icons/biscuits_ready_provisional.png" id="16_biscuits"]
 [ext_resource type="Texture2D" uid="uid://bvmswmmiy0a1x" path="res://assets/art/icons/condensed_milk_can_ready_provisional.png" id="17_milk"]
 [ext_resource type="Texture2D" uid="uid://ddr4ei73gi725" path="res://assets/art/icons/sugar_can_ready_provisional.png" id="18_sugar"]
 [ext_resource type="Texture2D" uid="uid://b13wtu7o711em" path="res://assets/art/icons/tea_box_ready_provisional.png" id="19_tea_box"]
 [ext_resource type="Shader" uid="uid://cxt8j3h5v6vwp" path="res://assets/shaders/world_color_grade.gdshader" id="20_grade"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_khata"]
+size = Vector2(117, 360)
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_grade"]
 shader = ExtResource("20_grade")
@@ -100,28 +104,30 @@ texture = ExtResource("15_banana")
 position = Vector2(436.72, 289.77002)
 
 [node name="TeaBox" type="Sprite2D" parent="WorldRoot/ToolLayer/ReadyItemRail" unique_id=755056709]
-position = Vector2(1528.88, 764.08)
-scale = Vector2(0.16, 0.16)
+position = Vector2(1517.456, 752.096)
+scale = Vector2(0.192, 0.192)
 texture = ExtResource("19_tea_box")
 
 [node name="TeaBoxAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/ReadyItemRail" unique_id=206178728 groups=["critical_interaction_anchor"]]
-position = Vector2(1528.88, 764.08)
+position = Vector2(1517.456, 752.096)
+scale = Vector2(1.2, 1.2)
 
 [node name="SugarCan" type="Sprite2D" parent="WorldRoot/ToolLayer/ReadyItemRail" unique_id=1194719677]
-position = Vector2(1781.375, 749.975)
-scale = Vector2(0.15, 0.15)
+position = Vector2(1704.8901, 734.7621)
+scale = Vector2(0.22800037, 0.22800037)
 texture = ExtResource("18_sugar")
 
 [node name="SugarAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/ReadyItemRail" unique_id=1474083354 groups=["critical_interaction_anchor"]]
-position = Vector2(1781.375, 749.975)
+position = Vector2(1704.8901, 734.7621)
+scale = Vector2(1.5200024, 1.5200024)
 
 [node name="CondensedMilkCan" type="Sprite2D" parent="WorldRoot/ToolLayer/ReadyItemRail" unique_id=704283837]
-position = Vector2(1661.01, 790.26)
+position = Vector2(1701.01, 770.26)
 scale = Vector2(0.18, 0.18)
 texture = ExtResource("17_milk")
 
 [node name="CondensedMilkAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/ReadyItemRail" unique_id=994689313 groups=["critical_interaction_anchor"]]
-position = Vector2(1661.01, 790.26)
+position = Vector2(1701.01, 770.26)
 
 [node name="Biscuits" type="Sprite2D" parent="WorldRoot/ToolLayer/ReadyItemRail" unique_id=1441415103]
 position = Vector2(1527.2272, 208.15034)
@@ -130,6 +136,26 @@ texture = ExtResource("16_biscuits")
 
 [node name="BiscuitsAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/ReadyItemRail" unique_id=618752368 groups=["critical_interaction_anchor"]]
 position = Vector2(1527.2272, 208.15034)
+
+[node name="KhataStation" type="Node2D" parent="WorldRoot/ToolLayer" unique_id=1872704980]
+editor_description = "Approved M1 composition revision 2 placement. Keep the sprite, collision shape, and interaction anchor aligned when editing."
+position = Vector2(960, 820)
+
+[node name="KhataHotspot" type="Area2D" parent="WorldRoot/ToolLayer/KhataStation" unique_id=172198341]
+position = Vector2(905, -91)
+
+[node name="Sprite" type="Sprite2D" parent="WorldRoot/ToolLayer/KhataStation/KhataHotspot" unique_id=1179571728]
+scale = Vector2(0.36, 0.36)
+texture = ExtResource("15_yysul")
+region_enabled = true
+region_rect = Rect2(781.3695, 28.300804, 356.05017, 1028.0656)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="WorldRoot/ToolLayer/KhataStation/KhataHotspot" unique_id=2145421756]
+position = Vector2(0.5, 0)
+shape = SubResource("RectangleShape2D_khata")
+
+[node name="InteractionAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/KhataStation/KhataHotspot" unique_id=1947038087 groups=["critical_interaction_anchor"]]
+position = Vector2(-50, -1)
 
 [node name="StoveStation" type="Node2D" parent="WorldRoot/ToolLayer" unique_id=2930590]
 position = Vector2(380, 925)
@@ -203,13 +229,14 @@ position = Vector2(-220, -105)
 position = Vector2(316, 96)
 
 [node name="BucketStation" type="Node2D" parent="WorldRoot/ToolLayer" unique_id=2061807017]
-position = Vector2(1745, 980)
+position = Vector2(1865, 952)
 
 [node name="Sprite" type="Sprite2D" parent="WorldRoot/ToolLayer/BucketStation" unique_id=337521503]
 scale = Vector2(0.43, 0.43)
 texture = ExtResource("13_bucket")
 
 [node name="InteractionAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/BucketStation" unique_id=1410089750 groups=["critical_interaction_anchor"]]
+position = Vector2(-50, -7)
 
 [node name="DragLayer" type="Node2D" parent="WorldRoot" unique_id=1052109653]
 z_index = 40
@@ -242,7 +269,7 @@ position = Vector2(176, 583)
 position = Vector2(1210, 735)
 
 [node name="BucketStatus" type="Marker2D" parent="WorldRoot/StatusBadgeAnchors" unique_id=1486285048]
-position = Vector2(1745, 835)
+position = Vector2(1789, 854)
 
 [node name="WorldEffects" type="Node2D" parent="WorldRoot" unique_id=1256984065]
 z_index = 50

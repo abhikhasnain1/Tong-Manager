@@ -36,4 +36,7 @@ func _verify_layout_contract() -> void:
 	assert(tool_def.burner_count == 2, "The demo stove exposes two configurable burners.")
 	for marker in get_tree().get_nodes_in_group("critical_interaction_anchor"):
 		var authored_position := world_root.to_local(marker.global_position)
-		assert(CROP_SAFE_RECT.has_point(authored_position), "%s is outside the 16:10 crop-safe area." % marker.name)
+		assert(
+			CROP_SAFE_RECT.has_point(authored_position),
+			"%s at %s is outside the 16:10 crop-safe area." % [marker.get_path(), authored_position]
+		)
