@@ -21,7 +21,7 @@ const TRAY_FILL := Color(1.0, 0.78, 0.2, 0.26)
 
 @export var origin := Vector2.ZERO
 @export var cell_size := Vector2(64.0, 48.0)
-@export var grid_size := Vector2i(12, 5)
+@export var grid_size := Vector2i(8, 5)
 @export_node_path("Marker2D") var top_left_path: NodePath
 @export_node_path("Marker2D") var top_right_path: NodePath
 @export_node_path("Marker2D") var bottom_left_path: NodePath

@@ -52,6 +52,7 @@ func apply_drop(payload: HeldItemPayload) -> void:
 func set_highlight(_valid: bool) -> void:
 	if _station == null:
 		return
+	_station.align_table_drag_preview(_candidate_cell)
 	_station.get_table_grid().preview_placement(
 		_station.get_table_footprint(),
 		_candidate_cell

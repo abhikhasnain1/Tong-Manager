@@ -9,6 +9,7 @@ const CUP_CATEGORY := &"cup"
 const SMALL_ITEM_CATEGORY := &"small_item"
 const RESERVATION_ID := &"tray_station"
 const INVALID_CELL := Vector2i(-1, -1)
+const ORGANIZE_GHOST_ALPHA := 0.42
 
 @export var tool_def: Resource
 @export var cup_scene: PackedScene
@@ -54,6 +55,7 @@ func _ready() -> void:
 	_spawn_initial_cups()
 	_reserve_initial_table_placement()
 	internal_grid.set_interact_mode(_interaction_controller.current_mode == InteractionController.MODE_INTERACT)
+	_update_mode_visual(_interaction_controller.current_mode)
 	_register_drop_zones()
 
 
@@ -169,6 +171,16 @@ func get_committed_table_cells() -> Array[Vector2i]:
 	return _table_grid.get_cells_for_item(RESERVATION_ID)
 
 
+func align_table_drag_preview(origin_cell: Vector2i) -> void:
+	if not _interaction_controller.is_dragging():
+		return
+	if _interaction_controller.current_payload.world_node != self:
+		return
+	var target_cells := _table_footprint.cells_from(origin_cell)
+	var target_anchor_position := _average_table_cell_position(target_cells)
+	global_position += target_anchor_position - table_placement_anchor.global_position
+
+
 func get_slot_count() -> int:
 	return internal_grid.grid_size.x * internal_grid.grid_size.y
 
@@ -242,6 +254,10 @@ func _begin_table_drag(viewport_position: Vector2) -> bool:
 	)
 	if _interaction_controller.start_drag(payload, self, viewport_position):
 		_register_drop_zones()
+		# Reparenting this station temporarily removes its owned zones from the tree.
+		# Refresh once they are registered again so the first drag frame already
+		# shows—and snaps to—the complete table footprint.
+		_interaction_controller.update_drag(viewport_position)
 		return true
 	_restore_table_reservation()
 	return false
@@ -317,8 +333,13 @@ func _on_drag_canceled(payload: HeldItemPayload) -> void:
 
 func _on_mode_changed(mode: StringName) -> void:
 	internal_grid.set_interact_mode(mode == InteractionController.MODE_INTERACT)
+	_update_mode_visual(mode)
 	_register_drop_zones()
 	get_node("/root/CursorService").reset()
+
+
+func _update_mode_visual(mode: StringName) -> void:
+	modulate.a = ORGANIZE_GHOST_ALPHA if mode == InteractionController.MODE_ORGANIZE else 1.0
 
 
 func _restore_table_reservation() -> void:
