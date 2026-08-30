@@ -8,6 +8,11 @@ const STATE_HOVER_ACTIONABLE := &"hover_actionable"
 const STATE_DRAGGING := &"dragging"
 const STATE_INVALID := &"invalid"
 
+const CURSOR_NORMAL: Texture2D = preload("res://assets/art/cursors/cursor_normal.png")
+const CURSOR_HOVER: Texture2D = preload("res://assets/art/cursors/cursor_hover.png")
+const CURSOR_GRABBABLE: Texture2D = preload("res://assets/art/cursors/cursor_grabbable.png")
+const CURSOR_GRABBED: Texture2D = preload("res://assets/art/cursors/cursor_grabbed.png")
+
 const STATE_TO_SYSTEM_SHAPE := {
 	STATE_DEFAULT: Input.CURSOR_ARROW,
 	STATE_HOVER_INTERACTABLE: Input.CURSOR_POINTING_HAND,
@@ -16,11 +21,31 @@ const STATE_TO_SYSTEM_SHAPE := {
 	STATE_INVALID: Input.CURSOR_FORBIDDEN,
 }
 
+const STATE_TO_CUSTOM_CURSOR := {
+	STATE_DEFAULT: {
+		"texture": CURSOR_NORMAL,
+		"hotspot": Vector2(14.0, 7.0),
+	},
+	STATE_HOVER_INTERACTABLE: {
+		"texture": CURSOR_HOVER,
+		"hotspot": Vector2(12.0, 9.0),
+	},
+	STATE_HOVER_ACTIONABLE: {
+		"texture": CURSOR_GRABBABLE,
+		"hotspot": Vector2(32.0, 32.0),
+	},
+	STATE_DRAGGING: {
+		"texture": CURSOR_GRABBED,
+		"hotspot": Vector2(32.0, 32.0),
+	},
+}
+
 var current_state: StringName = STATE_DEFAULT
 var _bound_hover_states: Dictionary = {}
 
 
 func _ready() -> void:
+	_install_custom_cursors()
 	reset()
 
 
@@ -80,5 +105,17 @@ func _on_bound_hover_tree_exited(target_id: int) -> void:
 		reset()
 
 
+func _install_custom_cursors() -> void:
+	for state: StringName in STATE_TO_CUSTOM_CURSOR:
+		var cursor_data: Dictionary = STATE_TO_CUSTOM_CURSOR[state]
+		Input.set_custom_mouse_cursor(
+			cursor_data["texture"],
+			STATE_TO_SYSTEM_SHAPE[state],
+			cursor_data["hotspot"]
+		)
+
+
 func _exit_tree() -> void:
+	for state: StringName in STATE_TO_CUSTOM_CURSOR:
+		Input.set_custom_mouse_cursor(null, STATE_TO_SYSTEM_SHAPE[state])
 	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
