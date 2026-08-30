@@ -21,7 +21,9 @@
     {"runtime": "res://assets/art/cursors/cursor_normal.png", "role": "cursor_default", "crop": [19, 30, 240, 341], "hotspot": [14, 7], "intended_size": [64, 64], "state_family": "hand_cursor_64", "perspective": "final"},
     {"runtime": "res://assets/art/cursors/cursor_hover.png", "role": "cursor_hover_interactable", "crop": [7, 17, 260, 320], "hotspot": [12, 9], "intended_size": [64, 64], "state_family": "hand_cursor_64", "perspective": "final"},
     {"runtime": "res://assets/art/cursors/cursor_grabbable.png", "role": "cursor_hover_actionable", "crop": [25, 29, 300, 378], "hotspot": [32, 32], "intended_size": [64, 64], "state_family": "hand_cursor_64", "perspective": "final"},
-    {"runtime": "res://assets/art/cursors/cursor_grabbed.png", "role": "cursor_dragging", "crop": [19, 9, 276, 300], "hotspot": [32, 32], "intended_size": [64, 64], "state_family": "hand_cursor_64", "perspective": "final"}
+    {"runtime": "res://assets/art/cursors/cursor_grabbed.png", "role": "cursor_dragging", "crop": [19, 9, 276, 300], "hotspot": [32, 32], "intended_size": [64, 64], "state_family": "hand_cursor_64", "perspective": "final"},
+    {"runtime": "res://assets/art/toolkit/cup_clean_provisional.png", "role": "cup_clean", "crop": [0, 0, 485, 501], "filter_padding": 8, "pivot": [250.5, 258.5], "intended_size": [75, 78], "state_family": "cup_501x517", "perspective": "provisional"},
+    {"runtime": "res://assets/art/toolkit/cup_dirty_provisional.png", "role": "cup_dirty", "crop": [0, 0, 485, 501], "filter_padding": 8, "pivot": [250.5, 258.5], "intended_size": [75, 78], "state_family": "cup_501x517", "perspective": "provisional"}
   ],
   "composition_contract": {
     "revision": 2,

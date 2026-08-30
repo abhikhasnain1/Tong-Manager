@@ -1,0 +1,53 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/tools/cup.gd" id="1_cup"]
+[ext_resource type="Texture2D" path="res://assets/art/toolkit/cup_clean_provisional.png" id="2_clean"]
+[ext_resource type="Texture2D" path="res://assets/art/toolkit/cup_dirty_provisional.png" id="3_dirty"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_cup"]
+size = Vector2(74, 76)
+
+[sub_resource type="Gradient" id="Gradient_contents"]
+offsets = PackedFloat32Array(0.62, 1)
+colors = PackedColorArray(0.35, 0.14, 0.05, 0.82, 0.35, 0.14, 0.05, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_contents"]
+gradient = SubResource("Gradient_contents")
+width = 256
+height = 256
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[node name="Cup" type="Area2D"]
+editor_description = "Reusable M2 cup lifecycle object. Tray ownership and movement are implemented by issue #50."
+script = ExtResource("1_cup")
+clean_texture = ExtResource("2_clean")
+dirty_texture = ExtResource("3_dirty")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+scale = Vector2(0.15, 0.15)
+texture = ExtResource("2_clean")
+
+[node name="ContentsOverlay" type="Sprite2D" parent="."]
+visible = false
+z_index = 1
+position = Vector2(0, -14)
+scale = Vector2(0.24, 0.08)
+texture = SubResource("GradientTexture2D_contents")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_cup")
+
+[node name="RelishMarkers" type="Node2D" parent="."]
+
+[node name="Slot1" type="Marker2D" parent="RelishMarkers"]
+position = Vector2(-18, -14)
+
+[node name="Slot2" type="Marker2D" parent="RelishMarkers"]
+position = Vector2(0, -8)
+
+[node name="Slot3" type="Marker2D" parent="RelishMarkers"]
+position = Vector2(18, -14)
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
