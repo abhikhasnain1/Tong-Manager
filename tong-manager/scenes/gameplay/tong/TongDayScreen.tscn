@@ -259,12 +259,29 @@ z_index = 35
 
 [node name="TableGrid" type="Node2D" parent="WorldRoot/DropZoneRoot"]
 script = ExtResource("24_table_grid")
-origin = Vector2(176, 646)
-cell_size = Vector2(134, 67)
 grid_size = Vector2i(12, 5)
+top_left_path = NodePath("AuthoredBounds/TopLeft")
+top_right_path = NodePath("AuthoredBounds/TopRight")
+bottom_left_path = NodePath("AuthoredBounds/BottomLeft")
+bottom_right_path = NodePath("AuthoredBounds/BottomRight")
 interaction_controller_path = NodePath("../../../InteractionController")
-authored_tray_cell = Vector2i(6, 2)
+authored_tray_cell = Vector2i(6, 1)
 authored_tray_footprint = SubResource("Resource_tray_footprint")
+
+[node name="AuthoredBounds" type="Node2D" parent="WorldRoot/DropZoneRoot/TableGrid"]
+editor_description = "Move the four child markers to align the organization grid. Do not move workstation sprites to fit the grid."
+
+[node name="TopLeft" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds"]
+position = Vector2(220, 710)
+
+[node name="TopRight" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds"]
+position = Vector2(1760, 710)
+
+[node name="BottomLeft" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds"]
+position = Vector2(162, 1050)
+
+[node name="BottomRight" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds"]
+position = Vector2(1818, 1050)
 
 [node name="StoveDropZoneAnchor" type="Marker2D" parent="WorldRoot/DropZoneRoot" unique_id=948933766 groups=["critical_interaction_anchor"]]
 position = Vector2(380, 875)
