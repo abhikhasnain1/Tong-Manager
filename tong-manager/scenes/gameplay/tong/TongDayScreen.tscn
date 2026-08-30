@@ -28,6 +28,9 @@ shader_parameter/brightness = 1.0
 shader_parameter/contrast = 1.0
 shader_parameter/saturation = 1.0
 
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_khata"]
+size = Vector2(220, 140)
+
 [node name="TongDayScreen" type="Node2D" unique_id=1430317922]
 script = ExtResource("1_screen")
 tool_def = ExtResource("3_tools")
@@ -130,6 +133,19 @@ texture = ExtResource("16_biscuits")
 
 [node name="BiscuitsAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/ReadyItemRail" unique_id=618752368 groups=["critical_interaction_anchor"]]
 position = Vector2(1527.2272, 208.15034)
+
+[node name="KhataStation" type="Node2D" parent="WorldRoot/ToolLayer"]
+position = Vector2(960, 820)
+editor_description = "Provisional staging transform. Assign the tabletop Khata texture, then position and scale KhataStation in the editor before composition revision 2 is locked."
+
+[node name="KhataHotspot" type="Area2D" parent="WorldRoot/ToolLayer/KhataStation"]
+
+[node name="Sprite" type="Sprite2D" parent="WorldRoot/ToolLayer/KhataStation/KhataHotspot"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="WorldRoot/ToolLayer/KhataStation/KhataHotspot"]
+shape = SubResource("RectangleShape2D_khata")
+
+[node name="InteractionAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/KhataStation/KhataHotspot" groups=["critical_interaction_anchor"]]
 
 [node name="StoveStation" type="Node2D" parent="WorldRoot/ToolLayer" unique_id=2930590]
 position = Vector2(380, 925)
