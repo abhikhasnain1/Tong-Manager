@@ -66,17 +66,11 @@ func _process(_delta: float) -> void:
 
 func world_to_cell(world_position: Vector2) -> Vector2i:
 	var grid_uv := _local_to_grid_uv(to_local(world_position))
-	var scaled_cell := grid_uv * Vector2(grid_size)
-	return Vector2i(floori(scaled_cell.x + 0.00001), floori(scaled_cell.y + 0.00001))
+	return Vector2i(floori(grid_uv.x * grid_size.x), floori(grid_uv.y * grid_size.y))
 
 
 func cell_to_world(cell: Vector2i) -> Vector2:
 	var grid_uv := (Vector2(cell) + Vector2(0.5, 0.5)) / Vector2(grid_size)
-	return to_global(_grid_uv_to_local(grid_uv))
-
-
-func cell_corner_to_world(cell: Vector2i) -> Vector2:
-	var grid_uv := Vector2(cell) / Vector2(grid_size)
 	return to_global(_grid_uv_to_local(grid_uv))
 
 

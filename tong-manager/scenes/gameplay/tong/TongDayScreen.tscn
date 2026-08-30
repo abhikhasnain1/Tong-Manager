@@ -23,16 +23,10 @@
 [ext_resource type="Shader" uid="uid://cxt8j3h5v6vwp" path="res://assets/shaders/world_color_grade.gdshader" id="20_grade"]
 [ext_resource type="Script" uid="uid://ch0ggxjjqwbeb" path="res://scripts/ui/tong_hud.gd" id="21_hud"]
 [ext_resource type="Script" uid="uid://c8pc6hixrf8v4" path="res://scripts/gameplay/interactions/interaction_controller.gd" id="22_interaction"]
-[ext_resource type="Script" uid="uid://d2kmtplthvi7h" path="res://scripts/data/placeable_footprint.gd" id="23_footprint"]
 [ext_resource type="Script" uid="uid://cw1qsdwkrovxk" path="res://scripts/gameplay/interactions/table_grid.gd" id="24_table_grid"]
-[ext_resource type="Script" uid="uid://4me7h8hyrsvn" path="res://scripts/gameplay/interactions/grid_placeable.gd" id="25_grid_placeable"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_khata"]
 size = Vector2(117, 360)
-
-[sub_resource type="Resource" id="Resource_tray_footprint"]
-script = ExtResource("23_footprint")
-size = Vector2i(4, 3)
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_grade"]
 shader = ExtResource("20_grade")
@@ -241,16 +235,6 @@ position = Vector2(-220, -105)
 
 [node name="BottomRight" type="Marker2D" parent="WorldRoot/ToolLayer/TrayStation/TableFootprint4x3" unique_id=1417795456]
 position = Vector2(316, 96)
-
-[node name="GridPlaceable" type="Node" parent="WorldRoot/ToolLayer/TrayStation"]
-editor_description = "Registers the tray from its current footprint anchor. Future organize-mode dragging calls begin, preview, commit, and cancel on this component."
-script = ExtResource("25_grid_placeable")
-item_id = &"tray"
-footprint = SubResource("Resource_tray_footprint")
-reservation_state = &"tray_area"
-table_grid_path = NodePath("../../../DropZoneRoot/TableGrid")
-world_node_path = NodePath("..")
-placement_anchor_path = NodePath("../TableFootprint4x3/TopLeft")
 
 [node name="BucketStation" type="Node2D" parent="WorldRoot/ToolLayer" unique_id=2061807017]
 position = Vector2(1865, 952)
