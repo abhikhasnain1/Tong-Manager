@@ -17,7 +17,11 @@
     {"runtime": "res://assets/art/icons/tea_box_ready_provisional.png", "role": "ready_item", "pivot": [455, 313], "authored_position": [1517.456, 752.096], "intended_size": [175, 120], "perspective": "provisional"},
     {"runtime": "res://assets/art/icons/sugar_can_ready_provisional.png", "role": "ready_item", "pivot": [442, 266], "authored_position": [1704.8901, 734.7621], "intended_size": [202, 122], "perspective": "provisional"},
     {"runtime": "res://assets/art/icons/condensed_milk_can_ready_provisional.png", "role": "ready_item", "pivot": [244, 357], "authored_position": [1701.01, 770.26], "intended_size": [88, 129], "perspective": "provisional"},
-    {"runtime": "res://assets/art/icons/biscuits_ready_provisional.png", "role": "ready_item", "pivot": [199, 343], "authored_position": [1527.2272, 208.15034], "intended_size": [132, 228], "perspective": "provisional"}
+    {"runtime": "res://assets/art/icons/biscuits_ready_provisional.png", "role": "ready_item", "pivot": [199, 343], "authored_position": [1527.2272, 208.15034], "intended_size": [132, 228], "perspective": "provisional"},
+    {"runtime": "res://assets/art/cursors/cursor_normal.png", "role": "cursor_default", "crop": [19, 30, 240, 341], "hotspot": [14, 7], "intended_size": [64, 64], "state_family": "hand_cursor_64", "perspective": "final"},
+    {"runtime": "res://assets/art/cursors/cursor_hover.png", "role": "cursor_hover_interactable", "crop": [7, 17, 260, 320], "hotspot": [12, 9], "intended_size": [64, 64], "state_family": "hand_cursor_64", "perspective": "final"},
+    {"runtime": "res://assets/art/cursors/cursor_grabbable.png", "role": "cursor_hover_actionable", "crop": [25, 29, 300, 378], "hotspot": [32, 32], "intended_size": [64, 64], "state_family": "hand_cursor_64", "perspective": "final"},
+    {"runtime": "res://assets/art/cursors/cursor_grabbed.png", "role": "cursor_dragging", "crop": [19, 9, 276, 300], "hotspot": [32, 32], "intended_size": [64, 64], "state_family": "hand_cursor_64", "perspective": "final"}
   ],
   "composition_contract": {
     "revision": 2,
