@@ -27,9 +27,6 @@ const TRAY_FILL := Color(1.0, 0.78, 0.2, 0.26)
 @export_node_path("Marker2D") var bottom_left_path: NodePath
 @export_node_path("Marker2D") var bottom_right_path: NodePath
 @export_node_path("Node") var interaction_controller_path: NodePath
-@export var reserve_authored_tray: bool = true
-@export var authored_tray_cell := Vector2i.ZERO
-@export var authored_tray_footprint: PlaceableFootprint
 
 var organize_mode_enabled: bool = false
 var occupied_cells: Dictionary = {}
@@ -44,7 +41,6 @@ func _ready() -> void:
 	assert(cell_size.x > 0.0 and cell_size.y > 0.0, "TableGrid cell_size must be positive.")
 	assert(grid_size.x > 0 and grid_size.y > 0, "TableGrid grid_size must be positive.")
 	_assert_authored_bounds()
-	_reserve_authored_tray_cells()
 
 	if Engine.is_editor_hint():
 		organize_mode_enabled = true
@@ -70,11 +66,17 @@ func _process(_delta: float) -> void:
 
 func world_to_cell(world_position: Vector2) -> Vector2i:
 	var grid_uv := _local_to_grid_uv(to_local(world_position))
-	return Vector2i(floori(grid_uv.x * grid_size.x), floori(grid_uv.y * grid_size.y))
+	var scaled_cell := grid_uv * Vector2(grid_size)
+	return Vector2i(floori(scaled_cell.x + 0.00001), floori(scaled_cell.y + 0.00001))
 
 
 func cell_to_world(cell: Vector2i) -> Vector2:
 	var grid_uv := (Vector2(cell) + Vector2(0.5, 0.5)) / Vector2(grid_size)
+	return to_global(_grid_uv_to_local(grid_uv))
+
+
+func cell_corner_to_world(cell: Vector2i) -> Vector2:
+	var grid_uv := Vector2(cell) / Vector2(grid_size)
 	return to_global(_grid_uv_to_local(grid_uv))
 
 
@@ -239,16 +241,6 @@ func _assert_authored_bounds() -> void:
 	for path in [top_left_path, top_right_path, bottom_left_path, bottom_right_path]:
 		assert(not path.is_empty(), "TableGrid requires four authored corner marker paths.")
 		assert(get_node_or_null(path) is Marker2D, "TableGrid corner path must resolve to Marker2D: %s" % path)
-
-
-func _reserve_authored_tray_cells() -> void:
-	if not reserve_authored_tray:
-		return
-	assert(authored_tray_footprint != null, "TableGrid requires the authored tray footprint.")
-	assert(
-		reserve_footprint(&"tray", authored_tray_footprint, authored_tray_cell, 0, STATE_TRAY_AREA),
-		"The authored tray footprint must fit inside the table grid."
-	)
 
 
 func _corner_position(path: NodePath, fallback: Vector2) -> Vector2:

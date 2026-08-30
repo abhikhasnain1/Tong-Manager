@@ -25,6 +25,7 @@
 [ext_resource type="Script" uid="uid://c8pc6hixrf8v4" path="res://scripts/gameplay/interactions/interaction_controller.gd" id="22_interaction"]
 [ext_resource type="Script" uid="uid://d2kmtplthvi7h" path="res://scripts/data/placeable_footprint.gd" id="23_footprint"]
 [ext_resource type="Script" uid="uid://cw1qsdwkrovxk" path="res://scripts/gameplay/interactions/table_grid.gd" id="24_table_grid"]
+[ext_resource type="Script" uid="uid://4me7h8hyrsvn" path="res://scripts/gameplay/interactions/grid_placeable.gd" id="25_grid_placeable"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_khata"]
 size = Vector2(117, 360)
@@ -45,7 +46,7 @@ script = ExtResource("1_screen")
 tool_def = ExtResource("3_tools")
 day_config = ExtResource("4_day")
 
-[node name="InteractionController" type="Node" parent="."]
+[node name="InteractionController" type="Node" parent="." unique_id=1552456969]
 script = ExtResource("22_interaction")
 drag_layer_path = NodePath("../WorldRoot/DragLayer")
 drop_zone_root_path = NodePath("../WorldRoot/DropZoneRoot")
@@ -241,6 +242,16 @@ position = Vector2(-220, -105)
 [node name="BottomRight" type="Marker2D" parent="WorldRoot/ToolLayer/TrayStation/TableFootprint4x3" unique_id=1417795456]
 position = Vector2(316, 96)
 
+[node name="GridPlaceable" type="Node" parent="WorldRoot/ToolLayer/TrayStation"]
+editor_description = "Registers the tray from its current footprint anchor. Future organize-mode dragging calls begin, preview, commit, and cancel on this component."
+script = ExtResource("25_grid_placeable")
+item_id = &"tray"
+footprint = SubResource("Resource_tray_footprint")
+reservation_state = &"tray_area"
+table_grid_path = NodePath("../../../DropZoneRoot/TableGrid")
+world_node_path = NodePath("..")
+placement_anchor_path = NodePath("../TableFootprint4x3/TopLeft")
+
 [node name="BucketStation" type="Node2D" parent="WorldRoot/ToolLayer" unique_id=2061807017]
 position = Vector2(1865, 952)
 
@@ -257,31 +268,29 @@ z_index = 40
 [node name="DropZoneRoot" type="Node2D" parent="WorldRoot" unique_id=817989639]
 z_index = 35
 
-[node name="TableGrid" type="Node2D" parent="WorldRoot/DropZoneRoot"]
+[node name="TableGrid" type="Node2D" parent="WorldRoot/DropZoneRoot" unique_id=560674855]
+z_index = -10
 script = ExtResource("24_table_grid")
-grid_size = Vector2i(12, 5)
 top_left_path = NodePath("AuthoredBounds/TopLeft")
 top_right_path = NodePath("AuthoredBounds/TopRight")
 bottom_left_path = NodePath("AuthoredBounds/BottomLeft")
 bottom_right_path = NodePath("AuthoredBounds/BottomRight")
 interaction_controller_path = NodePath("../../../InteractionController")
-authored_tray_cell = Vector2i(6, 1)
-authored_tray_footprint = SubResource("Resource_tray_footprint")
 
-[node name="AuthoredBounds" type="Node2D" parent="WorldRoot/DropZoneRoot/TableGrid"]
+[node name="AuthoredBounds" type="Node2D" parent="WorldRoot/DropZoneRoot/TableGrid" unique_id=1686286958]
 editor_description = "Move the four child markers to align the organization grid. Do not move workstation sprites to fit the grid."
 
-[node name="TopLeft" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds"]
-position = Vector2(220, 710)
+[node name="TopLeft" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds" unique_id=1911629364]
+position = Vector2(622, 747)
 
-[node name="TopRight" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds"]
-position = Vector2(1760, 710)
+[node name="TopRight" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds" unique_id=1216409695]
+position = Vector2(1795, 719)
 
-[node name="BottomLeft" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds"]
-position = Vector2(162, 1050)
+[node name="BottomLeft" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds" unique_id=95687265]
+position = Vector2(766, 1066)
 
-[node name="BottomRight" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds"]
-position = Vector2(1818, 1050)
+[node name="BottomRight" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds" unique_id=157738543]
+position = Vector2(1793, 1072)
 
 [node name="StoveDropZoneAnchor" type="Marker2D" parent="WorldRoot/DropZoneRoot" unique_id=948933766 groups=["critical_interaction_anchor"]]
 position = Vector2(380, 875)
@@ -378,23 +387,23 @@ vertical_alignment = 1
 custom_minimum_size = Vector2(270, 48)
 layout_mode = 2
 
-[node name="ModeSegmentedControl" type="HBoxContainer" parent="HUDLayer/RootUI/TopHud/ModePanel"]
+[node name="ModeSegmentedControl" type="HBoxContainer" parent="HUDLayer/RootUI/TopHud/ModePanel" unique_id=1596935881]
 layout_mode = 2
 theme_override_constants/separation = 8
 alignment = 1
 
-[node name="InteractModeLabel" type="Label" parent="HUDLayer/RootUI/TopHud/ModePanel/ModeSegmentedControl"]
+[node name="InteractModeLabel" type="Label" parent="HUDLayer/RootUI/TopHud/ModePanel/ModeSegmentedControl" unique_id=25748544]
 unique_name_in_owner = true
 layout_mode = 2
 text = "INTERACT"
 vertical_alignment = 1
 
-[node name="ModeDividerLabel" type="Label" parent="HUDLayer/RootUI/TopHud/ModePanel/ModeSegmentedControl"]
+[node name="ModeDividerLabel" type="Label" parent="HUDLayer/RootUI/TopHud/ModePanel/ModeSegmentedControl" unique_id=100188360]
 layout_mode = 2
 text = "|"
 vertical_alignment = 1
 
-[node name="OrganizeModeLabel" type="Label" parent="HUDLayer/RootUI/TopHud/ModePanel/ModeSegmentedControl"]
+[node name="OrganizeModeLabel" type="Label" parent="HUDLayer/RootUI/TopHud/ModePanel/ModeSegmentedControl" unique_id=309420385]
 unique_name_in_owner = true
 layout_mode = 2
 text = "ORGANIZE"
@@ -412,7 +421,7 @@ tooltip_text = "Provisional engineering control; final HUD art is pending."
 disabled = true
 text = "End Day"
 
-[node name="CustomerOrderOverlay" type="Control" parent="HUDLayer/RootUI"]
+[node name="CustomerOrderOverlay" type="Control" parent="HUDLayer/RootUI" unique_id=101989994]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -421,7 +430,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="InteractionPromptLayer" type="Control" parent="HUDLayer/RootUI"]
+[node name="InteractionPromptLayer" type="Control" parent="HUDLayer/RootUI" unique_id=1051817855]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -430,7 +439,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="ModalStack" type="Control" parent="HUDLayer/RootUI"]
+[node name="ModalStack" type="Control" parent="HUDLayer/RootUI" unique_id=38342153]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -439,7 +448,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="ToastLayer" type="Control" parent="HUDLayer/RootUI"]
+[node name="ToastLayer" type="Control" parent="HUDLayer/RootUI" unique_id=810629054]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
