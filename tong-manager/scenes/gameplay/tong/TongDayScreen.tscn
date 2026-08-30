@@ -23,9 +23,15 @@
 [ext_resource type="Shader" uid="uid://cxt8j3h5v6vwp" path="res://assets/shaders/world_color_grade.gdshader" id="20_grade"]
 [ext_resource type="Script" uid="uid://ch0ggxjjqwbeb" path="res://scripts/ui/tong_hud.gd" id="21_hud"]
 [ext_resource type="Script" uid="uid://c8pc6hixrf8v4" path="res://scripts/gameplay/interactions/interaction_controller.gd" id="22_interaction"]
+[ext_resource type="Script" uid="uid://d2kmtplthvi7h" path="res://scripts/data/placeable_footprint.gd" id="23_footprint"]
+[ext_resource type="Script" uid="uid://cw1qsdwkrovxk" path="res://scripts/gameplay/interactions/table_grid.gd" id="24_table_grid"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_khata"]
 size = Vector2(117, 360)
+
+[sub_resource type="Resource" id="Resource_tray_footprint"]
+script = ExtResource("23_footprint")
+size = Vector2i(4, 3)
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_grade"]
 shader = ExtResource("20_grade")
@@ -250,6 +256,15 @@ z_index = 40
 
 [node name="DropZoneRoot" type="Node2D" parent="WorldRoot" unique_id=817989639]
 z_index = 35
+
+[node name="TableGrid" type="Node2D" parent="WorldRoot/DropZoneRoot"]
+script = ExtResource("24_table_grid")
+origin = Vector2(176, 646)
+cell_size = Vector2(134, 67)
+grid_size = Vector2i(12, 5)
+interaction_controller_path = NodePath("../../../InteractionController")
+authored_tray_cell = Vector2i(6, 2)
+authored_tray_footprint = SubResource("Resource_tray_footprint")
 
 [node name="StoveDropZoneAnchor" type="Marker2D" parent="WorldRoot/DropZoneRoot" unique_id=948933766 groups=["critical_interaction_anchor"]]
 position = Vector2(380, 875)
