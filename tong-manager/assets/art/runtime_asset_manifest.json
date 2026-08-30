@@ -26,8 +26,9 @@
     {"runtime": "res://assets/art/toolkit/cup_dirty_provisional.png", "role": "cup_dirty", "crop": [0, 0, 485, 501], "filter_padding": 8, "pivot": [250.5, 258.5], "intended_size": [75, 78], "state_family": "cup_501x517", "perspective": "provisional"}
   ],
   "composition_contract": {
-    "revision": 2,
+    "revision": 3,
     "locked_on": "2026-08-29",
+    "interaction_alignment_updated_on": "2026-08-30",
     "critical_interaction_anchors": {
       "radio": [108, 262],
       "kettle": [201, 779],
@@ -42,9 +43,10 @@
       "dial_right": [405, 1011]
     },
     "tray_slots": [
-      [1068, 826], [1210, 826], [1352, 826],
-      [1068, 912], [1210, 912], [1352, 912]
+      [1062.83337, 831.125], [1210, 830.375], [1357.16663, 829.625],
+      [1043.16663, 918.375], [1210, 918.125], [1376.83325, 917.875]
     ],
+    "tray_table_placement_anchor": [1244, 901],
     "tray_table_footprint": {
       "top_left": [990, 780],
       "bottom_right": [1526, 981]

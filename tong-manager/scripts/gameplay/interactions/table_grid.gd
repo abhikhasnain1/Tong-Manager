@@ -69,6 +69,18 @@ func world_to_cell(world_position: Vector2) -> Vector2i:
 	return Vector2i(floori(grid_uv.x * grid_size.x), floori(grid_uv.y * grid_size.y))
 
 
+func world_to_grid_position(world_position: Vector2) -> Vector2:
+	return _local_to_grid_uv(to_local(world_position)) * Vector2(grid_size)
+
+
+func world_to_footprint_origin(world_position: Vector2, footprint_size: Vector2i) -> Vector2i:
+	var grid_position := world_to_grid_position(world_position)
+	return Vector2i(
+		roundi(grid_position.x - footprint_size.x * 0.5),
+		roundi(grid_position.y - footprint_size.y * 0.5)
+	)
+
+
 func cell_to_world(cell: Vector2i) -> Vector2:
 	var grid_uv := (Vector2(cell) + Vector2(0.5, 0.5)) / Vector2(grid_size)
 	return to_global(_grid_uv_to_local(grid_uv))
