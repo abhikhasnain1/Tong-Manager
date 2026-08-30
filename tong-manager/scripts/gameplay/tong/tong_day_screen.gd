@@ -32,9 +32,27 @@ func _fit_authored_world() -> void:
 func _verify_layout_contract() -> void:
 	assert(tool_def != null, "TongDayScreen requires a ToolDef resource.")
 	assert(day_config != null, "TongDayScreen requires a DayConfig resource.")
-	assert(tool_def.tray_capacity == 6, "The demo tray must hold six cups.")
-	assert(tool_def.tray_grid_size == Vector2i(3, 2), "The tray internal grid must be 3x2.")
-	assert(tool_def.tray_table_footprint == Vector2i(4, 3), "The tray table footprint must be 4x3.")
+	assert(tool_def.tray_capacity > 0, "Tray capacity must be positive.")
+	assert(
+		tool_def.tray_capacity <= tool_def.tray_grid_size.x * tool_def.tray_grid_size.y,
+		"Tray capacity cannot exceed its internal grid."
+	)
+	assert(
+		tool_def.tray_table_footprint.x > 0 and tool_def.tray_table_footprint.y > 0,
+		"Tray table footprint must be positive."
+	)
+	var tray_station := $WorldRoot/ToolLayer/TrayStation as TrayStation
+	assert(tray_station != null, "TongDayScreen requires the functional TrayStation scene.")
+	assert(tray_station.get_cup_count() == tool_def.tray_capacity, "Tray cup count must follow ToolDef.")
+	assert(
+		tray_station.get_slot_count() == tool_def.tray_grid_size.x * tool_def.tray_grid_size.y,
+		"Tray slot count must follow ToolDef."
+	)
+	assert(
+		tray_station.get_committed_table_cells().size()
+		== tool_def.tray_table_footprint.x * tool_def.tray_table_footprint.y,
+		"Tray reservation must match its ToolDef table footprint."
+	)
 	assert(tool_def.burner_count == 2, "The demo stove exposes two configurable burners.")
 	for marker in get_tree().get_nodes_in_group("critical_interaction_anchor"):
 		var authored_position := world_root.to_local(marker.global_position)

@@ -33,6 +33,7 @@ var current_mode: StringName = MODE_INTERACT
 
 var _drag_origin_parent: Node
 var _drag_origin_transform := Transform2D.IDENTITY
+var _registered_drop_zones: Array[DropZone] = []
 
 
 func _ready() -> void:
@@ -64,6 +65,19 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func is_dragging() -> bool:
 	return current_payload != null and is_instance_valid(current_drag_node)
+
+
+func register_drop_zone(drop_zone: DropZone) -> void:
+	if drop_zone == null or _registered_drop_zones.has(drop_zone):
+		return
+	_registered_drop_zones.append(drop_zone)
+
+
+func unregister_drop_zone(drop_zone: DropZone) -> void:
+	_registered_drop_zones.erase(drop_zone)
+	if hovered_drop_zone == drop_zone:
+		hovered_drop_zone.clear_highlight()
+		hovered_drop_zone = null
 
 
 func start_drag(payload: HeldItemPayload, drag_node: Node2D, viewport_position: Vector2) -> bool:
@@ -141,7 +155,7 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 	var best_invalid: DropZone
 	var best_invalid_distance := INF
 
-	for zone in _collect_drop_zones(drop_zone_root):
+	for zone in _get_available_drop_zones():
 		var zone_viewport_position := zone.get_global_transform_with_canvas().origin
 		var distance := viewport_position.distance_to(zone_viewport_position)
 		var zone_scale := zone.get_global_transform_with_canvas().get_scale()
@@ -174,6 +188,18 @@ func _collect_drop_zones(parent: Node) -> Array[DropZone]:
 		if child is DropZone:
 			zones.append(child)
 		zones.append_array(_collect_drop_zones(child))
+	return zones
+
+
+func _get_available_drop_zones() -> Array[DropZone]:
+	var zones := _collect_drop_zones(drop_zone_root)
+	for index in range(_registered_drop_zones.size() - 1, -1, -1):
+		var registered_zone := _registered_drop_zones[index]
+		if not is_instance_valid(registered_zone):
+			_registered_drop_zones.remove_at(index)
+			continue
+		if not zones.has(registered_zone):
+			zones.append(registered_zone)
 	return zones
 
 
