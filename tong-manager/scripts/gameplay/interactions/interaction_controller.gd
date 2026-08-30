@@ -15,6 +15,8 @@ const INPUT_ROTATE_ITEM := &"rotate_item"
 const INPUT_POUR := &"pour"
 const INPUT_QUICK_WASH := &"quick_wash"
 const INPUT_CANCEL := &"cancel"
+const CURSOR_STATE_DRAGGING := &"dragging"
+const CURSOR_STATE_INVALID := &"invalid"
 const FORWARDED_ACTIONS: Array[StringName] = [INPUT_ROTATE_ITEM, INPUT_POUR, INPUT_QUICK_WASH]
 
 @export_node_path("Node2D") var drag_layer_path: NodePath
@@ -22,6 +24,7 @@ const FORWARDED_ACTIONS: Array[StringName] = [INPUT_ROTATE_ITEM, INPUT_POUR, INP
 
 @onready var drag_layer := get_node_or_null(drag_layer_path) as Node2D
 @onready var drop_zone_root := get_node_or_null(drop_zone_root_path) as Node2D
+@onready var cursor_service: Node = get_node("/root/CursorService")
 
 var current_payload: HeldItemPayload
 var current_drag_node: Node2D
@@ -78,6 +81,7 @@ func start_drag(payload: HeldItemPayload, drag_node: Node2D, viewport_position: 
 	elif _drag_origin_parent != drag_layer:
 		drag_node.reparent(drag_layer, true)
 
+	cursor_service.set_state(CURSOR_STATE_DRAGGING)
 	update_drag(viewport_position)
 	drag_started.emit(current_payload, current_drag_node)
 	return true
@@ -97,6 +101,7 @@ func cancel_drag() -> void:
 	var canceled_payload := current_payload
 	_restore_drag_origin()
 	_clear_drag_state()
+	cursor_service.reset()
 	drag_canceled.emit(canceled_payload)
 
 
@@ -112,6 +117,7 @@ func release_drop(viewport_position: Vector2) -> void:
 	var target_zone := hovered_drop_zone
 	target_zone.apply_drop(dropped_payload)
 	_clear_drag_state()
+	cursor_service.reset()
 	drag_dropped.emit(dropped_payload, target_zone)
 
 
@@ -155,7 +161,11 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 		hovered_drop_zone.clear_highlight()
 	hovered_drop_zone = next_zone
 	if hovered_drop_zone != null:
-		hovered_drop_zone.set_highlight(hovered_drop_zone.accepts(current_payload).is_valid)
+		var is_valid := hovered_drop_zone.accepts(current_payload).is_valid
+		hovered_drop_zone.set_highlight(is_valid)
+		cursor_service.set_state(CURSOR_STATE_DRAGGING if is_valid else CURSOR_STATE_INVALID)
+	else:
+		cursor_service.set_state(CURSOR_STATE_DRAGGING)
 
 
 func _collect_drop_zones(parent: Node) -> Array[DropZone]:

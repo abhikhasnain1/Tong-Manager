@@ -8,10 +8,12 @@ const CROP_SAFE_RECT := Rect2(96.0, 0.0, 1728.0, 1080.0)
 
 @onready var world_root: Node2D = %WorldRoot
 @onready var composition_guides: Node2D = %CompositionGuides
+@onready var cursor_service: Node = get_node("/root/CursorService")
 
 
 func _ready() -> void:
 	get_viewport().size_changed.connect(_fit_authored_world)
+	cursor_service.bind_hover_target($WorldRoot/ToolLayer/KhataStation/KhataHotspot)
 	_fit_authored_world()
 	_verify_layout_contract()
 
