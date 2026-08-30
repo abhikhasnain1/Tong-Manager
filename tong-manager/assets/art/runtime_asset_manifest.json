@@ -1,0 +1,45 @@
+{
+  "authored_frame": [1920, 1080],
+  "crop_safe_x": [96, 1824],
+  "assets": [
+    {"runtime": "res://assets/art/backgrounds/tong_backdrop.png", "role": "backdrop", "pivot": [0, 0], "authored_position": [0, 0], "intended_size": [1920, 1080], "perspective": "final"},
+    {"runtime": "res://assets/art/backgrounds/tong_frame_back.png", "role": "frame_back", "pivot": [0, 0], "authored_position": [0, 0], "intended_size": [1920, 1080], "perspective": "final"},
+    {"runtime": "res://assets/art/backgrounds/tong_frame_front.png", "role": "frame_front", "pivot": [0, 0], "authored_position": [0, 0], "intended_size": [1920, 1080], "perspective": "final"},
+    {"runtime": "res://assets/art/toolkit/stove.png", "role": "stove", "pivot": [831, 338], "authored_position": [380, 925], "intended_size": [760, 309], "perspective": "final"},
+    {"runtime": "res://assets/art/toolkit/tray.png", "role": "tray", "pivot": [757, 286], "authored_position": [1210, 885], "intended_size": [696, 263], "perspective": "final"},
+    {"runtime": "res://assets/art/toolkit/kettle_side_provisional.png", "role": "kettle", "pivot": [286, 358], "authored_position": [176, 768], "intended_size": [275, 344], "perspective": "provisional"},
+    {"runtime": "res://assets/art/toolkit/bucket_clean_provisional.png", "role": "bucket", "pivot": [324, 334], "authored_position": [1745, 980], "intended_size": [279, 287], "perspective": "provisional"},
+    {"runtime": "res://assets/art/toolkit/radio_front_provisional.png", "role": "radio", "pivot": [436, 425], "authored_position": [58, 262], "intended_size": [279, 272], "perspective": "provisional"},
+    {"runtime": "res://assets/art/customers/customer_female_provisional.png", "role": "customer", "pivot": [276, 472], "authored_position": [720, 445], "intended_size": [359, 614], "perspective": "provisional"},
+    {"runtime": "res://assets/art/customers/customer_male_provisional.png", "role": "customer", "pivot": [285, 504], "authored_position": [1280, 445], "intended_size": [354, 625], "perspective": "provisional"},
+    {"runtime": "res://assets/art/icons/banana_ready_provisional.png", "role": "ready_item", "pivot": [156, 183], "authored_position": [436.72, 289.77002], "intended_size": [193, 228], "perspective": "provisional"},
+    {"runtime": "res://assets/art/icons/tea_box_ready_provisional.png", "role": "ready_item", "pivot": [455, 313], "authored_position": [1528.88, 764.08], "intended_size": [146, 100], "perspective": "provisional"},
+    {"runtime": "res://assets/art/icons/sugar_can_ready_provisional.png", "role": "ready_item", "pivot": [442, 266], "authored_position": [1781.375, 749.975], "intended_size": [133, 80], "perspective": "provisional"},
+    {"runtime": "res://assets/art/icons/condensed_milk_can_ready_provisional.png", "role": "ready_item", "pivot": [244, 357], "authored_position": [1661.01, 790.26], "intended_size": [88, 129], "perspective": "provisional"},
+    {"runtime": "res://assets/art/icons/biscuits_ready_provisional.png", "role": "ready_item", "pivot": [199, 343], "authored_position": [1527.2272, 208.15034], "intended_size": [132, 228], "perspective": "provisional"}
+  ],
+  "composition_contract": {
+    "locked_on": "2026-08-29",
+    "critical_interaction_anchors": {
+      "radio": [108, 262],
+      "kettle": [201, 779],
+      "tray": [1209, 869],
+      "bucket": [1745, 980]
+    },
+    "stove_anchors": {
+      "burner_left": [201, 875],
+      "burner_right": [492, 870],
+      "dial_left": [315, 1015],
+      "dial_right": [405, 1011]
+    },
+    "tray_slots": [
+      [1068, 826], [1210, 826], [1352, 826],
+      [1068, 912], [1210, 912], [1352, 912]
+    ],
+    "tray_table_footprint": {
+      "top_left": [990, 780],
+      "bottom_right": [1526, 981]
+    },
+    "kettle_steam_anchor": [53, 742]
+  }
+}
