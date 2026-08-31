@@ -17,7 +17,6 @@ const EMPTY_OUTLINE := Color(1.0, 1.0, 1.0, 0.35)
 const OCCUPIED_FILL := Color(0.12, 0.14, 0.18, 0.5)
 const VALID_FILL := Color(0.25, 1.0, 0.4, 0.42)
 const INVALID_FILL := Color(1.0, 0.25, 0.25, 0.42)
-const TRAY_FILL := Color(1.0, 0.78, 0.2, 0.26)
 const POLYGON_AREA_EPSILON := 0.001
 const MINIMUM_CELL_OVERLAP_AREA := 1.0
 const POLYGON_COVERAGE_EPSILON := 0.0001
@@ -427,7 +426,5 @@ func _fill_for_state(state: StringName) -> Color:
 			return VALID_FILL
 		STATE_INVALID_PREVIEW:
 			return INVALID_FILL
-		STATE_TRAY_AREA:
-			return TRAY_FILL
 		_:
 			return EMPTY_FILL

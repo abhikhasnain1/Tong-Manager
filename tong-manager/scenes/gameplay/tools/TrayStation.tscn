@@ -1,49 +1,49 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene format=3 uid="uid://c47us6eyg86n5"]
 
-[ext_resource type="Script" path="res://scripts/gameplay/tools/tray_station.gd" id="1_station"]
-[ext_resource type="Texture2D" path="res://assets/art/toolkit/tray.png" id="2_tray"]
+[ext_resource type="Script" uid="uid://checwetwalrkh" path="res://scripts/gameplay/tools/tray_station.gd" id="1_station"]
+[ext_resource type="Texture2D" uid="uid://ly7dwlhq6nik" path="res://assets/art/toolkit/tray.png" id="2_tray"]
 [ext_resource type="PackedScene" path="res://scenes/gameplay/tools/Cup.tscn" id="3_cup"]
-[ext_resource type="Script" path="res://scripts/gameplay/interactions/tray_grid.gd" id="4_grid"]
-[ext_resource type="Script" path="res://scripts/gameplay/interactions/tray_table_drop_zone.gd" id="5_table_drop"]
-[ext_resource type="Script" path="res://scripts/gameplay/interactions/tray_internal_drop_zone.gd" id="6_internal_drop"]
+[ext_resource type="Script" uid="uid://bbx3udc24eret" path="res://scripts/gameplay/interactions/tray_grid.gd" id="4_grid"]
+[ext_resource type="Script" uid="uid://yxawklnntgd6" path="res://scripts/gameplay/interactions/tray_table_drop_zone.gd" id="5_table_drop"]
+[ext_resource type="Script" uid="uid://cj3pt4bxvtlpx" path="res://scripts/gameplay/interactions/tray_internal_drop_zone.gd" id="6_internal_drop"]
 
 [sub_resource type="ConvexPolygonShape2D" id="ConvexPolygonShape2D_tray"]
-points = PackedVector2Array(-215, -80, 145, -97, 291, 50, -295, 56)
+points = PackedVector2Array(-239, -122, 241, -119, 343, 112, -344, 120)
 
-[node name="TrayStation" type="Node2D"]
+[node name="TrayStation" type="Node2D" unique_id=1239877257]
 editor_description = "Functional M2 tray. Edit TableFootprintBounds/CollisionPolygon2D for the physical table footprint; edit InternalGrid/AuthoredBounds only for the 3x2 cup grid."
 script = ExtResource("1_station")
 cup_scene = ExtResource("3_cup")
 interaction_controller_path = NodePath("../../../InteractionController")
 table_grid_path = NodePath("../../DropZoneRoot/TableGrid")
 
-[node name="TraySprite" type="Sprite2D" parent="."]
+[node name="TraySprite" type="Sprite2D" parent="." unique_id=220745907]
 scale = Vector2(0.46, 0.46)
 texture = ExtResource("2_tray")
 
-[node name="TrayBody" type="Area2D" parent="."]
+[node name="TrayBody" type="Area2D" parent="." unique_id=393227874]
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="TrayBody"]
+[node name="CollisionShape2D" type="CollisionShape2D" parent="TrayBody" unique_id=857435770]
 shape = SubResource("ConvexPolygonShape2D_tray")
 
-[node name="InteractionAnchor" type="Marker2D" parent="." groups=["critical_interaction_anchor"]]
+[node name="InteractionAnchor" type="Marker2D" parent="." unique_id=1346404446 groups=["critical_interaction_anchor"]]
 position = Vector2(-1, -16)
 
-[node name="TablePlacementAnchor" type="Marker2D" parent="."]
+[node name="TablePlacementAnchor" type="Marker2D" parent="." unique_id=1656535423]
 editor_description = "Stable table-snap anchor. Runtime preserves this anchor's initial fractional grid phase, then derives occupied cells from TableFootprintBounds after each whole-cell move."
 position = Vector2(34, 16)
 
-[node name="TableFootprintBounds" type="Area2D" parent="."]
+[node name="TableFootprintBounds" type="Area2D" parent="." unique_id=1381225645]
+editor_description = "Authoring-only physical table footprint. Select CollisionPolygon2D and move its four points to the tray area that actually occupies table space. This is separate from TrayBody's click collision and the InternalGrid cup slots."
 collision_layer = 0
 collision_mask = 0
 monitoring = false
 monitorable = false
-editor_description = "Authoring-only physical table footprint. Select CollisionPolygon2D and move its four points to the tray area that actually occupies table space. This is separate from TrayBody's click collision and the InternalGrid cup slots."
 
-[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="TableFootprintBounds"]
-polygon = PackedVector2Array(-250, -124, 249, -128, 367, 124, -368, 126)
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="TableFootprintBounds" unique_id=1671955264]
+polygon = PackedVector2Array(-239, -122, 241, -119, 343, 112, -344, 120)
 
-[node name="InternalGrid" type="Node2D" parent="."]
+[node name="InternalGrid" type="Node2D" parent="." unique_id=554544290]
 editor_description = "Move only the four AuthoredBounds markers to fit the tray perspective. CupSlot markers are derived automatically."
 z_index = 1
 script = ExtResource("4_grid")
@@ -53,57 +53,57 @@ bottom_left_path = NodePath("AuthoredBounds/BottomLeft")
 bottom_right_path = NodePath("AuthoredBounds/BottomRight")
 cup_slots_path = NodePath("../CupSlots")
 
-[node name="AuthoredBounds" type="Node2D" parent="InternalGrid"]
+[node name="AuthoredBounds" type="Node2D" parent="InternalGrid" unique_id=123478637]
 editor_description = "User-tuned tray interior. These four corners define the continuous 3x2 grid."
 
-[node name="TopLeft" type="Marker2D" parent="InternalGrid/AuthoredBounds"]
+[node name="TopLeft" type="Marker2D" parent="InternalGrid/AuthoredBounds" unique_id=897291052]
 position = Vector2(-206, -97)
 
-[node name="TopRight" type="Marker2D" parent="InternalGrid/AuthoredBounds"]
+[node name="TopRight" type="Marker2D" parent="InternalGrid/AuthoredBounds" unique_id=592498176]
 position = Vector2(206, -100)
 
-[node name="BottomLeft" type="Marker2D" parent="InternalGrid/AuthoredBounds"]
+[node name="BottomLeft" type="Marker2D" parent="InternalGrid/AuthoredBounds" unique_id=1018956351]
 position = Vector2(-265, 77)
 
-[node name="BottomRight" type="Marker2D" parent="InternalGrid/AuthoredBounds"]
+[node name="BottomRight" type="Marker2D" parent="InternalGrid/AuthoredBounds" unique_id=211331852]
 position = Vector2(265, 77)
 
-[node name="CupSlots" type="Node2D" parent="."]
+[node name="CupSlots" type="Node2D" parent="." unique_id=52952843]
 
-[node name="CupSlot0" type="Marker2D" parent="CupSlots" groups=["critical_interaction_anchor"]]
-position = Vector2(-147.16663, -53.875)
+[node name="CupSlot0" type="Marker2D" parent="CupSlots" unique_id=1904419305 groups=["critical_interaction_anchor"]]
+position = Vector2(-147.16666, -53.875)
 
-[node name="CupSlot1" type="Marker2D" parent="CupSlots" groups=["critical_interaction_anchor"]]
+[node name="CupSlot1" type="Marker2D" parent="CupSlots" unique_id=2008577872 groups=["critical_interaction_anchor"]]
 position = Vector2(0, -54.625)
 
-[node name="CupSlot2" type="Marker2D" parent="CupSlots" groups=["critical_interaction_anchor"]]
-position = Vector2(147.16663, -55.375)
+[node name="CupSlot2" type="Marker2D" parent="CupSlots" unique_id=1379584183 groups=["critical_interaction_anchor"]]
+position = Vector2(147.16666, -55.375)
 
-[node name="CupSlot3" type="Marker2D" parent="CupSlots" groups=["critical_interaction_anchor"]]
-position = Vector2(-166.83337, 33.375)
+[node name="CupSlot3" type="Marker2D" parent="CupSlots" unique_id=169153858 groups=["critical_interaction_anchor"]]
+position = Vector2(-166.83333, 33.375)
 
-[node name="CupSlot4" type="Marker2D" parent="CupSlots" groups=["critical_interaction_anchor"]]
+[node name="CupSlot4" type="Marker2D" parent="CupSlots" unique_id=354552958 groups=["critical_interaction_anchor"]]
 position = Vector2(0, 33.125)
 
-[node name="CupSlot5" type="Marker2D" parent="CupSlots" groups=["critical_interaction_anchor"]]
-position = Vector2(166.83325, 32.875)
+[node name="CupSlot5" type="Marker2D" parent="CupSlots" unique_id=822664830 groups=["critical_interaction_anchor"]]
+position = Vector2(166.83331, 32.875)
 
-[node name="Cups" type="Node2D" parent="."]
+[node name="Cups" type="Node2D" parent="." unique_id=833519557]
 z_index = 2
 
-[node name="TableDropZone" type="Area2D" parent="."]
+[node name="TableDropZone" type="Area2D" parent="." unique_id=1033120506]
 position = Vector2(34, 16)
 script = ExtResource("5_table_drop")
 zone_id = &"tray_table_placement"
 snap_radius = 192.0
 
-[node name="DebugPreview" type="Sprite2D" parent="TableDropZone"]
+[node name="DebugPreview" type="Sprite2D" parent="TableDropZone" unique_id=226334976]
 visible = false
 
-[node name="InternalDropZone" type="Area2D" parent="."]
+[node name="InternalDropZone" type="Area2D" parent="." unique_id=1214657144]
 script = ExtResource("6_internal_drop")
 zone_id = &"tray_internal_grid"
 snap_radius = 420.0
 
-[node name="DebugPreview" type="Sprite2D" parent="InternalDropZone"]
+[node name="DebugPreview" type="Sprite2D" parent="InternalDropZone" unique_id=1041434909]
 visible = false

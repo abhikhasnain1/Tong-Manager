@@ -9,7 +9,7 @@ const CUP_CATEGORY := &"cup"
 const SMALL_ITEM_CATEGORY := &"small_item"
 const RESERVATION_ID := &"tray_station"
 const ORGANIZE_GHOST_ALPHA := 0.42
-const MINIMUM_TABLE_COVERAGE_RATIO := 1.0
+const MINIMUM_TABLE_COVERAGE_RATIO := 0.9995
 
 @export var tool_def: Resource
 @export var cup_scene: PackedScene
@@ -232,6 +232,8 @@ func _connect_interactions() -> void:
 	tray_body.mouse_entered.connect(_on_tray_mouse_entered)
 	tray_body.mouse_exited.connect(_on_hover_exited)
 	_interaction_controller.drag_canceled.connect(_on_drag_canceled)
+	_interaction_controller.drag_started.connect(_on_drag_started)
+	_interaction_controller.drag_dropped.connect(_on_drag_dropped)
 	_interaction_controller.mode_changed.connect(_on_mode_changed)
 
 
@@ -349,8 +351,20 @@ func _on_hover_exited() -> void:
 
 func _on_drag_canceled(payload: HeldItemPayload) -> void:
 	if payload != null and payload.item_id == RESERVATION_ID:
+		modulate.a = 1.0
 		_register_drop_zones()
 		_restore_table_reservation()
+
+
+func _on_drag_started(payload: HeldItemPayload, drag_node: Node2D) -> void:
+	if payload == null or payload.item_id != RESERVATION_ID or drag_node != self:
+		return
+	modulate.a = ORGANIZE_GHOST_ALPHA
+
+
+func _on_drag_dropped(payload: HeldItemPayload, _drop_zone: DropZone) -> void:
+	if payload != null and payload.item_id == RESERVATION_ID:
+		modulate.a = 1.0
 
 
 func _on_mode_changed(mode: StringName) -> void:
@@ -360,8 +374,8 @@ func _on_mode_changed(mode: StringName) -> void:
 	get_node("/root/CursorService").reset()
 
 
-func _update_mode_visual(mode: StringName) -> void:
-	modulate.a = ORGANIZE_GHOST_ALPHA if mode == InteractionController.MODE_ORGANIZE else 1.0
+func _update_mode_visual(_mode: StringName) -> void:
+	modulate.a = 1.0
 
 
 func _restore_table_reservation() -> void:

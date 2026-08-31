@@ -3,7 +3,6 @@ extends Node2D
 
 const VALID_OUTLINE := Color(0.25, 1.0, 0.4, 0.95)
 const INVALID_OUTLINE := Color(1.0, 0.25, 0.25, 0.95)
-const TRAY_OUTLINE := Color(1.0, 0.82, 0.28, 0.95)
 
 var _table_grid: TableGrid
 
@@ -30,8 +29,6 @@ func _draw() -> void:
 					outline = VALID_OUTLINE
 				TableGrid.STATE_INVALID_PREVIEW:
 					outline = INVALID_OUTLINE
-				TableGrid.STATE_TRAY_AREA:
-					outline = TRAY_OUTLINE
 				_:
 					continue
 			var polygon := _table_grid.get_cell_polygon(cell)

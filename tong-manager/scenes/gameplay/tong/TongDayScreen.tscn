@@ -22,9 +22,9 @@
 [ext_resource type="Shader" uid="uid://cxt8j3h5v6vwp" path="res://assets/shaders/world_color_grade.gdshader" id="20_grade"]
 [ext_resource type="Script" uid="uid://ch0ggxjjqwbeb" path="res://scripts/ui/tong_hud.gd" id="21_hud"]
 [ext_resource type="Script" uid="uid://c8pc6hixrf8v4" path="res://scripts/gameplay/interactions/interaction_controller.gd" id="22_interaction"]
-[ext_resource type="PackedScene" path="res://scenes/gameplay/tools/TrayStation.tscn" id="23_tray_station"]
+[ext_resource type="PackedScene" uid="uid://c47us6eyg86n5" path="res://scenes/gameplay/tools/TrayStation.tscn" id="23_tray_station"]
 [ext_resource type="Script" uid="uid://cw1qsdwkrovxk" path="res://scripts/gameplay/interactions/table_grid.gd" id="24_table_grid"]
-[ext_resource type="Script" path="res://scripts/gameplay/interactions/table_grid_state_overlay.gd" id="25_grid_overlay"]
+[ext_resource type="Script" uid="uid://dk0vlm10lbc88" path="res://scripts/gameplay/interactions/table_grid_state_overlay.gd" id="25_grid_overlay"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_khata"]
 size = Vector2(117, 360)
@@ -199,7 +199,7 @@ position = Vector2(25, 11)
 [node name="SteamAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/KettleStation" unique_id=1303388186]
 position = Vector2(-123, -26)
 
-[node name="TrayStation" parent="WorldRoot/ToolLayer" instance=ExtResource("23_tray_station")]
+[node name="TrayStation" parent="WorldRoot/ToolLayer" unique_id=1164031835 instance=ExtResource("23_tray_station")]
 position = Vector2(1210, 885)
 tool_def = ExtResource("3_tools")
 
@@ -222,7 +222,6 @@ z_index = 35
 [node name="TableGrid" type="Node2D" parent="WorldRoot/DropZoneRoot" unique_id=560674855]
 z_index = -10
 script = ExtResource("24_table_grid")
-grid_size = Vector2i(8, 5)
 top_left_path = NodePath("AuthoredBounds/TopLeft")
 top_right_path = NodePath("AuthoredBounds/TopRight")
 bottom_left_path = NodePath("AuthoredBounds/BottomLeft")
@@ -231,10 +230,6 @@ interaction_controller_path = NodePath("../../../InteractionController")
 
 [node name="AuthoredBounds" type="Node2D" parent="WorldRoot/DropZoneRoot/TableGrid" unique_id=1686286958]
 editor_description = "Move the four child markers to align the organization grid. Do not move workstation sprites to fit the grid."
-
-[node name="StateOverlay" type="Node2D" parent="WorldRoot/DropZoneRoot/TableGrid"]
-z_index = 0
-script = ExtResource("25_grid_overlay")
 
 [node name="TopLeft" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds" unique_id=1911629364]
 position = Vector2(622, 747)
@@ -247,6 +242,9 @@ position = Vector2(766, 1066)
 
 [node name="BottomRight" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds" unique_id=157738543]
 position = Vector2(1793, 1072)
+
+[node name="StateOverlay" type="Node2D" parent="WorldRoot/DropZoneRoot/TableGrid" unique_id=1929212797]
+script = ExtResource("25_grid_overlay")
 
 [node name="StoveDropZoneAnchor" type="Marker2D" parent="WorldRoot/DropZoneRoot" unique_id=948933766 groups=["critical_interaction_anchor"]]
 position = Vector2(380, 875)
