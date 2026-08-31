@@ -11,7 +11,7 @@
 points = PackedVector2Array(-215, -80, 145, -97, 291, 50, -295, 56)
 
 [node name="TrayStation" type="Node2D"]
-editor_description = "Functional M2 tray. Adjust only InternalGrid/AuthoredBounds to retune its 3x2 perspective grid."
+editor_description = "Functional M2 tray. Edit TableFootprintBounds/CollisionPolygon2D for the physical table footprint; edit InternalGrid/AuthoredBounds only for the 3x2 cup grid."
 script = ExtResource("1_station")
 cup_scene = ExtResource("3_cup")
 interaction_controller_path = NodePath("../../../InteractionController")
@@ -32,6 +32,16 @@ position = Vector2(-1, -16)
 [node name="TablePlacementAnchor" type="Marker2D" parent="."]
 editor_description = "Logical centre of the tray's 4x3 table reservation. Do not use the sprite pivot for table snapping."
 position = Vector2(34, 16)
+
+[node name="TableFootprintBounds" type="Area2D" parent="."]
+collision_layer = 0
+collision_mask = 0
+monitoring = false
+monitorable = false
+editor_description = "Authoring-only physical table footprint. Select CollisionPolygon2D and move its four points to the tray area that actually occupies table space. This is separate from TrayBody's click collision and the InternalGrid cup slots."
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="TableFootprintBounds"]
+polygon = PackedVector2Array(-273.25, -79.5, 298.65, -90.1, 319.35, 116.6, -208.75, 117)
 
 [node name="InternalGrid" type="Node2D" parent="."]
 editor_description = "Move only the four AuthoredBounds markers to fit the tray perspective. CupSlot markers are derived automatically."
