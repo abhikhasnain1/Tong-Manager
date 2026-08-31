@@ -41,7 +41,7 @@ monitorable = false
 editor_description = "Authoring-only physical table footprint. Select CollisionPolygon2D and move its four points to the tray area that actually occupies table space. This is separate from TrayBody's click collision and the InternalGrid cup slots."
 
 [node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="TableFootprintBounds"]
-polygon = PackedVector2Array(-273.25, -79.5, 298.65, -90.1, 319.35, 116.6, -208.75, 117)
+polygon = PackedVector2Array(-250, -124, 249, -128, 367, 124, -368, 126)
 
 [node name="InternalGrid" type="Node2D" parent="."]
 editor_description = "Move only the four AuthoredBounds markers to fit the tray perspective. CupSlot markers are derived automatically."
