@@ -14,4 +14,4 @@ func _draw() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(110.0, 34.0), "16:10 crop-safe boundary", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 22, Color(0.2, 0.9, 1.0))
 	draw_string(ThemeDB.fallback_font, CUSTOMER_ZONE.position + Vector2(8.0, 28.0), "customer lane", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 22, Color(0.9, 0.4, 1.0))
 	draw_string(ThemeDB.fallback_font, TOOL_ZONE.position + Vector2(8.0, 30.0), "workstation", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 22, Color(1.0, 0.72, 0.2))
-	draw_string(ThemeDB.fallback_font, TRAY_ZONE.position + Vector2(8.0, 28.0), "tray 3x2 / table 4x3", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 22, Color(0.3, 1.0, 0.45))
+	draw_string(ThemeDB.fallback_font, TRAY_ZONE.position + Vector2(8.0, 28.0), "tray 3x2 / polygon table occupancy", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 22, Color(0.3, 1.0, 0.45))

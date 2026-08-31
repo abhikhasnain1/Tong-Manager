@@ -26,10 +26,11 @@
     {"runtime": "res://assets/art/toolkit/cup_dirty_provisional.png", "role": "cup_dirty", "crop": [0, 0, 485, 501], "filter_padding": 8, "pivot": [250.5, 258.5], "intended_size": [75, 78], "state_family": "cup_501x517", "perspective": "provisional"}
   ],
   "composition_contract": {
-    "revision": 4,
+    "revision": 5,
     "locked_on": "2026-08-29",
     "interaction_alignment_updated_on": "2026-08-30",
     "grid_feedback_updated_on": "2026-08-30",
+    "tray_occupancy_updated_on": "2026-08-30",
     "critical_interaction_anchors": {
       "radio": [108, 262],
       "kettle": [201, 779],
@@ -57,12 +58,24 @@
         "bottom_left": [766, 1066]
       }
     },
-    "tray_table_footprint": {
-      "logical_size": [4, 3],
-      "initial_origin": [2, 1],
-      "legacy_art_envelope": {
-        "top_left": [990, 780],
-        "bottom_right": [1526, 981]
+    "tray_table_occupancy": {
+      "model": "authored_polygon_overlap",
+      "scene": "res://scenes/gameplay/tools/TrayStation.tscn",
+      "node": "TableFootprintBounds/CollisionPolygon2D",
+      "coordinate_space": "tray_station_local",
+      "point_order": ["top_left", "top_right", "bottom_right", "bottom_left"],
+      "points": [[-250, -124], [249, -128], [367, 124], [-368, 126]],
+      "occupancy": {
+        "method": "cell_center_or_area_overlap_ratio",
+        "threshold_source": "res://data/balance/tool_level_1.tres#tray_table_overlap_threshold",
+        "level_1": 0.2,
+        "minimum_intersection_area_px2": 1.0,
+        "minimum_table_coverage_ratio": 1.0
+      },
+      "snap": {
+        "method": "whole_cell_with_fractional_anchor_phase",
+        "phase": [0.0, 0.5],
+        "switch_hysteresis": 0.08
       }
     },
     "kettle_steam_anchor": [53, 742]

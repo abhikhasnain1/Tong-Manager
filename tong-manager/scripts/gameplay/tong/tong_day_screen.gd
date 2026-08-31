@@ -38,8 +38,9 @@ func _verify_layout_contract() -> void:
 		"Tray capacity cannot exceed its internal grid."
 	)
 	assert(
-		tool_def.tray_table_footprint.x > 0 and tool_def.tray_table_footprint.y > 0,
-		"Tray table footprint must be positive."
+		tool_def.tray_table_overlap_threshold > 0.0
+		and tool_def.tray_table_overlap_threshold <= 1.0,
+		"Tray table overlap threshold must be within (0, 1]."
 	)
 	var tray_station := $WorldRoot/ToolLayer/TrayStation as TrayStation
 	assert(tray_station != null, "TongDayScreen requires the functional TrayStation scene.")
@@ -49,10 +50,10 @@ func _verify_layout_contract() -> void:
 		"Tray slot count must follow ToolDef."
 	)
 	assert(
-		tray_station.get_committed_table_cells().size()
-		== tool_def.tray_table_footprint.x * tool_def.tray_table_footprint.y,
-		"Tray reservation must match its ToolDef table footprint."
+		not tray_station.get_committed_table_cells().is_empty(),
+		"Tray polygon must reserve at least one table cell."
 	)
+	assert(tray_station.is_table_footprint_in_bounds(), "Tray polygon must begin inside the table.")
 	assert(tool_def.burner_count == 2, "The demo stove exposes two configurable burners.")
 	for marker in get_tree().get_nodes_in_group("critical_interaction_anchor"):
 		var authored_position := world_root.to_local(marker.global_position)

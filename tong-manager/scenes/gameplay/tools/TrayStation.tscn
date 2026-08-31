@@ -30,7 +30,7 @@ shape = SubResource("ConvexPolygonShape2D_tray")
 position = Vector2(-1, -16)
 
 [node name="TablePlacementAnchor" type="Marker2D" parent="."]
-editor_description = "Logical centre of the tray's 4x3 table reservation. Do not use the sprite pivot for table snapping."
+editor_description = "Stable table-snap anchor. Runtime preserves this anchor's initial fractional grid phase, then derives occupied cells from TableFootprintBounds after each whole-cell move."
 position = Vector2(34, 16)
 
 [node name="TableFootprintBounds" type="Area2D" parent="."]
