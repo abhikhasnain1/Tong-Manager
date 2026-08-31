@@ -64,13 +64,13 @@
       "node": "TableFootprintBounds/CollisionPolygon2D",
       "coordinate_space": "tray_station_local",
       "point_order": ["top_left", "top_right", "bottom_right", "bottom_left"],
-      "points": [[-250, -124], [249, -128], [367, 124], [-368, 126]],
+      "points": [[-239, -122], [241, -119], [343, 112], [-344, 120]],
       "occupancy": {
         "method": "cell_center_or_area_overlap_ratio",
         "threshold_source": "res://data/balance/tool_level_1.tres#tray_table_overlap_threshold",
-        "level_1": 0.2,
+        "level_1": 0.05,
         "minimum_intersection_area_px2": 1.0,
-        "minimum_table_coverage_ratio": 1.0
+        "minimum_table_coverage_ratio": 0.9995
       },
       "snap": {
         "method": "whole_cell_with_fractional_anchor_phase",

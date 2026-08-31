@@ -6,4 +6,4 @@ extends Resource
 @export var cup_volume_ml: int
 @export var burner_count: int
 @export var tray_grid_size: Vector2i
-@export_range(0.0, 1.0, 0.01) var tray_table_overlap_threshold: float = 0.20
+@export_range(0.0, 1.0, 0.01) var tray_table_overlap_threshold: float = 0.05
