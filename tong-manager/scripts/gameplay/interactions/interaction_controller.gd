@@ -33,6 +33,7 @@ var current_mode: StringName = MODE_INTERACT
 
 var _drag_origin_parent: Node
 var _drag_origin_transform := Transform2D.IDENTITY
+var _drag_pointer_offset := Vector2.ZERO
 var _registered_drop_zones: Array[DropZone] = []
 
 
@@ -90,6 +91,9 @@ func start_drag(payload: HeldItemPayload, drag_node: Node2D, viewport_position: 
 	current_drag_node = drag_node
 	_drag_origin_parent = drag_node.get_parent()
 	_drag_origin_transform = drag_node.transform
+	_drag_pointer_offset = Vector2.ZERO
+	if _drag_origin_parent != null and drag_node.is_inside_tree():
+		_drag_pointer_offset = viewport_position - drag_node.get_global_transform_with_canvas().origin
 	if _drag_origin_parent == null:
 		drag_layer.add_child(drag_node)
 	elif _drag_origin_parent != drag_layer:
@@ -104,7 +108,8 @@ func start_drag(payload: HeldItemPayload, drag_node: Node2D, viewport_position: 
 func update_drag(viewport_position: Vector2) -> void:
 	if not is_dragging():
 		return
-	current_drag_node.position = drag_layer.get_global_transform_with_canvas().affine_inverse() * viewport_position
+	var drag_origin_viewport := viewport_position - _drag_pointer_offset
+	current_drag_node.position = drag_layer.get_global_transform_with_canvas().affine_inverse() * drag_origin_viewport
 	_update_hovered_drop_zone(viewport_position)
 	drag_moved.emit(current_payload, viewport_position)
 
@@ -157,10 +162,14 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 
 	for zone in _get_available_drop_zones():
 		var zone_viewport_position := zone.get_global_transform_with_canvas().origin
-		var distance := viewport_position.distance_to(zone_viewport_position)
+		var zone_belongs_to_drag_node := (
+			current_drag_node == zone
+			or current_drag_node.is_ancestor_of(zone)
+		)
+		var distance := 0.0 if zone_belongs_to_drag_node else viewport_position.distance_to(zone_viewport_position)
 		var zone_scale := zone.get_global_transform_with_canvas().get_scale()
 		var snap_radius_viewport := zone.snap_radius * maxf(absf(zone_scale.x), absf(zone_scale.y))
-		if distance > snap_radius_viewport:
+		if not zone_belongs_to_drag_node and distance > snap_radius_viewport:
 			continue
 		if zone.accepts(current_payload).is_valid:
 			if distance < best_valid_distance:
@@ -223,3 +232,4 @@ func _clear_drag_state() -> void:
 	current_drag_node = null
 	_drag_origin_parent = null
 	_drag_origin_transform = Transform2D.IDENTITY
+	_drag_pointer_offset = Vector2.ZERO

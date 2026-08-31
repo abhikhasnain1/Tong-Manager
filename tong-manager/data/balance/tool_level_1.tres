@@ -10,4 +10,4 @@ kettle_capacity_ml = 1500
 cup_volume_ml = 250
 burner_count = 2
 tray_grid_size = Vector2i(3, 2)
-tray_table_footprint = Vector2i(4, 3)
+tray_table_overlap_threshold = 0.05
