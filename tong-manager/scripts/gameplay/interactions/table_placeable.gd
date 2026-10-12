@@ -13,6 +13,9 @@ var item: Node2D
 var _home_parent: Node
 var _zone: TablePlacementDropZone
 var _input_area: Area2D
+var _footprints: Array[PackedVector2Array] = []
+var _available_surfaces: Array[PlacementSurface] = []
+var candidate_surface: PlacementSurface
 
 
 func _ready() -> void:
@@ -30,6 +33,10 @@ func _ready() -> void:
 
 
 func configure(value: PlacementSurface, interaction: InteractionController) -> bool:
+	if not is_instance_valid(value) or not is_instance_valid(interaction):
+		return false
+	if surface == value and value.is_registered(item):
+		return true
 	surface = value
 	controller = interaction
 	_home_parent = item.get_parent()
@@ -39,11 +46,16 @@ func configure(value: PlacementSurface, interaction: InteractionController) -> b
 		shape = PackedVector2Array()
 		for point in authored.polygon:
 			shape.append(item.to_local(authored.to_global(point)))
-	var shapes: Array[PackedVector2Array] = [shape]
-	if not surface.register_item(item, shapes):
+	_footprints = [shape]
+	if not surface.register_item(item, _footprints):
 		return false
+	_available_surfaces = [surface]
 	controller.register_drop_zone(_zone)
 	return true
+
+
+func set_available_surfaces(values: Array[PlacementSurface]) -> void:
+	_available_surfaces = values.duplicate()
 
 
 func begin_drag(viewport_position: Vector2) -> bool:
@@ -66,30 +78,60 @@ func owns_payload(payload: HeldItemPayload) -> bool:
 
 
 func validate_placement() -> DropValidation:
-	if not is_instance_valid(surface):
+	candidate_surface = null
+	if not is_instance_valid(surface) or not surface.is_inside_tree() or not surface.is_registered(item):
 		return DropValidation.invalid("placement.unavailable")
-	var result := surface.validate_item(item)
-	if not result.is_valid:
-		return result
+	var first_failure := DropValidation.invalid("placement.unavailable")
+	for target in _available_surfaces:
+		if not is_instance_valid(target) or not target.is_inside_tree() or target.is_queued_for_deletion():
+			continue
+		# A movable surface cannot be placed onto itself or one of its children.
+		if item == target or item.is_ancestor_of(target):
+			continue
+		var result := target.validate_candidate(item, _footprints)
+		if result.is_valid:
+			result = _validate_visible_base(target)
+		if result.is_valid:
+			candidate_surface = target
+			return result
+		first_failure = result
+	return first_failure
+
+
+func _validate_visible_base(target: PlacementSurface) -> DropValidation:
 	# The authored table may be cropped by a narrow window. Never commit an
 	# unreachable base beyond the visible screen; this adds no table blocker.
 	var view := get_viewport().get_visible_rect()
-	for polygon in surface.get_candidate_polygons(item):
+	for polygon in target.project_footprints(item, _footprints):
 		for point in polygon:
-			var screen_point := surface.get_global_transform_with_canvas() * point
+			var screen_point := target.get_global_transform_with_canvas() * point
 			if (screen_point.x < view.position.x - 0.001 or screen_point.y < view.position.y - 0.001
 				or screen_point.x > view.end.x + 0.001 or screen_point.y > view.end.y + 0.001):
 				return DropValidation.invalid("placement.outside_view")
-	return result
+	return DropValidation.valid()
 
 
 func commit(payload: HeldItemPayload) -> bool:
 	if (not owns_payload(payload) or not is_instance_valid(_home_parent)
 		or not _home_parent.is_inside_tree() or _home_parent.is_queued_for_deletion()
-		or not validate_placement().is_valid or not surface.commit_item(item)):
+		or not validate_placement().is_valid):
 		return false
-	if item.get_parent() != _home_parent:
-		controller.reparent_preserving_transform(item, _home_parent)
+	var target := candidate_surface
+	var target_parent := _home_parent if target == surface else target.get_placement_parent()
+	if not is_instance_valid(target_parent) or not target_parent.is_inside_tree() or target_parent.is_queued_for_deletion():
+		return false
+	if target == surface:
+		if not surface.commit_item(item):
+			return false
+	else:
+		# Book the validated destination before releasing the original reservation.
+		# No signals or awaits can observe a half-completed ownership transfer.
+		if not target.register_item(item, _footprints):
+			return false
+		surface.unregister_item(item)
+		surface = target
+		_home_parent = target_parent
+	controller.reparent_preserving_transform(item, target_parent)
 	placement_committed.emit()
 	return true
 
@@ -107,15 +149,37 @@ func _is_frontmost_at(viewport_position: Vector2) -> bool:
 	# that painter order so overlapping tall art selects the visible container.
 	for node in get_tree().get_nodes_in_group(&"table_placeables"):
 		var other := node as TablePlaceable
-		if (other == self or other.surface != surface or not is_instance_valid(other.item)
+		if (other == self or other.controller != controller or not is_instance_valid(other.item)
 			or not other.item.is_visible_in_tree()
-			or not surface.is_registered(other.item) or not other._contains_pointer(viewport_position)):
+			or not is_instance_valid(other.surface) or not other.surface.is_registered(other.item)
+			or not other._contains_pointer(viewport_position)):
 			continue
-		var this_y := item.global_position.y
-		var other_y := other.item.global_position.y
-		if other_y > this_y or (other_y == this_y and other.item.is_greater_than(item)):
+		var this_root := _render_root()
+		var other_root := other._render_root()
+		if this_root == other_root:
+			# Contents render above the tray; siblings are Y-sorted within it.
+			if item.is_ancestor_of(other.item):
+				return false
+			if other.item.is_ancestor_of(item):
+				continue
+			this_root = item
+			other_root = other.item
+		var this_y := this_root.global_position.y
+		var other_y := other_root.global_position.y
+		if other_y > this_y or (other_y == this_y and other_root.is_greater_than(this_root)):
 			return false
 	return true
+
+
+func _render_root() -> Node2D:
+	var result := item
+	var ancestor := item.get_parent()
+	while ancestor != null:
+		var handle := ancestor.get_node_or_null("PlacementHandle") as TablePlaceable
+		if handle != null and handle.controller == controller:
+			result = ancestor as Node2D
+		ancestor = ancestor.get_parent()
+	return result
 
 
 func _contains_pointer(viewport_position: Vector2) -> bool:

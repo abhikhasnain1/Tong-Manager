@@ -22,18 +22,5 @@ func _ready() -> void:
 	var discard := screen.get_node("WorldRoot/DropZoneRoot/DiscardArea") as DiscardDropZone
 	discard.controller = controller
 	controller.register_drop_zone(discard)
-	var tray := screen.get_node("WorldRoot/ToolLayer/TrayStation") as TrayStation
-	for child in tray.cups.get_children():
-		if child is Cup:
-			var cup := child as Cup
-			cup.capacity_ml = float(tray.tool_def.cup_volume_ml)
-			var zone := BrewingDropZone.new()
-			zone.name = "PourTarget"
-			zone.is_cup_target = true
-			zone.target = cup
-			zone.controller = controller
-			zone.snap_radius = 30.0
-			zone.position = Vector2(0, -12)
-			zone.input_pickable = false
-			cup.add_child(zone)
-			controller.register_drop_zone(zone)
+	# The screen configures initial and newly spawned cups on either surface.
+	# Each cup owns its reusable pour target, independent of tray ownership.

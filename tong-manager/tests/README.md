@@ -1,8 +1,8 @@
 # Table placement and brewing verification
 
 The current table placement review is in `scenes/development/BrewingPreview.tscn`.
-Open it and press F6. Press **G** for Organize, then drag the tray or a tea, sugar
-or milk container to a clear part of the tabletop. The base outline is green for
+Open it and press F6. Press **G** for Organize, then drag the tray, a cup or a tea,
+sugar or milk container to a clear part of the tabletop. The base outline is green for
 a valid position and red for a blocked position. Release commits the exact
 position; an invalid release, Escape, right-click, mode change, focus loss or
 window resize returns the item. No rotation or automatic pushing is included.
@@ -14,22 +14,35 @@ accessible above placeable art and do not reserve table space. Two existing suga
 can pictures are separate texture regions with independent placement; neither
 creates ingredient stock or implements taking a portion.
 
-The populated tray carries its cups unchanged. **This is the table-only slice:**
-the internal cup grid and its existing brewing/service lifecycle remain until
-free tray contents and bidirectional table transfers are implemented in #103.
-Press G again for Interact to use the brewing actions described below. All scene
-icons, boxes and controls remain provisional. Bucket work is on hold.
+Cups and ingredient containers can also move freely onto and off the tray. Their
+complete bases must fit inside its usable interior; a base crossing the rim is
+invalid. Exact edge contact is allowed. The populated tray carries its contents
+with their arrangement, size and state unchanged, while table-owned items stay
+still. The starting six cups are an owned supply, not a six-slot placement limit.
+Press G again for Interact to brew, serve or discard. Releasing a cup in Interact
+does not rearrange it. All scene icons, boxes and controls remain provisional.
+Bucket work is on hold.
 
 ```sh
 godot --headless --path . --script res://tests/placement_geometry_test.gd
 godot --headless --path . --script res://tests/table_placement_test.gd
+godot --headless --path . --script res://tests/tray_transfer_test.gd
 godot --path . --resolution 1920x1080 --script res://tests/table_placement_input_test.gd
+godot --path . --resolution 1920x1080 --script res://tests/tray_transfer_input_test.gd
 ```
 
 The geometry suite checks concave boundaries/exclusions, compound footprints,
-exact edge contact, peer overlap, transformed geometry and stale identity safety.
+exact edge contact, peer overlap, transformed geometry, stale identity safety and
+cleanup when a drag's original owner is detached or destroyed.
 The table suites check continuous scene placement, rollback and actual input
-alongside moved-tray brewing and utility access. Run rendered checks at all four
+alongside moved-tray brewing and utility access. The transfer suites cover cups
+and all whole ingredient sources in both directions, preserved size and contents,
+mixed populated trays, rim/occupied drops, cancellation, removed objects, dynamic
+cup setup, action-only Interact releases, pouring, disposal and sample service
+after relocation. Overlapping filled cups verify separate bases, inherited liquid
+depth and real front-object picking in both placement orders. The rendered
+transfer script accepts optional initial, mixed-tray and overlapping-cup PNG paths
+after `--` for visual review. Run rendered checks at all four
 sizes listed below. Tests do not replace scene/play-feel acceptance before merge.
 
 Run from the `tong-manager` project directory with Godot 4.7 on PATH:
@@ -84,7 +97,7 @@ The upper-right **SAMPLE CUSTOMER** is a preview-only black-tea order requiring
 at least 150 ml and no garnishes. Drag a filled cup there: warm tea produces a
 happy sample; cold tea is accepted but produces an unhappy sample and the readable
 bad review “My tea was cold.” The temperature at actual handoff decides the result,
-including tea that cooled after pouring. The cup returns to its tray position
+including tea that cooled after pouring. The cup returns to its previous surface and position
 marked served. **Next sample customer** creates another sample order without
 refilling supplies or cleaning cups. Repeated or rejected handoffs add no review.
 

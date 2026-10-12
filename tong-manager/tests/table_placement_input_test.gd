@@ -1,6 +1,6 @@
 extends SceneTree
 
-# Real viewport picking/regressions for table placement; no #103 transfer claims.
+# Real viewport picking/regressions for the table and preserved brewing actions.
 var failures: Array[String] = []
 var checks := 0
 var preview: Node
@@ -185,21 +185,30 @@ func run() -> void:
 	await verify_overlap_picking(rail)
 	await verify_tray_source_picking(rail,tray)
 	var cup_snapshots: Array[Dictionary] = []
-	for child in tray.cups.get_children():
+	for child in tray.get_cups():
 		var cup := child as Cup
 		cup_snapshots.append({"cup":cup,"transform":cup.transform,"zone":cup.get_node("PourTarget")})
 	var tray_start := world.to_local(tray.global_position)
-	await arrange(tray,Vector2(1251.125,936.625),"Populated tray",Vector2(0,10))
+	# The middle now contains genuinely pickable free cups in Organize. Grip the
+	# exposed lower rim so this regression moves the tray, not its front cup.
+	var tray_grip := Vector2(0,65)
+	await arrange(tray,Vector2(1251.125,936.625),"Populated tray",tray_grip)
 	for snapshot in cup_snapshots:
 		var cup := snapshot.cup as Cup
-		check(cup.get_parent() == tray.cups and cup.transform.is_equal_approx(snapshot.transform) and cup.get_node("PourTarget") == snapshot.zone, "%s keeps owner, local pose and pour target while tray moves" % cup.name)
+		check(cup.get_parent() == tray.get_contents() and cup.transform.is_equal_approx(snapshot.transform) and cup.get_node("PourTarget") == snapshot.zone, "%s keeps owner, local pose and pour target while tray moves" % cup.name)
 	var tray_placed := tray.transform
-	await mouse(tray.get_global_transform_with_canvas().origin,true)
-	await mouse(at(Vector2(450,850)),false)
+	await mouse(at(world.to_local(tray.global_position)+tray_grip),true)
+	check(controller.current_drag_node == tray,"Exposed-rim pickup selects tray for invalid populated drop")
+	await mouse(at(Vector2(450,850)+tray_grip),false)
 	check(tray.transform.is_equal_approx(tray_placed), "Real invalid populated-tray drop restores origin")
-	await arrange(tray,Vector2(1000,875),"Tray covering water utility")
+	await arrange(tray,Vector2(1000,875),"Tray covering water utility",tray_grip)
 	var drum := preview.screen.get_node("WorldRoot/ToolLayer/WaterDrum") as WaterDrum
 	var drum_at := drum.get_global_transform_with_canvas().origin
+	var utility_hits_cup := false
+	for utility_cup in tray.get_cups():
+		var cup_handle := utility_cup.get_node("PlacementHandle") as TablePlaceable
+		utility_hits_cup = utility_hits_cup or cup_handle._contains_pointer(drum_at)
+	check((tray.get_node("PlacementHandle") as TablePlaceable)._contains_pointer(drum_at) and not utility_hits_cup,"Water passthrough fixture covers an exposed tray area rather than a cup")
 	await mouse(drum_at,true)
 	check(controller.current_drag_node == tray, "Organize click passes through water utility to covered tray")
 	await tap(KEY_ESCAPE)
@@ -213,12 +222,12 @@ func run() -> void:
 	check(kettle.volume_ml == 1500.0 and root.get_node("GameState").water_supply.remaining_ml == source_before-1500.0, "Covered water utility still fills conservatively")
 	check(drum.get_global_transform_with_canvas().origin.is_equal_approx(drum_at), "Water utility returns to its fixed accessible origin")
 	await tap(KEY_G)
-	await arrange(tray,Vector2(1550,930),"Tray covering discard utility")
+	await arrange(tray,Vector2(1550,930),"Tray covering discard utility",tray_grip)
 	await tap(KEY_G)
 	kettle.apply_heat(10,1)
 	kettle.add_tea_leaves()
 	kettle.advance_brewing(kettle.config.steep_seconds)
-	var cup := tray.cups.get_child(0) as Cup
+	var cup := tray.get_cups()[0] as Cup
 	await mouse(kettle.get_node("GripAnchor").get_global_transform_with_canvas().origin,true)
 	await move_pointer(aim(kettle,cup))
 	check(controller.hovered_drop_zone == cup.get_node("PourTarget"), "Moved cup remains selected from visible spout")
@@ -233,27 +242,27 @@ func run() -> void:
 	await mouse(cup.get_global_transform_with_canvas().origin,true)
 	check(controller.current_drag_node == cup, "Relocated cup still supports its existing drag lifecycle")
 	await mouse(discarded.get_global_transform_with_canvas().origin,false)
-	check(cup.volume_ml == 0.0 and cup.get_parent() == tray.cups and cup.transform.is_equal_approx(cup_origin), "Discard above overlapping tray empties and restores the same cup")
+	check(cup.volume_ml == 0.0 and cup.get_parent() == tray.get_contents() and cup.transform.is_equal_approx(cup_origin), "Discard above overlapping tray empties and restores the same cup")
 	await mouse(cup.get_global_transform_with_canvas().origin,true)
 	await mouse(at(Vector2(900,600)),false)
-	check(cup.get_parent() == tray.cups and cup.transform.is_equal_approx(cup_origin), "Invalid cup release preserves the existing #103 ownership boundary")
+	check(cup.get_parent() == tray.get_contents() and cup.transform.is_equal_approx(cup_origin), "Invalid Interact release preserves cup ownership and placement")
 	await tap(KEY_G)
-	await arrange(tray,tray_start,"Tray restored after utility regressions")
+	await arrange(tray,tray_start,"Tray restored after utility regressions",tray_grip)
 	await tap(KEY_G)
 	var reset_at: Vector2 = preview.reset_button.get_global_rect().get_center()
 	await mouse(reset_at,true)
 	await mouse(reset_at,false)
 	check(kettle.volume_ml == 0.0 and root.get_node("GameState").water_supply.remaining_ml == 3000.0, "Real preview reset still starts the empty-kettle fixture day")
 	check(hud.current_mode == controller.current_mode and hud.interact_mode_label.modulate == TongHud.ACTIVE_MODE_COLOR, "Visible mode indicator returns to Interact")
-	check(tray.get_cup_count() == 6 and tray.get_occupied_slot_count() == 6, "Placement never loses or duplicates starting cup ownership")
-	for child in tray.cups.get_children():
+	check(tray.get_cup_count() == 6 and preview.screen.get_cups().size() == 6, "Placement never loses or duplicates starting cup ownership")
+	for child in tray.get_cups():
 		check((child as Cup).volume_ml == 0.0, "Reset reaches %s after placement, pouring and discard" % child.name)
 	if captures.size() > 1:
 		await RenderingServer.frame_post_draw
 		check(root.get_texture().get_image().save_png(captures[1]) == OK, "Completed placement review capture saved")
 	if captures.size() > 2:
 		await tap(KEY_G)
-		var offset := Vector2(0,10)
+		var offset := tray_grip
 		await mouse(at(world.to_local(tray.global_position)+offset),true)
 		await move_pointer(at(Vector2(1221.125,931.625)+offset))
 		check(controller.current_drag_node == tray and controller.hovered_drop_zone != null and controller.hovered_drop_zone.accepts(controller.current_payload).is_valid, "Green review capture shows a valid free populated-tray candidate")

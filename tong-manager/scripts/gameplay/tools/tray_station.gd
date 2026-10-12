@@ -1,298 +1,58 @@
 class_name TrayStation
 extends Node2D
 
-signal cup_occupancy_changed
-
-const CUP_CATEGORY := &"cup"
-const SMALL_ITEM_CATEGORY := &"small_item"
-const RESERVATION_ID := &"tray_station"
-
 @export var tool_def: Resource
 @export var cup_scene: PackedScene
-@export_node_path("Node") var interaction_controller_path: NodePath
+# Initial supply poses only. These are not drop targets or a capacity limit.
+@export var starting_cup_positions := PackedVector2Array([
+	Vector2(-147.16666, -53.875), Vector2(0, -54.625), Vector2(147.16666, -55.375),
+	Vector2(-166.83333, 33.375), Vector2(0, 33.125), Vector2(166.83331, 32.875),
+])
 
-@onready var tray_body: Area2D = $TrayBody
-@onready var interaction_anchor: Marker2D = $InteractionAnchor
-@onready var table_placement_anchor: Marker2D = $TablePlacementAnchor
-@onready var table_footprint_bounds: CollisionPolygon2D = (
-	$TableFootprintBounds/CollisionPolygon2D
-)
-@onready var internal_grid: TrayGrid = $InternalGrid
-@onready var cup_slots: Node2D = $CupSlots
-@onready var cups: Node2D = $Cups
-@onready var internal_drop_zone: TrayInternalDropZone = $InternalDropZone
-
-var _interaction_controller: InteractionController
-var _slot_occupants: Dictionary = {}
+@onready var interior_surface: PlacementSurface = $InteriorSurface
+@onready var contents: Node2D = $Contents
+@onready var table_footprint_bounds: CollisionPolygon2D = $TableFootprintBounds/CollisionPolygon2D
 
 
 func _ready() -> void:
-	_interaction_controller = get_node_or_null(interaction_controller_path) as InteractionController
 	assert(tool_def != null, "TrayStation requires a tool definition.")
 	assert(cup_scene != null, "TrayStation requires a Cup scene.")
-	assert(_interaction_controller != null, "TrayStation requires an InteractionController.")
-	assert(tool_def.tray_grid_size.x > 0 and tool_def.tray_grid_size.y > 0, "Tray grid size must be positive.")
-	assert(table_footprint_bounds.polygon.size() >= 3, "Tray table footprint polygon is invalid.")
-	assert(tool_def.tray_capacity > 0, "Tray capacity must be positive.")
-	assert(
-		tool_def.tray_capacity <= tool_def.tray_grid_size.x * tool_def.tray_grid_size.y,
-		"Tray capacity cannot exceed its internal grid."
-	)
-
-	internal_grid.configure(tool_def.tray_grid_size)
-	_connect_interactions()
-	_spawn_initial_cups()
-	internal_grid.set_interact_mode(_interaction_controller.current_mode == InteractionController.MODE_INTERACT)
-	_update_mode_visual(_interaction_controller.current_mode)
-	_register_drop_zones()
-
-
-func get_available_clean_cup() -> Cup:
-	for cell in _ordered_cells():
-		var occupant: Variant = _slot_occupants.get(cell)
-		if occupant is Cup and (occupant as Cup).state == Cup.CupState.CLEAN:
-			return occupant as Cup
-	return null
-
-
-func consume_cup(cup: Cup) -> bool:
-	if cup == null:
-		return false
-	var occupied_cells := _cells_for_item(cup)
-	if occupied_cells.is_empty():
-		return false
-	_clear_item_cells(cup)
-	if cup.get_parent() == cups:
-		cups.remove_child(cup)
-	cup_occupancy_changed.emit()
-	return true
-
-
-func return_clean_cup(cup: Cup) -> bool:
-	if cup == null or cup.state != Cup.CupState.CLEAN or not _cells_for_item(cup).is_empty():
-		return false
-	for cell in _ordered_cells():
-		if _slot_occupants.has(cell):
-			continue
-		_place_node_at_cells(cup, [cell])
-		_ensure_cup_interaction(cup)
-		cup_occupancy_changed.emit()
-		return true
-	return false
-
-
-func can_place_inside(payload: HeldItemPayload, origin_cell: Vector2i) -> bool:
-	if payload == null:
-		return false
-	var category := StringName(payload.metadata.get("category", &""))
-	if category != CUP_CATEGORY and category != SMALL_ITEM_CATEGORY:
-		return false
-	var item := payload.world_node as Node2D
-	if item == null:
-		return false
-	var footprint_size: Vector2i = payload.metadata.get("footprint_size", Vector2i.ONE)
-	if footprint_size.x <= 0 or footprint_size.y <= 0:
-		return false
-	for cell in _cells_from(origin_cell, footprint_size):
-		if not internal_grid.is_cell_in_bounds(cell):
-			return false
-		if _slot_occupants.has(cell) and _slot_occupants[cell] != item:
-			return false
-	return true
-
-
-func place_inside(payload: HeldItemPayload, origin_cell: Vector2i) -> bool:
-	if not can_place_inside(payload, origin_cell):
-		return false
-	var item := payload.world_node as Node2D
-	var footprint_size: Vector2i = payload.metadata.get("footprint_size", Vector2i.ONE)
-	var target_cells := _cells_from(origin_cell, footprint_size)
-	_clear_item_cells(item)
-	_place_node_at_cells(item, target_cells)
-	if item is Cup:
-		_ensure_cup_interaction(item as Cup)
-	cup_occupancy_changed.emit()
-	return true
-
-
-func get_table_footprint_world_polygon() -> PackedVector2Array:
-	var world_polygon := PackedVector2Array()
-	for point in table_footprint_bounds.polygon:
-		world_polygon.append(table_footprint_bounds.to_global(point))
-	return world_polygon
-
-
-func get_interaction_controller() -> InteractionController:
-	return _interaction_controller
-
-
-func get_internal_grid() -> TrayGrid:
-	return internal_grid
-
-
-func get_table_placement_anchor_world_position() -> Vector2:
-	return table_placement_anchor.global_position
-
-
-func get_slot_count() -> int:
-	return internal_grid.grid_size.x * internal_grid.grid_size.y
-
-
-func get_cup_count() -> int:
-	var count := 0
-	for child in cups.get_children():
-		if child is Cup:
-			count += 1
-	return count
-
-
-func get_occupied_slot_count() -> int:
-	return _slot_occupants.size()
-
-
-func get_internal_cells_for_item(item: Node2D) -> Array[Vector2i]:
-	return _cells_for_item(item)
-
-
-func _connect_interactions() -> void:
-	tray_body.mouse_entered.connect(_on_tray_mouse_entered)
-	tray_body.mouse_exited.connect(_on_hover_exited)
-	_interaction_controller.drag_canceled.connect(_on_drag_canceled)
-	_interaction_controller.mode_changed.connect(_on_mode_changed)
-
-
-func _spawn_initial_cups() -> void:
-	for index in tool_def.tray_capacity:
+	assert(tool_def.starting_cup_count >= 0, "Starting cup supply cannot be negative.")
+	assert(tool_def.starting_cup_count <= starting_cup_positions.size(),
+		"Author an initial pose for each starting cup; placement capacity depends on free space.")
+	for index in tool_def.starting_cup_count:
 		var cup := cup_scene.instantiate() as Cup
 		assert(cup != null, "TrayStation cup_scene root must be Cup.")
 		cup.name = "Cup%d" % index
-		var cell := Vector2i(index % internal_grid.grid_size.x, index / internal_grid.grid_size.x)
-		_place_node_at_cells(cup, [cell])
-		_ensure_cup_interaction(cup)
+		cup.position = starting_cup_positions[index]
+		contents.add_child(cup)
 
 
-func _begin_cup_drag(cup: Cup, viewport_position: Vector2) -> bool:
-	if _interaction_controller.current_mode != InteractionController.MODE_INTERACT:
-		return false
-	if _cells_for_item(cup).is_empty() or _interaction_controller.is_dragging():
-		return false
-	var payload := HeldItemPayload.new(
-		&"tray",
-		StringName(cup.name),
-		1,
-		cup,
-		{
-			"category": CUP_CATEGORY,
-			"footprint_size": Vector2i.ONE,
-		}
-	)
-	return _interaction_controller.start_drag(payload, cup, viewport_position)
+func get_contents() -> Node2D:
+	return contents
 
 
-func _on_cup_input_event(
-	_viewport: Node,
-	event: InputEvent,
-	_shape_index: int,
-	cup: Cup
-) -> void:
-	if event is not InputEventMouseButton:
-		return
-	var mouse_event := event as InputEventMouseButton
-	if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
-		return
-	if _begin_cup_drag(cup, mouse_event.position):
-		get_viewport().set_input_as_handled()
-
-
-func _on_tray_mouse_entered() -> void:
-	if _interaction_controller.is_dragging():
-		return
-	if _interaction_controller.current_mode == InteractionController.MODE_ORGANIZE:
-		get_node("/root/CursorService").set_state(&"hover_actionable")
-
-
-func _on_cup_mouse_entered(cup: Cup) -> void:
-	if _interaction_controller.is_dragging() or _cells_for_item(cup).is_empty():
-		return
-	if _interaction_controller.current_mode == InteractionController.MODE_INTERACT:
-		get_node("/root/CursorService").set_state(&"hover_actionable")
-
-
-func _on_hover_exited() -> void:
-	if not _interaction_controller.is_dragging():
-		get_node("/root/CursorService").reset()
-
-
-func _on_drag_canceled(payload: HeldItemPayload) -> void:
-	if payload != null and payload.item_id == RESERVATION_ID:
-		modulate.a = 1.0
-
-
-func _on_mode_changed(mode: StringName) -> void:
-	internal_grid.set_interact_mode(mode == InteractionController.MODE_INTERACT)
-	_update_mode_visual(mode)
-	_register_drop_zones()
-	get_node("/root/CursorService").reset()
-
-
-func _update_mode_visual(_mode: StringName) -> void:
-	modulate.a = 1.0
-
-
-func _ensure_cup_interaction(cup: Cup) -> void:
-	var input_callable := _on_cup_input_event.bind(cup)
-	if not cup.input_event.is_connected(input_callable):
-		cup.input_event.connect(input_callable)
-	var entered_callable := _on_cup_mouse_entered.bind(cup)
-	if not cup.mouse_entered.is_connected(entered_callable):
-		cup.mouse_entered.connect(entered_callable)
-	if not cup.mouse_exited.is_connected(_on_hover_exited):
-		cup.mouse_exited.connect(_on_hover_exited)
-
-
-func _place_node_at_cells(item: Node2D, cells_to_occupy: Array[Vector2i]) -> void:
-	if item.get_parent() == null:
-		cups.add_child(item)
-	elif item.get_parent() != cups:
-		item.reparent(cups, true)
-	item.global_position = internal_grid.average_cell_world_position(cells_to_occupy)
-	for cell in cells_to_occupy:
-		_slot_occupants[cell] = item
-
-
-func _clear_item_cells(item: Node2D) -> void:
-	for cell in _cells_for_item(item):
-		_slot_occupants.erase(cell)
-
-
-func _cells_for_item(item: Node2D) -> Array[Vector2i]:
-	var result: Array[Vector2i] = []
-	for cell: Vector2i in _slot_occupants:
-		if _slot_occupants[cell] == item:
-			result.append(cell)
+func get_cups() -> Array[Cup]:
+	var result: Array[Cup] = []
+	for child in contents.get_children():
+		if child is Cup:
+			result.append(child)
 	return result
 
 
-func _ordered_cells() -> Array[Vector2i]:
-	return _cells_from(Vector2i.ZERO, internal_grid.grid_size)
+func get_cup_count() -> int:
+	return get_cups().size()
 
 
-func _cells_from(origin_cell: Vector2i, dimensions: Vector2i) -> Array[Vector2i]:
-	var result: Array[Vector2i] = []
-	for y in dimensions.y:
-		for x in dimensions.x:
-			result.append(origin_cell + Vector2i(x, y))
+func get_available_clean_cup() -> Cup:
+	for cup in get_cups():
+		if cup.state == Cup.CupState.CLEAN:
+			return cup
+	return null
+
+
+func get_table_footprint_world_polygon() -> PackedVector2Array:
+	var result := PackedVector2Array()
+	for point in table_footprint_bounds.polygon:
+		result.append(table_footprint_bounds.to_global(point))
 	return result
-
-
-func _register_drop_zones() -> void:
-	if not is_instance_valid(_interaction_controller):
-		return
-	_interaction_controller.unregister_drop_zone(internal_drop_zone)
-	if _interaction_controller.current_mode == InteractionController.MODE_INTERACT:
-		_interaction_controller.register_drop_zone(internal_drop_zone)
-
-
-func _exit_tree() -> void:
-	if is_instance_valid(_interaction_controller):
-		_interaction_controller.unregister_drop_zone(internal_drop_zone)

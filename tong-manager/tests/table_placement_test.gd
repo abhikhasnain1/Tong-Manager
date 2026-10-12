@@ -1,6 +1,6 @@
 extends SceneTree
 
-# Production-scene integration for #102. Free tray contents/transfers remain #103.
+# Production-scene integration for continuous table placement and safe lifecycle.
 class ExitAction:
 	extends Node
 	func cancel_action() -> void:
@@ -114,7 +114,7 @@ func run() -> void:
 	var tray := screen.get_node("WorldRoot/ToolLayer/TrayStation") as TrayStation
 	var tray_handle := tray.get_node("PlacementHandle") as TablePlaceable
 	check(surface.is_registered(tray) and tray.get_cup_count() == 6, "Populated tray begins registered with existing supply")
-	check(tray.get_node_or_null("InternalGrid") != null, "Internal cup lifecycle remains explicitly in the #103 boundary")
+	check(tray.get_node_or_null("InternalGrid") == null and tray.get_node_or_null("InteriorSurface") is PlacementSurface, "Tray retains a continuous interior instead of legacy slots")
 	check(not surface.is_registered(preview.kettle), "Kettle retains special burner seating, not table parking")
 	check(not surface.is_registered(screen.get_node("WorldRoot/ToolLayer/WaterDrum")), "Water remains a utility source, not an ordinary placeable")
 	controller.set_mode(InteractionController.MODE_ORGANIZE)
@@ -153,7 +153,7 @@ func run() -> void:
 		commit_move(handle, destinations[index-1], String(handle.item.name), Vector2(-5,8))
 		commit_move(handle, start, String(handle.item.name) + " restored")
 	var cup_snapshots: Array[Dictionary] = []
-	for child in tray.cups.get_children():
+	for child in tray.get_cups():
 		var cup := child as Cup
 		cup.set_process(false)
 		cup.receive_liquid(&"black_tea", 90.0 + cup_snapshots.size(), 72.0)
@@ -163,7 +163,7 @@ func run() -> void:
 	commit_move(tray_handle, Vector2(1251.125,936.625), "Populated tray", Vector2(80,20))
 	for snapshot in cup_snapshots:
 		var cup := snapshot.cup as Cup
-		check(cup.get_parent() == tray.cups and cup.transform.is_equal_approx(snapshot.transform), "%s retains identity, owner and child-local pose" % cup.name)
+		check(cup.get_parent() == tray.get_contents() and cup.transform.is_equal_approx(snapshot.transform), "%s retains identity, owner and child-local pose" % cup.name)
 		check(cup.volume_ml == snapshot.volume and cup.temperature == snapshot.temperature and cup.assigned_order_id == &"placement_fixture", "%s retains liquid, thermal and order data" % cup.name)
 		check(cup.get_node("PourTarget") == snapshot.zone and controller._get_available_drop_zones().has(snapshot.zone), "%s retains the registered live pour target" % cup.name)
 	commit_move(tray_handle, tray_start, "Tray restored")

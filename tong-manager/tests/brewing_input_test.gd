@@ -86,7 +86,7 @@ func run() -> void:
 	check(controller.is_dragging(), "Viewport press picks up kettle")
 	var grip := kettle.get_node("GripAnchor") as Node2D
 	check(grip.get_global_transform_with_canvas().origin.is_equal_approx(pickup), "Viewport pickup keeps pointer on kettle grip")
-	var cups: Node = preview.screen.get_node("WorldRoot/ToolLayer/TrayStation/Cups")
+	var cups: Node = preview.screen.get_node("WorldRoot/ToolLayer/TrayStation/Contents")
 	var first_cup := cups.get_child(0) as Cup
 	var target: Vector2 = first_cup.get_node("PourTarget").get_global_transform_with_canvas().origin
 	await move_pointer(target)

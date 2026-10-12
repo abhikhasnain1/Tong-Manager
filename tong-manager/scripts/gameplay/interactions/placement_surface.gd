@@ -8,10 +8,18 @@ const LINEAR_EPSILON := 0.000001
 const TRANSFORM_EPSILON := 0.000000000001
 
 @export var usable_polygon: PackedVector2Array = PackedVector2Array()
+@export_node_path("Node2D") var placement_parent_path: NodePath
 
 # Weak identity plus copied geometry prevents stale instance IDs and caller edits
 # from changing reservations. A drag leaves its old committed polygons occupied.
 var _items: Dictionary = {}
+
+
+func get_placement_parent() -> Node2D:
+	if not _live(self) or placement_parent_path.is_empty():
+		return null
+	var parent := get_node_or_null(placement_parent_path) as Node2D
+	return parent if _live(parent) else null
 
 
 func register_item(item: Node2D, local_footprints: Array[PackedVector2Array]) -> bool:
@@ -41,6 +49,24 @@ func validate_item(item: Node2D) -> DropValidation:
 	if not _has_identity(item):
 		return DropValidation.invalid("placement.unregistered")
 	return _validate_candidates(item, get_candidate_polygons(item))
+
+
+func validate_candidate(item: Node2D, local_footprints: Array[PackedVector2Array]) -> DropValidation:
+	# Preview a possible destination without registering the item, changing its
+	# current reservation, or releasing its reservation on another surface.
+	if not _live(self) or not _live(item):
+		return DropValidation.invalid("placement.unavailable")
+	return _validate_candidates(item, project_footprints(item, local_footprints))
+
+
+func project_footprints(item: Node2D, local_footprints: Array[PackedVector2Array]) -> Array[PackedVector2Array]:
+	# Surface-local preview geometry is independent of registration and fit.
+	if not _live(self) or not _live(item) or not _valid_footprints(local_footprints):
+		return []
+	var candidates := _transform_footprints(item, local_footprints)
+	if not _valid_footprints(candidates):
+		return []
+	return candidates
 
 
 func commit_item(item: Node2D) -> bool:
@@ -87,7 +113,10 @@ func _validate_candidates(item: Node2D, candidates: Array[PackedVector2Array]) -
 			if _overlap_area(polygon, exclusion) > AREA_EPSILON:
 				return DropValidation.invalid("placement.blocked")
 		for record: Dictionary in _items.values():
-			if (record["item"] as WeakRef).get_ref() == item:
+			var peer := (record["item"] as WeakRef).get_ref() as Node2D
+			# Candidate previews are read-only: ignore stale peers without purging
+			# the reservation dictionary as the mutating APIs normally do.
+			if not _live(peer) or peer == item:
 				continue
 			for peer_polygon: PackedVector2Array in record["committed"]:
 				if _overlap_area(polygon, peer_polygon) > AREA_EPSILON:

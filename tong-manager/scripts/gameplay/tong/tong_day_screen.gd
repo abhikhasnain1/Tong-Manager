@@ -40,29 +40,56 @@ func _fit_authored_world() -> void:
 
 
 func _configure_table_placement() -> void:
+	var tray := $WorldRoot/ToolLayer/TrayStation as TrayStation
 	for node in get_tree().get_nodes_in_group(&"table_placeables"):
 		if is_ancestor_of(node):
 			var handle := node as TablePlaceable
+			if handle.item is Cup:
+				continue
 			var configured := handle.configure(table_surface, $InteractionController)
 			assert(configured,
 				"Invalid initial table placement: %s" % handle.get_parent().name)
+			if handle.item != tray:
+				handle.set_available_surfaces([table_surface, tray.interior_surface])
+	for cup in get_cups():
+		var configured := configure_cup(cup)
+		assert(configured, "Invalid initial cup placement: %s" % cup.name)
+
+
+func get_cups() -> Array[Cup]:
+	var result: Array[Cup] = []
+	for node in get_tree().get_nodes_in_group(&"cups"):
+		if node is Cup and is_ancestor_of(node) and not node.is_queued_for_deletion():
+			result.append(node)
+	return result
+
+
+func configure_cup(cup: Cup) -> bool:
+	if (not is_instance_valid(cup) or not is_ancestor_of(cup) or cup.is_queued_for_deletion()
+		or not is_instance_valid(table_surface)):
+		return false
+	var tray := $WorldRoot/ToolLayer/TrayStation as TrayStation
+	var handle := cup.get_node_or_null("PlacementHandle") as TablePlaceable
+	if handle == null:
+		return false
+	# Reconfiguration must not overwrite ownership during a drag or transfer.
+	if not is_instance_valid(handle.surface) or not handle.surface.is_registered(cup):
+		var initial := tray.interior_surface if cup.get_parent() == tray.get_contents() else table_surface
+		if not handle.configure(initial, $InteractionController):
+			return false
+		cup.capacity_ml = float(tool_def.cup_volume_ml)
+	handle.set_available_surfaces([table_surface, tray.interior_surface])
+	cup.bind_controller($InteractionController)
+	return true
 
 
 func _verify_layout_contract() -> void:
 	assert(tool_def != null, "TongDayScreen requires a ToolDef resource.")
 	assert(day_config != null, "TongDayScreen requires a DayConfig resource.")
-	assert(tool_def.tray_capacity > 0, "Tray capacity must be positive.")
-	assert(
-		tool_def.tray_capacity <= tool_def.tray_grid_size.x * tool_def.tray_grid_size.y,
-		"Tray capacity cannot exceed its internal grid."
-	)
+	assert(tool_def.starting_cup_count >= 0, "Starting cup supply cannot be negative.")
 	var tray_station := $WorldRoot/ToolLayer/TrayStation as TrayStation
 	assert(tray_station != null, "TongDayScreen requires the functional TrayStation scene.")
-	assert(tray_station.get_cup_count() == tool_def.tray_capacity, "Tray cup count must follow ToolDef.")
-	assert(
-		tray_station.get_slot_count() == tool_def.tray_grid_size.x * tool_def.tray_grid_size.y,
-		"Tray slot count must follow ToolDef."
-	)
+	assert(get_cups().size() == tool_def.starting_cup_count, "Starting cup supply must follow ToolDef.")
 	assert(table_surface.is_registered(tray_station), "Tray requires a committed table footprint.")
 	assert(tool_def.burner_count == 2, "The demo stove exposes two configurable burners.")
 	for marker in get_tree().get_nodes_in_group("critical_interaction_anchor"):
