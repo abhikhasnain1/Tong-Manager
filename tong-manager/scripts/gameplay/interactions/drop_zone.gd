@@ -16,6 +16,10 @@ func is_relevant_to(_payload: HeldItemPayload) -> bool:
 	return true
 
 
+func get_probe_position(_payload: HeldItemPayload, viewport_position: Vector2) -> Vector2:
+	return viewport_position
+
+
 func accepts(payload: HeldItemPayload) -> DropValidation:
 	if payload == null:
 		return DropValidation.invalid("drop.missing_payload")

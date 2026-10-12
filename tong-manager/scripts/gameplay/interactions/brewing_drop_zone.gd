@@ -16,6 +16,11 @@ func _init() -> void:
 func is_relevant_to(payload: HeldItemPayload) -> bool:
 	return payload != null and is_instance_valid(payload.world_node) and payload.world_node is Kettle
 
+func get_probe_position(payload: HeldItemPayload, viewport_position: Vector2) -> Vector2:
+	if is_cup_target and is_relevant_to(payload):
+		return (payload.world_node as Kettle).get_pour_probe_viewport()
+	return viewport_position
+
 func accepts(payload: HeldItemPayload) -> DropValidation:
 	if payload == null or not is_instance_valid(target) or not payload.world_node is Kettle:
 		return DropValidation.invalid("brewing.kettle_required")

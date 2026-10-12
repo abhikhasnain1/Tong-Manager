@@ -134,8 +134,8 @@ func update_drag(viewport_position: Vector2) -> void:
 		return
 	var drag_origin_viewport := viewport_position - _drag_pointer_offset
 	current_drag_node.position = drag_layer.get_global_transform_with_canvas().affine_inverse() * drag_origin_viewport
-	_update_hovered_drop_zone(viewport_position)
 	drag_moved.emit(current_payload, viewport_position)
+	_update_hovered_drop_zone(viewport_position)
 
 
 func cancel_drag() -> void:
@@ -194,7 +194,8 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 			current_drag_node == zone
 			or current_drag_node.is_ancestor_of(zone)
 		)
-		var distance := 0.0 if zone_belongs_to_drag_node else viewport_position.distance_to(zone_viewport_position)
+		var probe_position := zone.get_probe_position(current_payload, viewport_position)
+		var distance := 0.0 if zone_belongs_to_drag_node else probe_position.distance_to(zone_viewport_position)
 		var zone_scale := zone.get_global_transform_with_canvas().get_scale()
 		var snap_radius_viewport := zone.snap_radius * maxf(absf(zone_scale.x), absf(zone_scale.y))
 		if not zone_belongs_to_drag_node and distance > snap_radius_viewport:

@@ -23,7 +23,7 @@ func _ready() -> void:
 	title.add_theme_font_size_override("font_size", 24)
 	rows.add_child(title)
 	var hint := Label.new()
-	hint.text = "Click a dial to heat → add tea when boiling → wait for Tea ready.\nDrag kettle to a cup · Hold Space to pour · Release Space to stop\nRelease mouse to return / seat kettle · Esc cancels · G toggles mode"
+	hint.text = "Click a dial to heat → add tea when boiling → wait for Tea ready.\nDrag by the handle · Aim the spout above a cup · Hold Space to pour\nRelease Space to stop · Release mouse to return / seat · Esc cancels · G toggles mode"
 	rows.add_child(hint)
 	var buttons := HBoxContainer.new()
 	rows.add_child(buttons)

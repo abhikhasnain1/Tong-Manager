@@ -6,6 +6,9 @@ signal pour_finished
 
 enum BrewState { EMPTY, WATER, HEATING, BOILING, STEEPING, LIQUOR_READY, OVERSTEEPED }
 
+const HELD_TILT := -0.18
+const POUR_HEIGHT := 65.0
+
 @export var tool_def: Resource = preload("res://data/balance/tool_level_1.tres")
 @export var config: BrewingConfig = preload("res://data/balance/brewing_level_1.tres")
 
@@ -30,6 +33,7 @@ var _lid_rest := Vector2.ZERO
 @onready var lid: Node2D = $Lid
 @onready var status: Label = $Status
 @onready var spout: Marker2D = $Spout
+@onready var grip_anchor: Marker2D = $GripAnchor
 @onready var steam_anchor: Marker2D = $SteamAnchor
 
 func _ready() -> void:
@@ -102,7 +106,7 @@ func start_pour(cup: Cup) -> bool:
 		_remember_origin()
 	is_pouring = true
 	pour_target = cup
-	rotation = -0.18
+	rotation = HELD_TILT
 	_changed()
 	return true
 
@@ -131,7 +135,7 @@ func stop_pour() -> void:
 		return
 	is_pouring = false
 	pour_target = null
-	rotation = 0.0
+	rotation = HELD_TILT if is_held else 0.0
 	if not is_held:
 		_restore_origin()
 	if controller != null:
@@ -155,17 +159,23 @@ func update_held_pour(pour_pressed: bool) -> void:
 		stop_pour()
 	if pour_pressed and not is_pouring and can_pour_into(cup):
 		start_pour(cup)
-	if is_pouring and is_instance_valid(zone):
-		_position_spout_above(zone.get_global_transform_with_canvas().origin)
 
-func _position_spout_above(viewport_position: Vector2) -> void:
+func get_pour_probe_viewport() -> Vector2:
+	# Aim below the visible spout; the pointer stays at the handle.
 	var parent := get_parent() as Node2D
-	position = parent.get_global_transform_with_canvas().affine_inverse() * viewport_position - spout.position.rotated(rotation) - Vector2(0, 65)
+	var canvas := parent.get_global_transform_with_canvas()
+	return spout.get_global_transform_with_canvas().origin + canvas.basis_xform(Vector2(0, POUR_HEIGHT))
+
+func _position_grip_at(viewport_position: Vector2) -> void:
+	var parent := get_parent() as Node2D
+	var pointer_local := parent.get_global_transform_with_canvas().affine_inverse() * viewport_position
+	position += pointer_local - transform * grip_anchor.position
 
 func _on_drag_moved(payload: HeldItemPayload, viewport_position: Vector2) -> void:
 	if payload.world_node == self and is_held:
-		_position_spout_above(viewport_position)
-		update_held_pour(Input.is_action_pressed(InteractionController.INPUT_POUR))
+		# Keep a stable aiming pose so starting/stopping flow never shifts the spout.
+		rotation = HELD_TILT
+		_position_grip_at(viewport_position)
 
 func begin_drag(viewport_position: Vector2) -> bool:
 	if controller == null or controller.current_mode != InteractionController.MODE_INTERACT:
@@ -251,8 +261,8 @@ func _on_hover(entered: bool) -> void:
 
 func _on_drag_canceled(payload: HeldItemPayload) -> void:
 	if payload.world_node == self:
-		stop_pour()
 		is_held = false
+		stop_pour()
 
 func _on_mode_changed(_mode: StringName) -> void:
 	stop_pour()
