@@ -5,9 +5,9 @@
     {"runtime": "res://assets/art/backgrounds/tong_backdrop.png", "role": "backdrop", "pivot": [0, 0], "authored_position": [0, 0], "intended_size": [1920, 1080], "perspective": "final"},
     {"runtime": "res://assets/art/backgrounds/tong_frame_back.png", "role": "frame_back", "pivot": [0, 0], "authored_position": [0, 0], "intended_size": [1920, 1080], "perspective": "final"},
     {"runtime": "res://assets/art/backgrounds/tong_frame_front.png", "role": "frame_front", "pivot": [0, 0], "authored_position": [0, 0], "intended_size": [1920, 1080], "perspective": "final"},
-    {"runtime": "res://assets/art/toolkit/stove.png", "role": "stove", "pivot": [831, 338], "authored_position": [380, 925], "intended_size": [760, 309], "perspective": "final"},
+    {"runtime": "res://assets/art/toolkit/stove_body_temporary.png", "role": "stove", "pivot": [983, 400], "authored_position": [380, 925], "intended_size": [760, 309], "perspective": "provisional"},
     {"runtime": "res://assets/art/toolkit/tray.png", "role": "tray", "pivot": [757, 286], "authored_position": [1258.9999, 898], "intended_size": [529, 179], "station_scale": [0.76, 0.68], "perspective": "final"},
-    {"runtime": "res://assets/art/toolkit/kettle_side_provisional.png", "role": "kettle", "pivot": [286, 358], "authored_position": [176, 768], "intended_size": [275, 344], "perspective": "provisional"},
+    {"runtime": "res://assets/art/toolkit/kettle_body_temporary.png", "role": "kettle", "pivot": [560.5, 701.5], "authored_position": [176, 768], "intended_size": [275, 344], "perspective": "provisional"},
     {"runtime": "res://assets/art/toolkit/bucket_clean_provisional.png", "role": "bucket", "pivot": [324, 334], "authored_position": [1865, 952], "intended_size": [279, 287], "perspective": "provisional"},
     {"runtime": "res://assets/art/toolkit/khata_closed.png", "role": "khata", "crop": [781.3695, 28.300804, 356.05017, 1028.0656], "pivot": [178.02509, 514.0328], "authored_position": [1865, 729], "intended_size": [128, 370], "perspective": "provisional"},
     {"runtime": "res://assets/art/toolkit/radio_front_provisional.png", "role": "radio", "pivot": [436, 425], "authored_position": [58, 262], "intended_size": [279, 272], "perspective": "provisional"},
@@ -26,7 +26,8 @@
     {"runtime": "res://assets/art/toolkit/cup_dirty_provisional.png", "role": "cup_dirty", "crop": [0, 0, 485, 501], "filter_padding": 8, "pivot": [250.5, 258.5], "intended_size": [75, 78], "state_family": "cup_501x517", "perspective": "provisional"}
   ],
   "composition_contract": {
-    "revision": 6,
+    "revision": 7,
+    "brewing_layers_updated_on": "2026-10-12",
     "locked_on": "2026-08-29",
     "interaction_alignment_updated_on": "2026-08-30",
     "grid_feedback_updated_on": "2026-08-30",
@@ -78,6 +79,16 @@
         "switch_hysteresis": 0.08
       }
     },
-    "kettle_steam_anchor": [53, 742]
+    "kettle_steam_anchor": [202, 690]
+  },
+  "brewing_art": {
+    "status": "Temporary layered art approved 2026-10-12",
+    "textures": [
+      "res://assets/art/toolkit/kettle_body_temporary.png",
+      "res://assets/art/toolkit/kettle_lid_temporary.png",
+      "res://assets/art/toolkit/stove_body_temporary.png",
+      "res://assets/art/toolkit/stove_dial_temporary.png"
+    ],
+    "note": "Separate lid and dials; see Kettle.tscn and Stove.tscn for authored pivots. Contents use status markers. Lid soft alpha edge remains provisional."
   }
 }

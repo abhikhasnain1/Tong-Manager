@@ -30,6 +30,22 @@ var current_payload: HeldItemPayload
 var current_drag_node: Node2D
 var hovered_drop_zone: DropZone
 var current_mode: StringName = MODE_INTERACT
+var action_owner: Node
+
+func has_active_action() -> bool:
+	return is_instance_valid(action_owner)
+
+func lock_action(owner_node: Node) -> bool:
+	if not is_instance_valid(owner_node) or is_dragging():
+		return false
+	if has_active_action() and action_owner != owner_node:
+		return false
+	action_owner = owner_node
+	return true
+
+func unlock_action(owner_node: Node) -> void:
+	if action_owner == owner_node:
+		action_owner = null
 
 var _drag_origin_parent: Node
 var _drag_origin_transform := Transform2D.IDENTITY
@@ -42,10 +58,43 @@ func _ready() -> void:
 	assert(drop_zone_root != null, "InteractionController requires a DropZoneRoot reference.")
 
 
+func _input(event: InputEvent) -> void:
+	# Gameplay owns both edges of Space during a drag, before focused GUI buttons.
+	if (is_dragging() or has_active_action()) and event.is_action(INPUT_POUR):
+		if event.is_action_pressed(INPUT_POUR):
+			action_requested.emit(INPUT_POUR)
+		get_viewport().set_input_as_handled()
+		return
+	# A drag begun in the world must finish even over a GUI panel. Otherwise
+	# the panel can swallow mouse release and leave a stuck kettle or cup.
+	if is_dragging():
+		if event is InputEventMouseMotion:
+			update_drag(event.position)
+			get_viewport().set_input_as_handled()
+		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+			release_drop(event.position)
+			get_viewport().set_input_as_handled()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT and is_node_ready():
+		if has_active_action():
+			action_owner.call("cancel_action")
+		if is_dragging():
+			cancel_drag()
+		Input.action_release(INPUT_POUR)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(INPUT_ORGANIZE_TOGGLE):
 		toggle_mode()
 		get_viewport().set_input_as_handled()
+		return
+
+	if has_active_action():
+		if event.is_action_pressed(INPUT_CANCEL):
+			action_owner.call("cancel_action")
+			get_viewport().set_input_as_handled()
 		return
 
 	for action in FORWARDED_ACTIONS:
@@ -76,12 +125,14 @@ func register_drop_zone(drop_zone: DropZone) -> void:
 
 func unregister_drop_zone(drop_zone: DropZone) -> void:
 	_registered_drop_zones.erase(drop_zone)
-	if hovered_drop_zone == drop_zone:
+	if is_instance_valid(hovered_drop_zone) and hovered_drop_zone == drop_zone:
 		hovered_drop_zone.clear_highlight()
 		hovered_drop_zone = null
 
 
 func start_drag(payload: HeldItemPayload, drag_node: Node2D, viewport_position: Vector2) -> bool:
+	if has_active_action():
+		return false
 	if payload == null or not is_instance_valid(drag_node):
 		return false
 	if is_dragging():
@@ -110,8 +161,8 @@ func update_drag(viewport_position: Vector2) -> void:
 		return
 	var drag_origin_viewport := viewport_position - _drag_pointer_offset
 	current_drag_node.position = drag_layer.get_global_transform_with_canvas().affine_inverse() * drag_origin_viewport
-	_update_hovered_drop_zone(viewport_position)
 	drag_moved.emit(current_payload, viewport_position)
+	_update_hovered_drop_zone(viewport_position)
 
 
 func cancel_drag() -> void:
@@ -128,7 +179,7 @@ func release_drop(viewport_position: Vector2) -> void:
 	if not is_dragging():
 		return
 	update_drag(viewport_position)
-	if hovered_drop_zone == null or not hovered_drop_zone.accepts(current_payload).is_valid:
+	if not is_instance_valid(hovered_drop_zone) or not hovered_drop_zone.accepts(current_payload).is_valid:
 		cancel_drag()
 		return
 
@@ -148,6 +199,8 @@ func set_mode(mode: StringName) -> void:
 	assert(mode == MODE_INTERACT or mode == MODE_ORGANIZE, "Unsupported interaction mode: %s" % mode)
 	if mode == current_mode:
 		return
+	if has_active_action():
+		action_owner.call("cancel_action")
 	if is_dragging():
 		cancel_drag()
 	current_mode = mode
@@ -161,12 +214,17 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 	var best_invalid_distance := INF
 
 	for zone in _get_available_drop_zones():
+		if not zone.is_inside_tree() or zone.is_queued_for_deletion():
+			continue
+		if not zone.is_relevant_to(current_payload):
+			continue
 		var zone_viewport_position := zone.get_global_transform_with_canvas().origin
 		var zone_belongs_to_drag_node := (
 			current_drag_node == zone
 			or current_drag_node.is_ancestor_of(zone)
 		)
-		var distance := 0.0 if zone_belongs_to_drag_node else viewport_position.distance_to(zone_viewport_position)
+		var probe_position := zone.get_probe_position(current_payload, viewport_position)
+		var distance := 0.0 if zone_belongs_to_drag_node else probe_position.distance_to(zone_viewport_position)
 		var zone_scale := zone.get_global_transform_with_canvas().get_scale()
 		var snap_radius_viewport := zone.snap_radius * maxf(absf(zone_scale.x), absf(zone_scale.y))
 		if not zone_belongs_to_drag_node and distance > snap_radius_viewport:
@@ -180,10 +238,10 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 			best_invalid_distance = distance
 
 	var next_zone := best_valid if best_valid != null else best_invalid
-	if hovered_drop_zone != null and hovered_drop_zone != next_zone:
+	if is_instance_valid(hovered_drop_zone) and hovered_drop_zone != next_zone:
 		hovered_drop_zone.clear_highlight()
 	hovered_drop_zone = next_zone
-	if hovered_drop_zone != null:
+	if is_instance_valid(hovered_drop_zone):
 		var is_valid := hovered_drop_zone.accepts(current_payload).is_valid
 		hovered_drop_zone.set_highlight(is_valid)
 		cursor_service.set_state(CURSOR_STATE_DRAGGING if is_valid else CURSOR_STATE_INVALID)
@@ -207,9 +265,18 @@ func _get_available_drop_zones() -> Array[DropZone]:
 		if not is_instance_valid(registered_zone):
 			_registered_drop_zones.remove_at(index)
 			continue
+		# Retain registrations across legitimate reparenting, but never target
+		# a retained node while it is detached from the active scene.
+		if not registered_zone.is_inside_tree() or registered_zone.is_queued_for_deletion():
+			continue
 		if not zones.has(registered_zone):
 			zones.append(registered_zone)
 	return zones
+
+
+func restore_drag_origin() -> void:
+	# Non-placement drops (water, discard, service) retain the source vessel.
+	_restore_drag_origin()
 
 
 func _restore_drag_origin() -> void:
@@ -225,7 +292,7 @@ func _restore_drag_origin() -> void:
 
 
 func _clear_drag_state() -> void:
-	if hovered_drop_zone != null:
+	if is_instance_valid(hovered_drop_zone):
 		hovered_drop_zone.clear_highlight()
 	hovered_drop_zone = null
 	current_payload = null

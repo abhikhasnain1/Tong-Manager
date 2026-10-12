@@ -9,8 +9,6 @@
 [ext_resource type="Texture2D" uid="uid://dykjvd34a6300" path="res://assets/art/backgrounds/tong_frame_front.png" id="7_frame_front"]
 [ext_resource type="Texture2D" uid="uid://di6xtpc42d3lp" path="res://assets/art/customers/customer_female_provisional.png" id="8_female"]
 [ext_resource type="Texture2D" uid="uid://e3ndmlh0j3cw" path="res://assets/art/customers/customer_male_provisional.png" id="9_male"]
-[ext_resource type="Texture2D" uid="uid://ctif8v4bibith" path="res://assets/art/toolkit/stove.png" id="10_stove"]
-[ext_resource type="Texture2D" uid="uid://bgpqb7a7mwg82" path="res://assets/art/toolkit/kettle_side_provisional.png" id="12_kettle"]
 [ext_resource type="Texture2D" uid="uid://nfxyjvf8sp4v" path="res://assets/art/toolkit/bucket_clean_provisional.png" id="13_bucket"]
 [ext_resource type="Texture2D" uid="uid://1y2dfab013y" path="res://assets/art/toolkit/radio_front_provisional.png" id="14_radio"]
 [ext_resource type="Texture2D" uid="uid://bsrrhf3c6lkxy" path="res://assets/art/icons/banana_ready_provisional.png" id="15_banana"]
@@ -25,6 +23,12 @@
 [ext_resource type="PackedScene" uid="uid://c47us6eyg86n5" path="res://scenes/gameplay/tools/TrayStation.tscn" id="23_tray_station"]
 [ext_resource type="Script" uid="uid://cw1qsdwkrovxk" path="res://scripts/gameplay/interactions/table_grid.gd" id="24_table_grid"]
 [ext_resource type="Script" uid="uid://dk0vlm10lbc88" path="res://scripts/gameplay/interactions/table_grid_state_overlay.gd" id="25_grid_overlay"]
+
+[ext_resource type="PackedScene" path="res://scenes/gameplay/tools/Kettle.tscn" id="26_kettle"]
+[ext_resource type="PackedScene" path="res://scenes/gameplay/tools/Stove.tscn" id="27_stove"]
+[ext_resource type="Script" path="res://scripts/gameplay/tools/brewing_workstation.gd" id="28_brewing"]
+[ext_resource type="PackedScene" path="res://scenes/gameplay/tools/WaterDrum.tscn" id="29_water"]
+[ext_resource type="Script" path="res://scripts/gameplay/interactions/discard_drop_zone.gd" id="30_discard"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_khata"]
 size = Vector2(117, 360)
@@ -166,38 +170,12 @@ shape = SubResource("RectangleShape2D_khata")
 [node name="InteractionAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/KhataStation/KhataHotspot" unique_id=1947038087 groups=["critical_interaction_anchor"]]
 position = Vector2(-50, -1)
 
-[node name="StoveStation" type="Node2D" parent="WorldRoot/ToolLayer" unique_id=2930590]
+[node name="StoveStation" parent="WorldRoot/ToolLayer" instance=ExtResource("27_stove")]
 position = Vector2(380, 925)
 
-[node name="Sprite" type="Sprite2D" parent="WorldRoot/ToolLayer/StoveStation" unique_id=323516916]
-scale = Vector2(0.457, 0.457)
-texture = ExtResource("10_stove")
-
-[node name="BurnerLeftAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/StoveStation" unique_id=1241904593 groups=["critical_interaction_anchor"]]
-position = Vector2(-179, -50)
-
-[node name="BurnerRightAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/StoveStation" unique_id=1717648719 groups=["critical_interaction_anchor"]]
-position = Vector2(112, -55)
-
-[node name="DialLeftAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/StoveStation" unique_id=1295240243 groups=["critical_interaction_anchor"]]
-position = Vector2(-65, 90)
-
-[node name="DialRightAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/StoveStation" unique_id=1108963866 groups=["critical_interaction_anchor"]]
-position = Vector2(25, 86)
-
-[node name="KettleStation" type="Node2D" parent="WorldRoot/ToolLayer" unique_id=743514530]
+[node name="KettleStation" parent="WorldRoot/ToolLayer" instance=ExtResource("26_kettle")]
 z_index = 2
 position = Vector2(176, 768)
-
-[node name="Sprite" type="Sprite2D" parent="WorldRoot/ToolLayer/KettleStation" unique_id=2003610635]
-scale = Vector2(0.48, 0.48)
-texture = ExtResource("12_kettle")
-
-[node name="InteractionAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/KettleStation" unique_id=286335678 groups=["critical_interaction_anchor"]]
-position = Vector2(25, 11)
-
-[node name="SteamAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/KettleStation" unique_id=1303388186]
-position = Vector2(-123, -26)
 
 [node name="TrayStation" parent="WorldRoot/ToolLayer" unique_id=1164031835 instance=ExtResource("23_tray_station")]
 position = Vector2(1258.9999, 898)
@@ -219,6 +197,13 @@ z_index = 40
 
 [node name="DropZoneRoot" type="Node2D" parent="WorldRoot" unique_id=817989639]
 z_index = 35
+
+[node name="DiscardArea" type="Area2D" parent="WorldRoot/DropZoneRoot"]
+position = Vector2(1635, 925)
+script = ExtResource("30_discard")
+
+[node name="WaterDrum" parent="WorldRoot/ToolLayer" instance=ExtResource("29_water")]
+position = Vector2(835, 875)
 
 [node name="TableGrid" type="Node2D" parent="WorldRoot/DropZoneRoot" unique_id=560674855]
 z_index = -10
@@ -417,3 +402,6 @@ mouse_filter = 2
 [node name="WorldSfx" type="AudioStreamPlayer" parent="." unique_id=1210688115]
 
 [node name="UISfx" type="AudioStreamPlayer" parent="." unique_id=1378301498]
+
+[node name="BrewingWorkstation" type="Node" parent="."]
+script = ExtResource("28_brewing")
