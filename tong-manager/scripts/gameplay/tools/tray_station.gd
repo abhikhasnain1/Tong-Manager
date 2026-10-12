@@ -2,18 +2,14 @@ class_name TrayStation
 extends Node2D
 
 signal cup_occupancy_changed
-signal table_placement_committed(cells: Array[Vector2i])
 
-const TABLE_CATEGORY := &"tray_station"
 const CUP_CATEGORY := &"cup"
 const SMALL_ITEM_CATEGORY := &"small_item"
 const RESERVATION_ID := &"tray_station"
-const MINIMUM_TABLE_COVERAGE_RATIO := 0.9995
 
 @export var tool_def: Resource
 @export var cup_scene: PackedScene
 @export_node_path("Node") var interaction_controller_path: NodePath
-@export_node_path("Node2D") var table_grid_path: NodePath
 
 @onready var tray_body: Area2D = $TrayBody
 @onready var interaction_anchor: Marker2D = $InteractionAnchor
@@ -24,30 +20,18 @@ const MINIMUM_TABLE_COVERAGE_RATIO := 0.9995
 @onready var internal_grid: TrayGrid = $InternalGrid
 @onready var cup_slots: Node2D = $CupSlots
 @onready var cups: Node2D = $Cups
-@onready var table_drop_zone: TrayTableDropZone = $TableDropZone
 @onready var internal_drop_zone: TrayInternalDropZone = $InternalDropZone
 
 var _interaction_controller: InteractionController
-var _table_grid: TableGrid
 var _slot_occupants: Dictionary = {}
-var _home_parent: Node
-var _committed_table_cells: Array[Vector2i] = []
-var _table_snap_phase := Vector2.ZERO
 
 
 func _ready() -> void:
 	_interaction_controller = get_node_or_null(interaction_controller_path) as InteractionController
-	_table_grid = get_node_or_null(table_grid_path) as TableGrid
 	assert(tool_def != null, "TrayStation requires a tool definition.")
 	assert(cup_scene != null, "TrayStation requires a Cup scene.")
 	assert(_interaction_controller != null, "TrayStation requires an InteractionController.")
-	assert(_table_grid != null, "TrayStation requires a TableGrid.")
 	assert(tool_def.tray_grid_size.x > 0 and tool_def.tray_grid_size.y > 0, "Tray grid size must be positive.")
-	assert(
-		tool_def.tray_table_overlap_threshold > 0.0
-		and tool_def.tray_table_overlap_threshold <= 1.0,
-		"Tray table overlap threshold must be in the range (0, 1]."
-	)
 	assert(table_footprint_bounds.polygon.size() >= 3, "Tray table footprint polygon is invalid.")
 	assert(tool_def.tray_capacity > 0, "Tray capacity must be positive.")
 	assert(
@@ -55,14 +39,9 @@ func _ready() -> void:
 		"Tray capacity cannot exceed its internal grid."
 	)
 
-	_home_parent = get_parent()
-	_table_snap_phase = _fractional_grid_phase(
-		_table_grid.world_to_grid_position(table_placement_anchor.global_position)
-	)
 	internal_grid.configure(tool_def.tray_grid_size)
 	_connect_interactions()
 	_spawn_initial_cups()
-	_reserve_initial_table_placement()
 	internal_grid.set_interact_mode(_interaction_controller.current_mode == InteractionController.MODE_INTERACT)
 	_update_mode_visual(_interaction_controller.current_mode)
 	_register_drop_zones()
@@ -136,49 +115,11 @@ func place_inside(payload: HeldItemPayload, origin_cell: Vector2i) -> bool:
 	return true
 
 
-func commit_table_placement(candidate_cells: Array[Vector2i]) -> bool:
-	var current_cells := get_table_footprint_cells()
-	if not _cell_arrays_equal(current_cells, candidate_cells):
-		return false
-	if not is_table_footprint_in_bounds() or not _table_grid.can_place_cells(current_cells):
-		return false
-	if not _table_grid.reserve_cells(RESERVATION_ID, current_cells, TableGrid.STATE_TRAY_AREA):
-		return false
-	if get_parent() != _home_parent:
-		reparent(_home_parent, true)
-	_register_drop_zones()
-	_committed_table_cells = current_cells.duplicate()
-	table_placement_committed.emit(_committed_table_cells.duplicate())
-	return true
-
-
-func get_table_grid() -> TableGrid:
-	return _table_grid
-
-
 func get_table_footprint_world_polygon() -> PackedVector2Array:
 	var world_polygon := PackedVector2Array()
 	for point in table_footprint_bounds.polygon:
 		world_polygon.append(table_footprint_bounds.to_global(point))
 	return world_polygon
-
-
-func get_table_footprint_cells() -> Array[Vector2i]:
-	return _table_grid.get_cells_overlapping_world_polygon(
-		get_table_footprint_world_polygon(),
-		tool_def.tray_table_overlap_threshold
-	)
-
-
-func is_table_footprint_in_bounds() -> bool:
-	return _table_grid.is_world_polygon_in_bounds(
-		get_table_footprint_world_polygon(),
-		MINIMUM_TABLE_COVERAGE_RATIO
-	)
-
-
-func get_table_snap_phase() -> Vector2:
-	return _table_snap_phase
 
 
 func get_interaction_controller() -> InteractionController:
@@ -191,19 +132,6 @@ func get_internal_grid() -> TrayGrid:
 
 func get_table_placement_anchor_world_position() -> Vector2:
 	return table_placement_anchor.global_position
-
-
-func get_committed_table_cells() -> Array[Vector2i]:
-	return _table_grid.get_cells_for_item(RESERVATION_ID)
-
-
-func align_table_drag_preview(grid_position: Vector2) -> void:
-	if not _interaction_controller.is_dragging():
-		return
-	if _interaction_controller.current_payload.world_node != self:
-		return
-	var target_anchor_position := _table_grid.grid_position_to_world(grid_position)
-	global_position += target_anchor_position - table_placement_anchor.global_position
 
 
 func get_slot_count() -> int:
@@ -227,7 +155,6 @@ func get_internal_cells_for_item(item: Node2D) -> Array[Vector2i]:
 
 
 func _connect_interactions() -> void:
-	tray_body.input_event.connect(_on_tray_input_event)
 	tray_body.mouse_entered.connect(_on_tray_mouse_entered)
 	tray_body.mouse_exited.connect(_on_hover_exited)
 	_interaction_controller.drag_canceled.connect(_on_drag_canceled)
@@ -242,46 +169,6 @@ func _spawn_initial_cups() -> void:
 		var cell := Vector2i(index % internal_grid.grid_size.x, index / internal_grid.grid_size.x)
 		_place_node_at_cells(cup, [cell])
 		_ensure_cup_interaction(cup)
-
-
-func _reserve_initial_table_placement() -> void:
-	assert(is_table_footprint_in_bounds(), "TrayStation initial polygon extends outside the table grid.")
-	var initial_cells := get_table_footprint_cells()
-	assert(not initial_cells.is_empty(), "TrayStation initial polygon does not own any table cells.")
-	var reserved := _table_grid.reserve_cells(
-		RESERVATION_ID,
-		initial_cells,
-		TableGrid.STATE_TRAY_AREA
-	)
-	assert(reserved, "TrayStation initial polygon-derived table reservation is invalid.")
-	_committed_table_cells = initial_cells.duplicate()
-
-
-func _begin_table_drag(viewport_position: Vector2) -> bool:
-	if _interaction_controller.current_mode != InteractionController.MODE_ORGANIZE:
-		return false
-	if _interaction_controller.is_dragging():
-		return false
-	_table_grid.clear_item(RESERVATION_ID)
-	var payload := HeldItemPayload.new(
-		&"table_grid",
-		RESERVATION_ID,
-		1,
-		self,
-		{
-			"category": TABLE_CATEGORY,
-			"occupancy_model": &"authored_polygon",
-		}
-	)
-	if _interaction_controller.start_drag(payload, self, viewport_position):
-		_register_drop_zones()
-		# Reparenting this station temporarily removes its owned zones from the tree.
-		# Refresh once they are registered again so the first drag frame already
-		# shows—and snaps to—the complete table footprint.
-		_interaction_controller.update_drag(viewport_position)
-		return true
-	_restore_table_reservation()
-	return false
 
 
 func _begin_cup_drag(cup: Cup, viewport_position: Vector2) -> bool:
@@ -300,16 +187,6 @@ func _begin_cup_drag(cup: Cup, viewport_position: Vector2) -> bool:
 		}
 	)
 	return _interaction_controller.start_drag(payload, cup, viewport_position)
-
-
-func _on_tray_input_event(_viewport: Node, event: InputEvent, _shape_index: int) -> void:
-	if event is not InputEventMouseButton:
-		return
-	var mouse_event := event as InputEventMouseButton
-	if mouse_event.button_index != MOUSE_BUTTON_LEFT or not mouse_event.pressed:
-		return
-	if _begin_table_drag(mouse_event.position):
-		get_viewport().set_input_as_handled()
 
 
 func _on_cup_input_event(
@@ -349,8 +226,6 @@ func _on_hover_exited() -> void:
 func _on_drag_canceled(payload: HeldItemPayload) -> void:
 	if payload != null and payload.item_id == RESERVATION_ID:
 		modulate.a = 1.0
-		_register_drop_zones()
-		_restore_table_reservation()
 
 
 func _on_mode_changed(mode: StringName) -> void:
@@ -362,17 +237,6 @@ func _on_mode_changed(mode: StringName) -> void:
 
 func _update_mode_visual(_mode: StringName) -> void:
 	modulate.a = 1.0
-
-
-func _restore_table_reservation() -> void:
-	if _committed_table_cells.is_empty():
-		return
-	var restored := _table_grid.reserve_cells(
-		RESERVATION_ID,
-		_committed_table_cells,
-		TableGrid.STATE_TRAY_AREA
-	)
-	assert(restored, "TrayStation failed to restore its previous table reservation.")
 
 
 func _ensure_cup_interaction(cup: Cup) -> void:
@@ -421,39 +285,14 @@ func _cells_from(origin_cell: Vector2i, dimensions: Vector2i) -> Array[Vector2i]
 	return result
 
 
-func _fractional_grid_phase(grid_position: Vector2) -> Vector2:
-	var phase := Vector2(
-		fposmod(grid_position.x, 1.0),
-		fposmod(grid_position.y, 1.0)
-	)
-	if is_zero_approx(phase.x) or is_equal_approx(phase.x, 1.0):
-		phase.x = 0.0
-	if is_zero_approx(phase.y) or is_equal_approx(phase.y, 1.0):
-		phase.y = 0.0
-	return phase
-
-
-func _cell_arrays_equal(left: Array[Vector2i], right: Array[Vector2i]) -> bool:
-	if left.size() != right.size():
-		return false
-	for index in left.size():
-		if left[index] != right[index]:
-			return false
-	return true
-
-
 func _register_drop_zones() -> void:
 	if not is_instance_valid(_interaction_controller):
 		return
-	_interaction_controller.unregister_drop_zone(table_drop_zone)
 	_interaction_controller.unregister_drop_zone(internal_drop_zone)
-	if _interaction_controller.current_mode == InteractionController.MODE_ORGANIZE:
-		_interaction_controller.register_drop_zone(table_drop_zone)
-	else:
+	if _interaction_controller.current_mode == InteractionController.MODE_INTERACT:
 		_interaction_controller.register_drop_zone(internal_drop_zone)
 
 
 func _exit_tree() -> void:
 	if is_instance_valid(_interaction_controller):
-		_interaction_controller.unregister_drop_zone(table_drop_zone)
 		_interaction_controller.unregister_drop_zone(internal_drop_zone)

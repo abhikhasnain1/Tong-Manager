@@ -21,14 +21,15 @@
 [ext_resource type="Script" uid="uid://ch0ggxjjqwbeb" path="res://scripts/ui/tong_hud.gd" id="21_hud"]
 [ext_resource type="Script" uid="uid://c8pc6hixrf8v4" path="res://scripts/gameplay/interactions/interaction_controller.gd" id="22_interaction"]
 [ext_resource type="PackedScene" uid="uid://c47us6eyg86n5" path="res://scenes/gameplay/tools/TrayStation.tscn" id="23_tray_station"]
-[ext_resource type="Script" uid="uid://cw1qsdwkrovxk" path="res://scripts/gameplay/interactions/table_grid.gd" id="24_table_grid"]
-[ext_resource type="Script" uid="uid://dk0vlm10lbc88" path="res://scripts/gameplay/interactions/table_grid_state_overlay.gd" id="25_grid_overlay"]
 
 [ext_resource type="PackedScene" path="res://scenes/gameplay/tools/Kettle.tscn" id="26_kettle"]
 [ext_resource type="PackedScene" path="res://scenes/gameplay/tools/Stove.tscn" id="27_stove"]
 [ext_resource type="Script" path="res://scripts/gameplay/tools/brewing_workstation.gd" id="28_brewing"]
 [ext_resource type="PackedScene" path="res://scenes/gameplay/tools/WaterDrum.tscn" id="29_water"]
 [ext_resource type="Script" path="res://scripts/gameplay/interactions/discard_drop_zone.gd" id="30_discard"]
+
+[ext_resource type="Script" path="res://scripts/gameplay/interactions/placement_surface.gd" id="31_surface"]
+[ext_resource type="Script" path="res://scripts/gameplay/interactions/table_placeable.gd" id="32_placeable"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_khata"]
 size = Vector2(117, 360)
@@ -95,6 +96,7 @@ centered = false
 
 [node name="ToolLayer" type="Node2D" parent="WorldRoot" unique_id=1482854898]
 z_index = 30
+y_sort_enabled = true
 
 [node name="RadioStation" type="Node2D" parent="WorldRoot/ToolLayer" unique_id=740677604]
 position = Vector2(58, 262)
@@ -107,6 +109,7 @@ texture = ExtResource("14_radio")
 position = Vector2(50, 0)
 
 [node name="ReadyItemRail" type="Node2D" parent="WorldRoot/ToolLayer" unique_id=1537676163]
+y_sort_enabled = true
 
 [node name="Banana" type="Sprite2D" parent="WorldRoot/ToolLayer/ReadyItemRail" unique_id=1489529758]
 position = Vector2(436.72, 289.77002)
@@ -126,9 +129,18 @@ position = Vector2(1517.456, 752.096)
 scale = Vector2(1.2, 1.2)
 
 [node name="SugarCan" type="Sprite2D" parent="WorldRoot/ToolLayer/ReadyItemRail" unique_id=1194719677]
-position = Vector2(1704.8901, 734.7621)
+position = Vector2(1654.445018, 734.7621)
 scale = Vector2(0.22800037, 0.22800037)
 texture = ExtResource("18_sugar")
+region_enabled = true
+region_rect = Rect2(0, 0, 442.5, 533)
+
+[node name="SugarCanEnglish" type="Sprite2D" parent="WorldRoot/ToolLayer/ReadyItemRail"]
+position = Vector2(1755.335182, 734.7621)
+scale = Vector2(0.22800037, 0.22800037)
+texture = ExtResource("18_sugar")
+region_enabled = true
+region_rect = Rect2(442.5, 0, 442.5, 533)
 
 [node name="SugarAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/ReadyItemRail" unique_id=1474083354 groups=["critical_interaction_anchor"]]
 position = Vector2(1704.8901, 734.7621)
@@ -199,38 +211,26 @@ z_index = 40
 z_index = 35
 
 [node name="DiscardArea" type="Area2D" parent="WorldRoot/DropZoneRoot"]
+z_index = 80
+z_as_relative = false
 position = Vector2(1635, 925)
 script = ExtResource("30_discard")
 
 [node name="WaterDrum" parent="WorldRoot/ToolLayer" instance=ExtResource("29_water")]
+z_index = 80
+z_as_relative = false
 position = Vector2(835, 875)
 
-[node name="TableGrid" type="Node2D" parent="WorldRoot/DropZoneRoot" unique_id=560674855]
-z_index = -10
-script = ExtResource("24_table_grid")
-top_left_path = NodePath("AuthoredBounds/TopLeft")
-top_right_path = NodePath("AuthoredBounds/TopRight")
-bottom_left_path = NodePath("AuthoredBounds/BottomLeft")
-bottom_right_path = NodePath("AuthoredBounds/BottomRight")
-interaction_controller_path = NodePath("../../../InteractionController")
+[node name="TablePlacementSurface" type="Node2D" parent="WorldRoot/DropZoneRoot"]
+script = ExtResource("31_surface")
+usable_polygon = PackedVector2Array(0, 710, 260, 710, 330, 730, 450, 716, 620, 742, 790, 742, 850, 734, 1090, 719, 1195, 716, 1240, 726, 1400, 726, 1500, 709, 1640, 709, 1740, 706, 1920, 700, 1920, 1080, 0, 1080)
+editor_description = "All clear tabletop is usable. Only the stove is excluded; object bases reserve their own space."
 
-[node name="AuthoredBounds" type="Node2D" parent="WorldRoot/DropZoneRoot/TableGrid" unique_id=1686286958]
-editor_description = "Move the four child markers to align the organization grid. Do not move workstation sprites to fit the grid."
+[node name="Exclusions" type="Node2D" parent="WorldRoot/DropZoneRoot/TablePlacementSurface"]
 
-[node name="TopLeft" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds" unique_id=1911629364]
-position = Vector2(622, 747)
-
-[node name="TopRight" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds" unique_id=1216409695]
-position = Vector2(1795, 719)
-
-[node name="BottomLeft" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds" unique_id=95687265]
-position = Vector2(766, 1066)
-
-[node name="BottomRight" type="Marker2D" parent="WorldRoot/DropZoneRoot/TableGrid/AuthoredBounds" unique_id=157738543]
-position = Vector2(1793, 1072)
-
-[node name="StateOverlay" type="Node2D" parent="WorldRoot/DropZoneRoot/TableGrid" unique_id=1929212797]
-script = ExtResource("25_grid_overlay")
+[node name="Stove" type="Polygon2D" parent="WorldRoot/DropZoneRoot/TablePlacementSurface/Exclusions"]
+visible = false
+polygon = PackedVector2Array(115, 774, 615, 774, 640, 793, 760, 1059, 742, 1079, 3, 1079, 3, 989, 95, 784)
 
 [node name="StoveDropZoneAnchor" type="Marker2D" parent="WorldRoot/DropZoneRoot" unique_id=948933766 groups=["critical_interaction_anchor"]]
 position = Vector2(380, 875)
@@ -405,3 +405,43 @@ mouse_filter = 2
 
 [node name="BrewingWorkstation" type="Node" parent="."]
 script = ExtResource("28_brewing")
+
+[node name="PlacementBody" type="Area2D" parent="WorldRoot/ToolLayer/ReadyItemRail/TeaBox"]
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="WorldRoot/ToolLayer/ReadyItemRail/TeaBox/PlacementBody"]
+polygon = PackedVector2Array(-247.166667, -146.333333, 195.541667, -307.791667, 429.916667, -156.75, 429.916667, 98.458333, -64.875, 312, -247.166667, 108.875)
+
+[node name="PlacementHandle" type="Node2D" parent="WorldRoot/ToolLayer/ReadyItemRail/TeaBox"]
+script = ExtResource("32_placeable")
+input_area_path = NodePath("../PlacementBody")
+footprint = PackedVector2Array(-244.5, 110, 250.5, -103, 429.5, 97, -65.5, 310)
+
+[node name="PlacementBody" type="Area2D" parent="WorldRoot/ToolLayer/ReadyItemRail/SugarCan"]
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="WorldRoot/ToolLayer/ReadyItemRail/SugarCan/PlacementBody"]
+polygon = PackedVector2Array(-216.863762, -165.622977, 103.311157, -165.622977, 103.311157, 211.569394, -216.863762, 211.569394)
+
+[node name="PlacementHandle" type="Node2D" parent="WorldRoot/ToolLayer/ReadyItemRail/SugarCan"]
+script = ExtResource("32_placeable")
+input_area_path = NodePath("../PlacementBody")
+footprint = PackedVector2Array(100.749758, 203.499231, 97.675407, 214.229181, 88.570503, 224.546786, 73.784939, 234.055544, 53.886919, 242.390041, 29.64111, 249.229986, 1.979267, 254.312523, -28.035582, 257.442334, -59.249983, 258.499142, -90.464384, 257.442334, -120.479233, 254.312523, -148.141076, 249.229986, -172.386884, 242.390041, -192.284905, 234.055544, -207.070468, 224.546786, -216.175373, 214.229181, -219.249723, 203.499231, -216.175373, 192.769281, -207.070468, 182.451677, -192.284905, 172.942918, -172.386884, 164.608421, -148.141076, 157.768477, -120.479233, 152.685939, -90.464384, 149.556128, -59.249983, 148.49932, -28.035582, 149.556128, 1.979267, 152.685939, 29.64111, 157.768477, 53.886919, 164.608421, 73.784939, 172.942918, 88.570503, 182.451677, 97.675407, 192.769281)
+
+[node name="PlacementBody" type="Area2D" parent="WorldRoot/ToolLayer/ReadyItemRail/SugarCanEnglish"]
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="WorldRoot/ToolLayer/ReadyItemRail/SugarCanEnglish/PlacementBody"]
+polygon = PackedVector2Array(-102.347123, -165.622977, 217.827796, -165.622977, 217.827796, 211.569394, -102.347123, 211.569394)
+
+[node name="PlacementHandle" type="Node2D" parent="WorldRoot/ToolLayer/ReadyItemRail/SugarCanEnglish"]
+script = ExtResource("32_placeable")
+input_area_path = NodePath("../PlacementBody")
+footprint = PackedVector2Array(218.248848, 203.499231, 215.174497, 214.229181, 206.069593, 224.546786, 191.284029, 234.055544, 171.386009, 242.390041, 147.1402, 249.229986, 119.478357, 254.312523, 89.463508, 257.442334, 58.249107, 258.499142, 27.034706, 257.442334, -2.980143, 254.312523, -30.641986, 249.229986, -54.887794, 242.390041, -74.785815, 234.055544, -89.571378, 224.546786, -98.676283, 214.229181, -101.750633, 203.499231, -98.676283, 192.769281, -89.571378, 182.451677, -74.785815, 172.942918, -54.887794, 164.608421, -30.641986, 157.768477, -2.980143, 152.685939, 27.034706, 149.556128, 58.249107, 148.49932, 89.463508, 149.556128, 119.478357, 152.685939, 147.1402, 157.768477, 171.386009, 164.608421, 191.284029, 172.942918, 206.069593, 182.451677, 215.174497, 192.769281)
+
+[node name="PlacementBody" type="Area2D" parent="WorldRoot/ToolLayer/ReadyItemRail/CondensedMilkCan"]
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="WorldRoot/ToolLayer/ReadyItemRail/CondensedMilkCan/PlacementBody"]
+polygon = PackedVector2Array(-211.166667, -295.888889, 188.833333, -295.888889, 188.833333, 193, -211.166667, 193)
+
+[node name="PlacementHandle" type="Node2D" parent="WorldRoot/ToolLayer/ReadyItemRail/CondensedMilkCan"]
+script = ExtResource("32_placeable")
+input_area_path = NodePath("../PlacementBody")
+footprint = PackedVector2Array(189.5, 189, 185.618627, 201.29069, 174.123666, 213.109056, 155.456862, 224.000925, 130.33557, 233.547727, 99.725187, 241.382586, 64.802053, 247.204411, 26.908245, 250.789473, -12.5, 252, -51.908245, 250.789473, -89.802053, 247.204411, -124.725187, 241.382586, -155.33557, 233.547727, -180.456862, 224.000925, -199.123666, 213.109056, -210.618627, 201.29069, -214.5, 189, -210.618627, 176.70931, -199.123666, 164.890944, -180.456862, 153.999075, -155.33557, 144.452273, -124.725187, 136.617414, -89.802053, 130.795589, -51.908245, 127.210527, -12.5, 126, 26.908245, 127.210527, 64.802053, 130.795589, 99.725187, 136.617414, 130.33557, 144.452273, 155.456862, 153.999075, 174.123666, 164.890944, 185.618627, 176.70931)

@@ -4,18 +4,17 @@
 [ext_resource type="Texture2D" uid="uid://ly7dwlhq6nik" path="res://assets/art/toolkit/tray.png" id="2_tray"]
 [ext_resource type="PackedScene" path="res://scenes/gameplay/tools/Cup.tscn" id="3_cup"]
 [ext_resource type="Script" uid="uid://bbx3udc24eret" path="res://scripts/gameplay/interactions/tray_grid.gd" id="4_grid"]
-[ext_resource type="Script" uid="uid://yxawklnntgd6" path="res://scripts/gameplay/interactions/tray_table_drop_zone.gd" id="5_table_drop"]
+[ext_resource type="Script" path="res://scripts/gameplay/interactions/table_placeable.gd" id="5_placement"]
 [ext_resource type="Script" uid="uid://cj3pt4bxvtlpx" path="res://scripts/gameplay/interactions/tray_internal_drop_zone.gd" id="6_internal_drop"]
 
 [sub_resource type="ConvexPolygonShape2D" id="ConvexPolygonShape2D_tray"]
 points = PackedVector2Array(-239, -122, 241, -119, 339, 108, -344, 120)
 
 [node name="TrayStation" type="Node2D" unique_id=1239877257]
-editor_description = "Functional M2 tray. Edit TableFootprintBounds/CollisionPolygon2D for the physical table footprint; edit InternalGrid/AuthoredBounds only for the 3x2 cup grid."
+editor_description = "Continuous table placement uses TableFootprintBounds/CollisionPolygon2D. InternalGrid remains the legacy cup-only surface until free tray transfers replace it."
 script = ExtResource("1_station")
 cup_scene = ExtResource("3_cup")
 interaction_controller_path = NodePath("../../../InteractionController")
-table_grid_path = NodePath("../../DropZoneRoot/TableGrid")
 
 [node name="TraySprite" type="Sprite2D" parent="." unique_id=220745907]
 scale = Vector2(0.46, 0.46)
@@ -30,11 +29,11 @@ shape = SubResource("ConvexPolygonShape2D_tray")
 position = Vector2(-1, -16)
 
 [node name="TablePlacementAnchor" type="Marker2D" parent="." unique_id=1656535423]
-editor_description = "Stable table-snap anchor. Runtime preserves this anchor's initial fractional grid phase, then derives occupied cells from TableFootprintBounds after each whole-cell move."
+editor_description = "Historical interaction reference; continuous table movement preserves the pointer grip without snapping."
 position = Vector2(34, 16)
 
 [node name="TableFootprintBounds" type="Area2D" parent="." unique_id=1381225645]
-editor_description = "Physical table footprint. Select CollisionPolygon2D and fit its eight points to the tray silhouette. This polygon drives runtime table occupancy and remains separate from TrayBody's click collision and the InternalGrid cup slots."
+editor_description = "Physical table footprint. Select CollisionPolygon2D and fit its eight points to the tray silhouette. This polygon drives continuous table fit and remains separate from TrayBody's click collision and the InternalGrid cup slots."
 collision_layer = 0
 collision_mask = 0
 monitoring = false
@@ -91,14 +90,10 @@ position = Vector2(166.83331, 32.875)
 [node name="Cups" type="Node2D" parent="." unique_id=833519557]
 z_index = 2
 
-[node name="TableDropZone" type="Area2D" parent="." unique_id=1033120506]
-position = Vector2(34, 16)
-script = ExtResource("5_table_drop")
-zone_id = &"tray_table_placement"
-snap_radius = 192.0
-
-[node name="DebugPreview" type="Sprite2D" parent="TableDropZone" unique_id=226334976]
-visible = false
+[node name="PlacementHandle" type="Node2D" parent="."]
+script = ExtResource("5_placement")
+footprint_path = NodePath("../TableFootprintBounds/CollisionPolygon2D")
+input_area_path = NodePath("../TrayBody")
 
 [node name="InternalDropZone" type="Area2D" parent="." unique_id=1214657144]
 script = ExtResource("6_internal_drop")

@@ -49,13 +49,13 @@ func _build_controls() -> void:
 	rows.name = "Rows"
 	margin.add_child(rows)
 	var title := Label.new()
-	title.text = "BREWING REVIEW"
+	title.text = "TABLE & BREWING REVIEW"
 	title.add_theme_font_size_override("font_size", 20)
 	rows.add_child(title)
 	var hint := Label.new()
 	hint.add_theme_font_size_override("font_size", 16)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.text = "Drag the water drum to the empty kettle. Heat, then add tea.\nAim the spout at a cup and hold Space. Drag a cup to the sample customer.\nDrag kettle/cup to Discard to empty. Esc cancels; G switches mode."
+	hint.text = "G: Organize to move the tray, tea, sugar or milk. Green fits; red returns.\nG: Interact for water, brewing, cup service and disposal. Esc cancels.\nHold Space to pour from the kettle. Drag vessels to Discard.\nCups still use tray slots; free tray transfers follow in the next slice."
 	rows.add_child(hint)
 	var buttons := HBoxContainer.new()
 	buttons.name = "Buttons"
