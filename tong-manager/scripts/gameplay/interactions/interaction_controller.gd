@@ -58,6 +58,33 @@ func _ready() -> void:
 	assert(drop_zone_root != null, "InteractionController requires a DropZoneRoot reference.")
 
 
+func _input(event: InputEvent) -> void:
+	# Gameplay owns both edges of Space during a drag, before focused GUI buttons.
+	if (is_dragging() or has_active_action()) and event.is_action(INPUT_POUR):
+		if event.is_action_pressed(INPUT_POUR):
+			action_requested.emit(INPUT_POUR)
+		get_viewport().set_input_as_handled()
+		return
+	# A drag begun in the world must finish even over a GUI panel. Otherwise
+	# the panel can swallow mouse release and leave a stuck kettle or cup.
+	if is_dragging():
+		if event is InputEventMouseMotion:
+			update_drag(event.position)
+			get_viewport().set_input_as_handled()
+		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+			release_drop(event.position)
+			get_viewport().set_input_as_handled()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT and is_node_ready():
+		if has_active_action():
+			action_owner.call("cancel_action")
+		if is_dragging():
+			cancel_drag()
+		Input.action_release(INPUT_POUR)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(INPUT_ORGANIZE_TOGGLE):
 		toggle_mode()
@@ -187,6 +214,8 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 	var best_invalid_distance := INF
 
 	for zone in _get_available_drop_zones():
+		if not zone.is_inside_tree() or zone.is_queued_for_deletion():
+			continue
 		if not zone.is_relevant_to(current_payload):
 			continue
 		var zone_viewport_position := zone.get_global_transform_with_canvas().origin
@@ -236,9 +265,18 @@ func _get_available_drop_zones() -> Array[DropZone]:
 		if not is_instance_valid(registered_zone):
 			_registered_drop_zones.remove_at(index)
 			continue
+		# Retain registrations across legitimate reparenting, but never target
+		# a retained node while it is detached from the active scene.
+		if not registered_zone.is_inside_tree() or registered_zone.is_queued_for_deletion():
+			continue
 		if not zones.has(registered_zone):
 			zones.append(registered_zone)
 	return zones
+
+
+func restore_drag_origin() -> void:
+	# Non-placement drops (water, discard, service) retain the source vessel.
+	_restore_drag_origin()
 
 
 func _restore_drag_origin() -> void:

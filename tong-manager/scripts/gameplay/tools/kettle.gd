@@ -17,6 +17,7 @@ var volume_ml := 0.0
 var temperature := 20.0
 var contains_tea := false
 var steep_progress := 0.0
+# Retained field name; this is elapsed ready time regardless of heat.
 var ready_heat_seconds := 0.0
 var is_pouring := false
 var is_held := false
@@ -29,6 +30,8 @@ var _hovered := false
 var _lid_amount := 0.0
 var _steam_time := 0.0
 var _lid_rest := Vector2.ZERO
+var _pour_zone: BrewingDropZone
+var _pour_requires_release := false
 
 @onready var lid: Node2D = $Lid
 @onready var status: Label = $Status
@@ -81,24 +84,37 @@ func apply_heat(delta: float, intensity: float) -> void:
 	temperature = minf(config.boiling_temperature, temperature + config.heat_rate * intensity * delta)
 	if not contains_tea:
 		state = BrewState.BOILING if temperature >= config.boiling_temperature else BrewState.HEATING
-	elif temperature >= config.boiling_temperature:
-		if state == BrewState.STEEPING:
-			var remaining := maxf(0.0, config.steep_seconds - steep_progress)
-			steep_progress += delta
-			if steep_progress >= config.steep_seconds:
-				state = BrewState.LIQUOR_READY
-				ready_heat_seconds += maxf(0.0, delta - remaining)
-		elif state == BrewState.LIQUOR_READY:
-			ready_heat_seconds += delta
-		if ready_heat_seconds >= config.oversteep_seconds:
+	_changed()
+
+func advance_brewing(delta: float) -> void:
+	# One elapsed clock belongs to the kettle, independent of burner heat input.
+	if not is_finite(delta) or delta <= 0.0 or volume_ml <= 0.0 or not contains_tea:
+		return
+	var remaining_time := delta
+	if state == BrewState.STEEPING:
+		var until_ready := maxf(0.0, config.steep_seconds - steep_progress)
+		if remaining_time + 0.000000001 < until_ready:
+			steep_progress += remaining_time
+			_changed()
+			return
+		steep_progress = config.steep_seconds
+		remaining_time = maxf(0.0, remaining_time - until_ready)
+		state = BrewState.LIQUOR_READY
+	if state == BrewState.LIQUOR_READY:
+		ready_heat_seconds = minf(config.oversteep_seconds, ready_heat_seconds + remaining_time)
+		if ready_heat_seconds + 0.000000001 >= config.oversteep_seconds:
+			ready_heat_seconds = config.oversteep_seconds
 			state = BrewState.OVERSTEEPED
+			stop_pour()
 	_changed()
 
 func can_pour_into(cup: Cup) -> bool:
-	return is_instance_valid(cup) and state == BrewState.LIQUOR_READY and volume_ml > 0.0 and cup.can_receive_liquid(&"black_tea")
+	return is_instance_valid(cup) and cup.is_inside_tree() and not cup.is_queued_for_deletion() and state == BrewState.LIQUOR_READY and volume_ml > 0.0 and cup.can_receive_liquid(&"black_tea")
 
 func start_pour(cup: Cup) -> bool:
 	if is_pouring or not can_pour_into(cup):
+		return false
+	if is_held and (_pour_requires_release or _held_cup_target() != cup):
 		return false
 	if controller != null and not is_held and not controller.lock_action(self):
 		return false
@@ -106,6 +122,8 @@ func start_pour(cup: Cup) -> bool:
 		_remember_origin()
 	is_pouring = true
 	pour_target = cup
+	_pour_zone = controller.hovered_drop_zone as BrewingDropZone if is_held else null
+	pour_target.contents_discarded.connect(_on_target_discarded)
 	rotation = HELD_TILT
 	_changed()
 	return true
@@ -113,12 +131,12 @@ func start_pour(cup: Cup) -> bool:
 func update_pour(delta: float) -> void:
 	if not is_pouring:
 		return
-	if not is_instance_valid(pour_target) or not can_pour_into(pour_target):
+	if not is_instance_valid(pour_target) or not can_pour_into(pour_target) or (is_held and (not is_instance_valid(_pour_zone) or not _valid_pour_zone(_pour_zone, pour_target))):
 		stop_pour()
 		return
 	if not is_finite(delta) or delta <= 0.0:
 		return
-	var transferred := pour_target.receive_liquid(&"black_tea", minf(volume_ml, config.pour_rate_ml * delta))
+	var transferred := pour_target.receive_liquid(&"black_tea", minf(volume_ml, config.pour_rate_ml * delta), temperature)
 	volume_ml = maxf(0.0, volume_ml - transferred)
 	if volume_ml <= 0.0001:
 		volume_ml = 0.0
@@ -134,7 +152,10 @@ func stop_pour() -> void:
 	if not is_pouring:
 		return
 	is_pouring = false
+	if is_instance_valid(pour_target) and pour_target.contents_discarded.is_connected(_on_target_discarded):
+		pour_target.contents_discarded.disconnect(_on_target_discarded)
 	pour_target = null
+	_pour_zone = null
 	rotation = HELD_TILT if is_held else 0.0
 	if not is_held:
 		_restore_origin()
@@ -146,18 +167,46 @@ func stop_pour() -> void:
 func cancel_action() -> void:
 	stop_pour()
 
+func discard_contents() -> float:
+	stop_pour()
+	var discarded := volume_ml
+	volume_ml = 0.0
+	contains_tea = false
+	steep_progress = 0.0
+	ready_heat_seconds = 0.0
+	state = BrewState.EMPTY
+	_changed()
+	return discarded
+
+func _on_target_discarded(_discarded_ml: float) -> void:
+	_pour_requires_release = true
+	stop_pour()
+
+func _valid_pour_zone(zone: BrewingDropZone, cup: Cup) -> bool:
+	return is_instance_valid(zone) and zone.is_inside_tree() and not zone.is_queued_for_deletion() and zone.is_cup_target and is_instance_valid(cup) and cup.is_inside_tree() and cup.is_ancestor_of(zone) and zone.target == cup
+
+func _held_cup_target() -> Cup:
+	if not is_instance_valid(controller) or not controller.is_dragging() or controller.current_drag_node != self:
+		return null
+	var zone := controller.hovered_drop_zone as BrewingDropZone if is_instance_valid(controller.hovered_drop_zone) else null
+	if not is_instance_valid(zone) or not is_instance_valid(zone.target) or not zone.target is Cup:
+		return null
+	var cup := zone.target as Cup
+	return cup if _valid_pour_zone(zone, cup) else null
+
 func finish_cup_interaction() -> void:
 	stop_pour()
 	_restore_origin()
 
 func update_held_pour(pour_pressed: bool) -> void:
+	if not pour_pressed:
+		_pour_requires_release = false
 	if not is_held or controller == null:
 		return
-	var zone: BrewingDropZone = controller.hovered_drop_zone as BrewingDropZone if is_instance_valid(controller.hovered_drop_zone) else null
-	var cup: Cup = zone.target as Cup if is_instance_valid(zone) and zone.is_cup_target and is_instance_valid(zone.target) else null
+	var cup := _held_cup_target()
 	if not pour_pressed or cup != pour_target:
 		stop_pour()
-	if pour_pressed and not is_pouring and can_pour_into(cup):
+	if pour_pressed and not _pour_requires_release and not is_pouring and can_pour_into(cup):
 		start_pour(cup)
 
 func get_pour_probe_viewport() -> Vector2:
@@ -208,7 +257,9 @@ func _restore_origin() -> void:
 
 func _process(delta: float) -> void:
 	update_held_pour(Input.is_action_pressed(InteractionController.INPUT_POUR))
-	update_pour(delta)
+	var pour_delta := minf(delta, maxf(0.0, config.oversteep_seconds - ready_heat_seconds)) if state == BrewState.LIQUOR_READY else delta
+	update_pour(pour_delta)
+	advance_brewing(delta)
 	var heated: bool = is_instance_valid(current_burner) and current_burner.get("heat_level") > 0 and not is_held and not is_pouring
 	if not heated:
 		temperature = maxf(config.ambient_temperature, temperature - config.cooling_rate * delta)

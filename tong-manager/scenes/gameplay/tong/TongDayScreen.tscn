@@ -27,6 +27,8 @@
 [ext_resource type="PackedScene" path="res://scenes/gameplay/tools/Kettle.tscn" id="26_kettle"]
 [ext_resource type="PackedScene" path="res://scenes/gameplay/tools/Stove.tscn" id="27_stove"]
 [ext_resource type="Script" path="res://scripts/gameplay/tools/brewing_workstation.gd" id="28_brewing"]
+[ext_resource type="PackedScene" path="res://scenes/gameplay/tools/WaterDrum.tscn" id="29_water"]
+[ext_resource type="Script" path="res://scripts/gameplay/interactions/discard_drop_zone.gd" id="30_discard"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_khata"]
 size = Vector2(117, 360)
@@ -195,6 +197,13 @@ z_index = 40
 
 [node name="DropZoneRoot" type="Node2D" parent="WorldRoot" unique_id=817989639]
 z_index = 35
+
+[node name="DiscardArea" type="Area2D" parent="WorldRoot/DropZoneRoot"]
+position = Vector2(1635, 925)
+script = ExtResource("30_discard")
+
+[node name="WaterDrum" parent="WorldRoot/ToolLayer" instance=ExtResource("29_water")]
+position = Vector2(835, 875)
 
 [node name="TableGrid" type="Node2D" parent="WorldRoot/DropZoneRoot" unique_id=560674855]
 z_index = -10

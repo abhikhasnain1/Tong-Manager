@@ -21,7 +21,7 @@ func ready_tea(kettle: Kettle, amount: float = 500.0) -> void:
 	kettle.add_water(amount)
 	kettle.apply_heat(10.0, 1.0)
 	check(kettle.add_tea_leaves(), "Tea should enter boiling water")
-	kettle.apply_heat(kettle.config.steep_seconds, 1.0)
+	kettle.advance_brewing(kettle.config.steep_seconds)
 	check(kettle.state == Kettle.BrewState.LIQUOR_READY, "Steeping reaches ready")
 
 func aim_spout(kettle: Kettle, controller: InteractionController, target: Vector2) -> Vector2:
@@ -91,8 +91,8 @@ func run() -> void:
 	check(cup.volume_ml == 50 and kettle.volume_ml == 0, "Insufficient kettle volume conserved")
 	check(kettle.state == Kettle.BrewState.EMPTY and not kettle.contains_tea, "Empty batch resets")
 	ready_tea(kettle)
-	kettle.apply_heat(kettle.config.oversteep_seconds, 1)
-	check(kettle.state == Kettle.BrewState.OVERSTEEPED, "Continued heat oversteeps")
+	kettle.advance_brewing(kettle.config.oversteep_seconds)
+	check(kettle.state == Kettle.BrewState.OVERSTEEPED, "Elapsed ready time oversteeps")
 	check(not kettle.start_pour(cup), "Oversteeped batch rejects serving")
 	ready_tea(kettle)
 	cup.reset_clean()

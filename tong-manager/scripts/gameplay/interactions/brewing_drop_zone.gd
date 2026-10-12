@@ -22,9 +22,11 @@ func get_probe_position(payload: HeldItemPayload, viewport_position: Vector2) ->
 	return viewport_position
 
 func accepts(payload: HeldItemPayload) -> DropValidation:
-	if payload == null or not is_instance_valid(target) or not payload.world_node is Kettle:
+	if (payload == null or not is_instance_valid(target) or not is_instance_valid(payload.world_node)
+		or not payload.world_node is Kettle or not is_inside_tree() or not target.is_inside_tree()
+		or target.is_queued_for_deletion() or not target.is_ancestor_of(self)):
 		return DropValidation.invalid("brewing.kettle_required")
-	if controller.current_mode != InteractionController.MODE_INTERACT:
+	if not is_instance_valid(controller) or controller.current_mode != InteractionController.MODE_INTERACT:
 		return DropValidation.invalid("brewing.use_mode_required")
 	var kettle := payload.world_node as Kettle
 	var valid := kettle.can_pour_into(target as Cup) if is_cup_target else bool(target.call("can_seat", kettle))

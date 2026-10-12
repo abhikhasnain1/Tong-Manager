@@ -9,6 +9,7 @@ interaction_minutes = 10
 customer_count_min = 4
 customer_count_max = 5
 starting_cash = 100
+daily_water_ml = 3000.0
 starting_inventory = {
 &"banana": 4,
 &"biscuits": 6,
@@ -17,6 +18,5 @@ starting_inventory = {
 &"ginger": 4,
 &"honey": 4,
 &"lemon": 4,
-&"sugar": 12,
-&"water": 1500
+&"sugar": 12
 }
