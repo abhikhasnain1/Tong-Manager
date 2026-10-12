@@ -40,6 +40,13 @@ func apply_drop(payload: HeldItemPayload) -> void:
 	drop_applied.emit(payload)
 
 
+func try_apply_drop(payload: HeldItemPayload) -> bool:
+	if not accepts(payload).is_valid:
+		return false
+	apply_drop(payload)
+	return true
+
+
 func set_highlight(valid: bool) -> void:
 	debug_preview.modulate = VALID_HIGHLIGHT if valid else INVALID_HIGHLIGHT
 	debug_preview.visible = true

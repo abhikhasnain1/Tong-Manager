@@ -49,13 +49,25 @@ func unlock_action(owner_node: Node) -> void:
 
 var _drag_origin_parent: Node
 var _drag_origin_transform := Transform2D.IDENTITY
-var _drag_pointer_offset := Vector2.ZERO
+var _drag_start_pointer := Vector2.ZERO
+var _drag_start_position := Vector2.ZERO
 var _registered_drop_zones: Array[DropZone] = []
 
 
 func _ready() -> void:
 	assert(drag_layer != null, "InteractionController requires a DragLayer reference.")
 	assert(drop_zone_root != null, "InteractionController requires a DropZoneRoot reference.")
+
+
+func _exit_tree() -> void:
+	# Scene teardown can run while its parents are busy removing children. Drop
+	# interaction references without restoring/reparenting nodes or emitting drag
+	# callbacks into a scene that is leaving the tree.
+	action_owner = null
+	_clear_drag_state()
+	Input.action_release(INPUT_POUR)
+	if is_instance_valid(cursor_service):
+		cursor_service.reset()
 
 
 func _input(event: InputEvent) -> void:
@@ -142,13 +154,13 @@ func start_drag(payload: HeldItemPayload, drag_node: Node2D, viewport_position: 
 	current_drag_node = drag_node
 	_drag_origin_parent = drag_node.get_parent()
 	_drag_origin_transform = drag_node.transform
-	_drag_pointer_offset = Vector2.ZERO
-	if _drag_origin_parent != null and drag_node.is_inside_tree():
-		_drag_pointer_offset = viewport_position - drag_node.get_global_transform_with_canvas().origin
 	if _drag_origin_parent == null:
 		drag_layer.add_child(drag_node)
+		drag_node.position = drag_layer.get_global_transform_with_canvas().affine_inverse() * viewport_position
 	elif _drag_origin_parent != drag_layer:
-		drag_node.reparent(drag_layer, true)
+		reparent_preserving_transform(drag_node, drag_layer)
+	_drag_start_pointer = viewport_position
+	_drag_start_position = drag_node.position
 
 	cursor_service.set_state(CURSOR_STATE_DRAGGING)
 	update_drag(viewport_position)
@@ -159,10 +171,50 @@ func start_drag(payload: HeldItemPayload, drag_node: Node2D, viewport_position: 
 func update_drag(viewport_position: Vector2) -> void:
 	if not is_dragging():
 		return
-	var drag_origin_viewport := viewport_position - _drag_pointer_offset
-	current_drag_node.position = drag_layer.get_global_transform_with_canvas().affine_inverse() * drag_origin_viewport
+	# Transform a displacement instead of round-tripping the large absolute
+	# authored position through canvas coordinates. A stationary pickup or a
+	# return to its starting pointer keeps an exact touching base unchanged.
+	var displacement := viewport_position - _drag_start_pointer
+	var canvas_inverse := drag_layer.get_global_transform_with_canvas().affine_inverse()
+	current_drag_node.position = _drag_start_position + canvas_inverse.basis_xform(displacement)
 	drag_moved.emit(current_payload, viewport_position)
 	_update_hovered_drop_zone(viewport_position)
+
+
+func reparent_preserving_transform(item: Node2D, parent: Node) -> void:
+	if item.get_parent() == parent:
+		return
+	var relative := _relative_transform(item, parent)
+	item.reparent(parent, false)
+	item.transform = relative
+
+
+func _relative_transform(item: Node2D, parent: Node) -> Transform2D:
+	if item.is_set_as_top_level():
+		return item.global_transform
+	# Cancel shared world transforms before calculating the new local pose.
+	# reparent(true) otherwise introduces viewport-scale rounding at exact edges.
+	var ancestors: Dictionary = {}
+	var ancestor := item
+	var item_to_ancestor := Transform2D.IDENTITY
+	while ancestor != null:
+		ancestors[ancestor] = item_to_ancestor
+		if ancestor.is_set_as_top_level():
+			break
+		item_to_ancestor = ancestor.transform * item_to_ancestor
+		ancestor = ancestor.get_parent() as Node2D
+	ancestor = parent as Node2D
+	var parent_to_ancestor := Transform2D.IDENTITY
+	while ancestor != null:
+		if ancestors.has(ancestor):
+			return parent_to_ancestor.affine_inverse() * (ancestors[ancestor] as Transform2D)
+		if ancestor.is_set_as_top_level():
+			break
+		parent_to_ancestor = ancestor.transform * parent_to_ancestor
+		ancestor = ancestor.get_parent() as Node2D
+	if parent is CanvasItem:
+		return parent.get_global_transform().affine_inverse() * item.global_transform
+	return item.global_transform
 
 
 func cancel_drag() -> void:
@@ -185,7 +237,9 @@ func release_drop(viewport_position: Vector2) -> void:
 
 	var dropped_payload := current_payload
 	var target_zone := hovered_drop_zone
-	target_zone.apply_drop(dropped_payload)
+	if not target_zone.try_apply_drop(dropped_payload):
+		cancel_drag()
+		return
 	_clear_drag_state()
 	cursor_service.reset()
 	drag_dropped.emit(dropped_payload, target_zone)
@@ -299,4 +353,5 @@ func _clear_drag_state() -> void:
 	current_drag_node = null
 	_drag_origin_parent = null
 	_drag_origin_transform = Transform2D.IDENTITY
-	_drag_pointer_offset = Vector2.ZERO
+	_drag_start_pointer = Vector2.ZERO
+	_drag_start_position = Vector2.ZERO

@@ -1,4 +1,36 @@
-# Brewing verification
+# Table placement and brewing verification
+
+The current table placement review is in `scenes/development/BrewingPreview.tscn`.
+Open it and press F6. Press **G** for Organize, then drag the tray or a tea, sugar
+or milk container to a clear part of the tabletop. The base outline is green for
+a valid position and red for a blocked position. Release commits the exact
+position; an invalid release, Escape, right-click, mode change, focus loss or
+window resize returns the item. No rotation or automatic pushing is included.
+
+Only the stove blocks ordinary table placement. Other objects reserve their base
+footprints. The strip behind the stove is usable wherever a base fits. Drops must
+also keep the base inside the visible window. The water/discard controls remain
+accessible above placeable art and do not reserve table space. Two existing sugar
+can pictures are separate texture regions with independent placement; neither
+creates ingredient stock or implements taking a portion.
+
+The populated tray carries its cups unchanged. **This is the table-only slice:**
+the internal cup grid and its existing brewing/service lifecycle remain until
+free tray contents and bidirectional table transfers are implemented in #103.
+Press G again for Interact to use the brewing actions described below. All scene
+icons, boxes and controls remain provisional. Bucket work is on hold.
+
+```sh
+godot --headless --path . --script res://tests/placement_geometry_test.gd
+godot --headless --path . --script res://tests/table_placement_test.gd
+godot --path . --resolution 1920x1080 --script res://tests/table_placement_input_test.gd
+```
+
+The geometry suite checks concave boundaries/exclusions, compound footprints,
+exact edge contact, peer overlap, transformed geometry and stale identity safety.
+The table suites check continuous scene placement, rollback and actual input
+alongside moved-tray brewing and utility access. Run rendered checks at all four
+sizes listed below. Tests do not replace scene/play-feel acceptance before merge.
 
 Run from the `tong-manager` project directory with Godot 4.7 on PATH:
 
@@ -66,5 +98,5 @@ Tea stock and sample customers are explicit development fixtures. This scene doe
 not implement production ingredient inventory, customer orders, payments, a day
 ledger or a reputation economy. Preview controls are disabled during any drag or
 active action, and never take keyboard focus from Space-to-pour. Bucket work stays
-separate. Temporary lid/dial art and procedural steam/flames still need visual and
-play-feel acceptance before merge.
+separate. Brewing mechanics were accepted in PR #106; artwork and presentation
+remain provisional. The new placement slice needs its own scene review before merge.
