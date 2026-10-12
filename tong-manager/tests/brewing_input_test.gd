@@ -94,6 +94,17 @@ func run() -> void:
 	await create_timer(.05).timeout
 	check(first_cup.volume_ml == 0 and not kettle.is_pouring, "Pointer covering cup cannot pour when spout misses")
 	await pour_key(false)
+	await move_pointer(aim_pointer(kettle, target))
+	for unrelated_key in [KEY_ENTER, KEY_A]:
+		for pressed in [true, false]:
+			var key := InputEventKey.new()
+			key.keycode = unrelated_key
+			key.physical_keycode = unrelated_key
+			key.pressed = pressed
+			Input.parse_input_event(key)
+			await process_frame
+			await process_frame
+		check(first_cup.volume_ml == 0 and not kettle.is_pouring, "Only mapped Space pours; key %d does not" % unrelated_key)
 	# Keep a real GUI Button focused during the world drag. Both Space edges
 	# must belong to pouring even if a future preview control can take focus.
 	var focus_trap := Button.new()
