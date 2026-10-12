@@ -43,6 +43,7 @@ var volume_ml := 0.0
 var liquid_type: StringName = &""
 var temperature := 20.0
 var controller: InteractionController
+var _hovered := false
 
 func can_receive_liquid(kind: StringName) -> bool:
 	return (
@@ -124,6 +125,8 @@ func _ready() -> void:
 func bind_controller(value: InteractionController) -> void:
 	if not is_instance_valid(value) or value.is_queued_for_deletion():
 		return
+	if is_instance_valid(controller) and controller.mode_changed.is_connected(_refresh_hover):
+		controller.mode_changed.disconnect(_refresh_hover)
 	var zone := get_node_or_null("PourTarget") as BrewingDropZone
 	if zone != null and is_instance_valid(zone.controller) and zone.controller != value:
 		zone.controller.unregister_drop_zone(zone)
@@ -137,6 +140,7 @@ func bind_controller(value: InteractionController) -> void:
 		zone.name = "PourTarget"
 		add_child(zone)
 	controller = value
+	controller.mode_changed.connect(_refresh_hover)
 	zone.is_cup_target = true
 	zone.target = self
 	zone.controller = controller
@@ -159,6 +163,7 @@ func _can_interact() -> bool:
 	if (not is_inside_tree() or is_queued_for_deletion()
 		or not is_instance_valid(controller) or not controller.is_inside_tree() or controller.is_queued_for_deletion()
 		or controller.current_mode != InteractionController.MODE_INTERACT
+		or not controller.can_start_world_action()
 		or controller.is_dragging() or controller.has_active_action()):
 		return false
 	var handle := get_node_or_null("PlacementHandle") as TablePlaceable
@@ -175,8 +180,16 @@ func _on_input(_viewport: Node, event: InputEvent, _shape: int) -> void:
 
 
 func _on_hover(entered: bool) -> void:
+	_hovered = entered
 	if _can_interact():
 		get_node("/root/CursorService").set_state(&"hover_actionable" if entered else &"default")
+		if entered:
+			controller.report_hint("Use · drag cup to serve or discard · Organize to rearrange")
+
+
+func _refresh_hover(_mode: StringName) -> void:
+	if _hovered:
+		_on_hover(true)
 
 
 func _configure_in_screen() -> void:

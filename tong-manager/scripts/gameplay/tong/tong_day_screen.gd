@@ -10,6 +10,8 @@ const CROP_SAFE_RECT := Rect2(96.0, 0.0, 1728.0, 1080.0)
 @onready var composition_guides: Node2D = %CompositionGuides
 @onready var cursor_service: Node = get_node("/root/CursorService")
 @onready var table_surface: PlacementSurface = $WorldRoot/DropZoneRoot/TablePlacementSurface
+var portion_sources: Array[IngredientPortionSource] = []
+var _portion_provider: PortionStockProvider
 
 
 func _ready() -> void:
@@ -17,12 +19,51 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_fit_authored_world)
 	var interaction := $InteractionController as InteractionController
 	var hud := $HUDLayer/RootUI as TongHud
-	interaction.mode_changed.connect(hud.set_mode)
-	hud.set_mode(interaction.current_mode)
+	interaction.modal_root = $HUDLayer/RootUI/ModalStack
+	hud.bind_controller(interaction)
 	cursor_service.bind_hover_target($WorldRoot/ToolLayer/KhataStation/KhataHotspot)
 	_fit_authored_world()
 	_configure_table_placement()
+	_configure_portion_sources()
+	_configure_portion_target($WorldRoot/ToolLayer/KettleStation)
 	_verify_layout_contract()
+
+
+func set_portion_provider(provider: PortionStockProvider) -> void:
+	# Normal scenes have no ingredient supply until the shared inventory binds it.
+	_portion_provider = provider
+	for source in portion_sources:
+		if is_instance_valid(source):
+			source.set_provider(provider)
+
+
+func _configure_portion_sources() -> void:
+	var rail := $WorldRoot/ToolLayer/ReadyItemRail
+	var definitions := [
+		["TeaBox", &"black_tea", &"teabag"],
+		["SugarCan", &"sugar", &"spoonful"],
+		["SugarCanEnglish", &"sugar", &"spoonful"],
+		["CondensedMilkCan", &"condensed_milk", &"spoonful"],
+	]
+	for definition in definitions:
+		var item := rail.get_node(NodePath(definition[0])) as Node2D
+		var source := IngredientPortionSource.new()
+		source.name = "IngredientSource"
+		item.add_child(source)
+		source.configure($InteractionController, definition[1], definition[2],
+			item.get_node("PlacementBody"), item.get_node("PlacementHandle"))
+		source.set_provider(_portion_provider)
+		portion_sources.append(source)
+
+
+func _configure_portion_target(target: Node2D) -> void:
+	var zone := target.get_node_or_null("IngredientTarget") as IngredientPortionTarget
+	if zone == null:
+		zone = IngredientPortionTarget.new()
+		zone.name = "IngredientTarget"
+		target.add_child(zone)
+	zone.position = Vector2(26, -70) if target is Kettle else Vector2(0, -12)
+	zone.configure($InteractionController, target)
 
 
 func set_composition_guides_visible(is_visible: bool) -> void:
@@ -80,6 +121,7 @@ func configure_cup(cup: Cup) -> bool:
 		cup.capacity_ml = float(tool_def.cup_volume_ml)
 	handle.set_available_surfaces([table_surface, tray.interior_surface])
 	cup.bind_controller($InteractionController)
+	_configure_portion_target(cup)
 	return true
 
 

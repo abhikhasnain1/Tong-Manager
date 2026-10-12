@@ -227,7 +227,7 @@ func _on_drag_moved(payload: HeldItemPayload, viewport_position: Vector2) -> voi
 		_position_grip_at(viewport_position)
 
 func begin_drag(viewport_position: Vector2) -> bool:
-	if controller == null or controller.current_mode != InteractionController.MODE_INTERACT:
+	if controller == null or controller.current_mode != InteractionController.MODE_INTERACT or not controller.can_start_world_action():
 		return false
 	if controller.is_dragging() or controller.has_active_action() or is_pouring:
 		return false
@@ -265,7 +265,8 @@ func _process(delta: float) -> void:
 		temperature = maxf(config.ambient_temperature, temperature - config.cooling_rate * delta)
 		if not contains_tea and volume_ml > 0.0 and temperature < config.boiling_temperature:
 			state = BrewState.WATER
-	_lid_amount = move_toward(_lid_amount, 1.0 if _hovered and not is_held and not is_pouring else 0.0, delta * 7.0)
+	var passive_hover := _hovered and (controller == null or (not controller.is_world_input_blocked() and not controller.is_pointer_over_ui()))
+	_lid_amount = move_toward(_lid_amount, 1.0 if passive_hover and not is_held and not is_pouring else 0.0, delta * 7.0)
 	lid.position = _lid_rest + Vector2(0.0, -13.0 * _lid_amount)
 	lid.rotation = -0.045 * _lid_amount
 	_steam_time += delta
@@ -308,7 +309,10 @@ func _on_input(_viewport: Node, event: InputEvent, _shape_index: int) -> void:
 func _on_hover(entered: bool) -> void:
 	_hovered = entered
 	if controller != null and not controller.is_dragging() and not controller.has_active_action():
-		get_node("/root/CursorService").set_state(&"hover_actionable" if entered else &"default")
+		var actionable := entered and controller.current_mode == InteractionController.MODE_INTERACT and controller.can_start_world_action()
+		get_node("/root/CursorService").set_state(&"hover_actionable" if actionable else &"default")
+		if actionable:
+			controller.report_hint("Use · drag kettle by handle · hold Space to pour · drop on Discard to empty")
 
 func _on_drag_canceled(payload: HeldItemPayload) -> void:
 	if payload.world_node == self:
@@ -317,6 +321,8 @@ func _on_drag_canceled(payload: HeldItemPayload) -> void:
 
 func _on_mode_changed(_mode: StringName) -> void:
 	stop_pour()
+	if _hovered:
+		_on_hover(true)
 
 func _exit_tree() -> void:
 	# Reparenting during drag also emits tree_exiting; do not clear ownership here.

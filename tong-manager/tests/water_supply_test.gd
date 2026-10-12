@@ -109,6 +109,7 @@ func run() -> void:
 	var controller := InteractionController.new()
 	controller.drag_layer_path = NodePath("../DragLayer")
 	controller.drop_zone_root_path = NodePath("../Zones")
+	controller.current_mode = InteractionController.MODE_INTERACT
 	fixture.add_child(controller)
 	var drum_scene := load("res://scenes/gameplay/tools/WaterDrum.tscn") as PackedScene
 	var drum := drum_scene.instantiate() as WaterDrum
@@ -186,6 +187,7 @@ func run() -> void:
 	var scene_kettle := screen.get_node("WorldRoot/ToolLayer/KettleStation") as Kettle
 	var scene_drum := screen.get_node("WorldRoot/ToolLayer/WaterDrum") as WaterDrum
 	var scene_controller := screen.get_node("InteractionController") as InteractionController
+	scene_controller.set_mode(InteractionController.MODE_INTERACT)
 	var scene_fill := scene_kettle.get_node("WaterFillTarget") as WaterFillDropZone
 	scene_kettle.set_process(false)
 	check(scene_kettle.volume_ml == 0.0, "Normal Tong kettle starts empty")
@@ -212,6 +214,7 @@ func run() -> void:
 	scene_kettle = screen.get_node("WorldRoot/ToolLayer/KettleStation") as Kettle
 	scene_drum = screen.get_node("WorldRoot/ToolLayer/WaterDrum") as WaterDrum
 	scene_controller = screen.get_node("InteractionController") as InteractionController
+	scene_controller.set_mode(InteractionController.MODE_INTERACT)
 	scene_fill = scene_kettle.get_node("WaterFillTarget") as WaterFillDropZone
 	check(game_state.water_supply.remaining_ml == 900.0 and scene_drum.remaining_label.text.contains("900 ml"), "First Tong load honors its customized DayConfig allocation")
 	check(scene_drum.begin_drag(scene_drum.get_global_transform_with_canvas().origin), "Customized finite supply supports the production gesture")

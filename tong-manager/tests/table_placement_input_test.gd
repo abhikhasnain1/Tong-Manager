@@ -151,7 +151,7 @@ func run() -> void:
 	var tea := rail.get_node("TeaBox") as Node2D
 	var tea_start := world.to_local(tea.global_position)
 	await mouse(at(tea_start),true)
-	check(not controller.is_dragging(), "Interact does not arrange source containers")
+	check(not controller.is_dragging(), "Neutral does not arrange or extract from source containers")
 	await mouse(at(tea_start),false)
 	await tap(KEY_G)
 	check(controller.current_mode == InteractionController.MODE_ORGANIZE, "Real G selects existing Organize mode")
@@ -213,7 +213,7 @@ func run() -> void:
 	check(controller.current_drag_node == tray, "Organize click passes through water utility to covered tray")
 	await tap(KEY_ESCAPE)
 	await mouse(drum_at,false)
-	await tap(KEY_G)
+	await tap(KEY_U)
 	var kettle := preview.kettle as Kettle
 	var source_before: float = root.get_node("GameState").water_supply.remaining_ml
 	await mouse(drum_at,true)
@@ -223,7 +223,7 @@ func run() -> void:
 	check(drum.get_global_transform_with_canvas().origin.is_equal_approx(drum_at), "Water utility returns to its fixed accessible origin")
 	await tap(KEY_G)
 	await arrange(tray,Vector2(1550,930),"Tray covering discard utility",tray_grip)
-	await tap(KEY_G)
+	await tap(KEY_U)
 	kettle.apply_heat(10,1)
 	kettle.add_tea_leaves()
 	kettle.advance_brewing(kettle.config.steep_seconds)
@@ -253,7 +253,7 @@ func run() -> void:
 	await mouse(reset_at,true)
 	await mouse(reset_at,false)
 	check(kettle.volume_ml == 0.0 and root.get_node("GameState").water_supply.remaining_ml == 3000.0, "Real preview reset still starts the empty-kettle fixture day")
-	check(hud.current_mode == controller.current_mode and hud.interact_mode_label.modulate == TongHud.ACTIVE_MODE_COLOR, "Visible mode indicator returns to Interact")
+	check(hud.current_mode == InteractionController.MODE_NEUTRAL and hud.interact_mode_label.modulate == TongHud.INACTIVE_MODE_COLOR and hud.organize_mode_label.modulate == TongHud.INACTIVE_MODE_COLOR, "Preview reset visibly returns to Neutral")
 	check(tray.get_cup_count() == 6 and preview.screen.get_cups().size() == 6, "Placement never loses or duplicates starting cup ownership")
 	for child in tray.get_cups():
 		check((child as Cup).volume_ml == 0.0, "Reset reaches %s after placement, pouring and discard" % child.name)

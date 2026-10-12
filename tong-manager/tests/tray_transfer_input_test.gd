@@ -186,9 +186,9 @@ func run() -> void:
 	await mouse(at(Vector2(905,945)),false)
 	check(not controller.is_dragging() and cups[0].transform.is_equal_approx(saved_pose),"Real Escape cancels a table/tray transfer")
 	await mouse(cups[0].get_global_transform_with_canvas().origin,true)
-	await tap(KEY_G)
+	await tap(KEY_U)
 	await mouse(at(Vector2(905,945)),false)
-	check(controller.current_mode == InteractionController.MODE_INTERACT and cups[0].transform.is_equal_approx(saved_pose),"Real mode switch cancels pending placement")
+	check(controller.current_mode == InteractionController.MODE_INTERACT and cups[0].transform.is_equal_approx(saved_pose),"Real Use shortcut cancels pending placement")
 	# Interact drags remain actions and cannot silently relocate a cup.
 	var action_cup := cups[1]
 	var action_pose := action_cup.transform

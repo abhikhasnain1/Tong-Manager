@@ -15,6 +15,8 @@ func bind_controller(controller: InteractionController) -> void:
 			burner.set_process(false)
 			continue
 		burner.controller = controller
+		if not controller.mode_changed.is_connected(dial.refresh_hover):
+			controller.mode_changed.connect(dial.refresh_hover)
 		var zone := BrewingDropZone.new()
 		zone.name = "DropZone"
 		zone.target = burner

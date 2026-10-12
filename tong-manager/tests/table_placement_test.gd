@@ -260,6 +260,7 @@ func run() -> void:
 	var exit_action := ExitAction.new()
 	exit_host.add_child(exit_action)
 	root.add_child(exit_host)
+	exit_controller.set_mode(InteractionController.MODE_INTERACT)
 	check(exit_controller.lock_action(exit_action), "Controller-exit regression owns a live action")
 	cursor.set_state(&"hover_actionable")
 	Input.action_press(InteractionController.INPUT_POUR)

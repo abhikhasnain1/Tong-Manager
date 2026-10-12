@@ -7,6 +7,8 @@ const STATE_HOVER_INTERACTABLE := &"hover_interactable"
 const STATE_HOVER_ACTIONABLE := &"hover_actionable"
 const STATE_DRAGGING := &"dragging"
 const STATE_INVALID := &"invalid"
+const STATE_SPOON := &"spoon"
+const STATE_TEABAG := &"teabag"
 
 const CURSOR_NORMAL: Texture2D = preload("res://assets/art/cursors/cursor_normal.png")
 const CURSOR_HOVER: Texture2D = preload("res://assets/art/cursors/cursor_hover.png")
@@ -19,9 +21,19 @@ const STATE_TO_SYSTEM_SHAPE := {
 	STATE_HOVER_ACTIONABLE: Input.CURSOR_CROSS,
 	STATE_DRAGGING: Input.CURSOR_DRAG,
 	STATE_INVALID: Input.CURSOR_FORBIDDEN,
+	STATE_SPOON: Input.CURSOR_HELP,
+	STATE_TEABAG: Input.CURSOR_CAN_DROP,
 }
 
 const STATE_TO_CUSTOM_CURSOR := {
+	STATE_SPOON: {
+		"texture": preload("res://assets/art/cursors/cursor_spoon.svg"),
+		"hotspot": Vector2(15, 15),
+	},
+	STATE_TEABAG: {
+		"texture": preload("res://assets/art/cursors/cursor_teabag.svg"),
+		"hotspot": Vector2(19, 28),
+	},
 	STATE_DEFAULT: {
 		"texture": CURSOR_NORMAL,
 		"hotspot": Vector2(14.0, 7.0),
