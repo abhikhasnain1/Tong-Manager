@@ -225,6 +225,7 @@ position = Vector2(835, 875)
 script = ExtResource("31_surface")
 usable_polygon = PackedVector2Array(0, 710, 260, 710, 330, 730, 450, 716, 620, 742, 790, 742, 850, 734, 1090, 719, 1195, 716, 1240, 726, 1400, 726, 1500, 709, 1640, 709, 1740, 706, 1920, 700, 1920, 1080, 0, 1080)
 editor_description = "All clear tabletop is usable. Only the stove is excluded; object bases reserve their own space."
+placement_parent_path = NodePath("../../ToolLayer/ReadyItemRail")
 
 [node name="Exclusions" type="Node2D" parent="WorldRoot/DropZoneRoot/TablePlacementSurface"]
 

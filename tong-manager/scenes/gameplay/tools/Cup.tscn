@@ -1,8 +1,9 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/gameplay/tools/cup.gd" id="1_cup"]
 [ext_resource type="Texture2D" path="res://assets/art/toolkit/cup_clean_provisional.png" id="2_clean"]
 [ext_resource type="Texture2D" path="res://assets/art/toolkit/cup_dirty_provisional.png" id="3_dirty"]
+[ext_resource type="Script" path="res://scripts/gameplay/interactions/table_placeable.gd" id="4_placement"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_cup"]
 size = Vector2(74, 76)
@@ -20,7 +21,7 @@ fill_from = Vector2(0.5, 0.5)
 fill_to = Vector2(1, 0.5)
 
 [node name="Cup" type="Area2D"]
-editor_description = "Reusable M2 cup lifecycle object. Tray ownership and movement are implemented by issue #50."
+editor_description = "Reusable cup with free table/tray placement in Organize and brewing/service interactions in Interact."
 script = ExtResource("1_cup")
 clean_texture = ExtResource("2_clean")
 dirty_texture = ExtResource("3_dirty")
@@ -31,13 +32,17 @@ texture = ExtResource("2_clean")
 
 [node name="ContentsOverlay" type="Sprite2D" parent="."]
 visible = false
-z_index = 1
 position = Vector2(0, -14)
 scale = Vector2(0.24, 0.08)
 texture = SubResource("GradientTexture2D_contents")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("RectangleShape2D_cup")
+
+[node name="PlacementHandle" type="Node2D" parent="."]
+script = ExtResource("4_placement")
+input_area_path = NodePath("..")
+footprint = PackedVector2Array(14.625000, 32.625000, 14.354072, 33.561434, 13.551701, 34.461880, 12.248722, 35.291737, 10.495206, 36.019113, 8.358540, 36.616054, 5.920836, 37.059622, 3.275774, 37.332769, 0.525000, 37.425000, -2.225774, 37.332769, -4.870836, 37.059622, -7.308540, 36.616054, -9.445206, 36.019113, -11.198722, 35.291737, -12.501701, 34.461880, -13.304072, 33.561434, -13.575000, 32.625000, -13.304072, 31.688566, -12.501701, 30.788120, -11.198722, 29.958263, -9.445206, 29.230887, -7.308540, 28.633946, -4.870836, 28.190378, -2.225774, 27.917231, 0.525000, 27.825000, 3.275774, 27.917231, 5.920836, 28.190378, 8.358540, 28.633946, 10.495206, 29.230887, 12.248722, 29.958263, 13.551701, 30.788120, 14.354072, 31.688566)
 
 [node name="RelishMarkers" type="Node2D" parent="."]
 

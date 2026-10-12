@@ -55,7 +55,7 @@ func _build_controls() -> void:
 	var hint := Label.new()
 	hint.add_theme_font_size_override("font_size", 16)
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.text = "G: Organize to move the tray, tea, sugar or milk. Green fits; red returns.\nG: Interact for water, brewing, cup service and disposal. Esc cancels.\nHold Space to pour from the kettle. Drag vessels to Discard.\nCups still use tray slots; free tray transfers follow in the next slice."
+	hint.text = "G: Organize to move cups, tray, tea, sugar or milk. Green fits; red returns.\nG: Interact for water, brewing, cup service and disposal. Esc cancels.\nHold Space to pour from the kettle. Drag vessels to Discard.\nIn Organize, move cups or containers onto/off the tray. No slots."
 	rows.add_child(hint)
 	var buttons := HBoxContainer.new()
 	buttons.name = "Buttons"
@@ -94,7 +94,7 @@ func reset_fixture() -> void:
 	kettle.discard_contents()
 	kettle.temperature = kettle.config.ambient_temperature
 	stove.burners[0].seat(kettle)
-	for cup in screen.get_node("WorldRoot/ToolLayer/TrayStation/Cups").get_children():
+	for cup in screen.get_cups():
 		(cup as Cup).reset_clean()
 	var game_state := get_node("/root/GameState")
 	game_state.ensure_water_day()

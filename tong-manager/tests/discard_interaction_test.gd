@@ -20,7 +20,7 @@ func run() -> void:
 	var kettle: Kettle = screen.get_node("WorldRoot/ToolLayer/KettleStation")
 	var tray: TrayStation = screen.get_node("WorldRoot/ToolLayer/TrayStation")
 	var discard: DiscardDropZone = screen.get_node("WorldRoot/DropZoneRoot/DiscardArea")
-	var cup := tray.cups.get_child(0) as Cup
+	var cup := tray.get_cups()[0] as Cup
 	kettle.set_process(false)
 	cup.set_process(false)
 	var water_before: float = root.get_node("GameState").water_supply.remaining_ml

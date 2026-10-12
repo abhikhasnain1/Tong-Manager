@@ -4,10 +4,8 @@
 
 [resource]
 script = ExtResource("1_tool_def")
-tray_capacity = 6
+starting_cup_count = 6
 bucket_capacity = 6
 kettle_capacity_ml = 1500
 cup_volume_ml = 250
 burner_count = 2
-tray_grid_size = Vector2i(3, 2)
-tray_table_overlap_threshold = 0.05

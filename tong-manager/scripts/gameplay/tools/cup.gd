@@ -42,6 +42,7 @@ const ALLOWED_TRANSITIONS: Dictionary = {
 var volume_ml := 0.0
 var liquid_type: StringName = &""
 var temperature := 20.0
+var controller: InteractionController
 
 func can_receive_liquid(kind: StringName) -> bool:
 	return (
@@ -113,6 +114,81 @@ func _ready() -> void:
 	liquid_changed.connect(_update_volume_marker)
 	_update_volume_marker(volume_ml)
 	_apply_state_visuals()
+	input_event.connect(_on_input)
+	mouse_entered.connect(_on_hover.bind(true))
+	mouse_exited.connect(_on_hover.bind(false))
+	add_to_group(&"cups")
+	_configure_in_screen.call_deferred()
+
+
+func bind_controller(value: InteractionController) -> void:
+	if not is_instance_valid(value) or value.is_queued_for_deletion():
+		return
+	var zone := get_node_or_null("PourTarget") as BrewingDropZone
+	if zone != null and is_instance_valid(zone.controller) and zone.controller != value:
+		zone.controller.unregister_drop_zone(zone)
+	if zone != null and zone.is_queued_for_deletion():
+		if is_instance_valid(zone.controller):
+			zone.controller.unregister_drop_zone(zone)
+		remove_child(zone)
+		zone = null
+	if zone == null:
+		zone = BrewingDropZone.new()
+		zone.name = "PourTarget"
+		add_child(zone)
+	controller = value
+	zone.is_cup_target = true
+	zone.target = self
+	zone.controller = controller
+	zone.snap_radius = 30.0
+	zone.position = Vector2(0, -12)
+	zone.input_pickable = false
+	controller.register_drop_zone(zone)
+
+
+func begin_interaction_drag(viewport_position: Vector2) -> bool:
+	if not _can_interact():
+		return false
+	var payload := HeldItemPayload.new(&"cup", StringName(name), 1, self, {
+		"category": &"cup",
+	})
+	return controller.start_drag(payload, self, viewport_position)
+
+
+func _can_interact() -> bool:
+	if (not is_inside_tree() or is_queued_for_deletion()
+		or not is_instance_valid(controller) or not controller.is_inside_tree() or controller.is_queued_for_deletion()
+		or controller.current_mode != InteractionController.MODE_INTERACT
+		or controller.is_dragging() or controller.has_active_action()):
+		return false
+	var handle := get_node_or_null("PlacementHandle") as TablePlaceable
+	return (handle != null and not handle.is_queued_for_deletion() and handle.controller == controller
+		and is_instance_valid(handle.surface) and handle.surface.is_inside_tree()
+		and not handle.surface.is_queued_for_deletion() and handle.surface.is_registered(self))
+
+
+func _on_input(_viewport: Node, event: InputEvent, _shape: int) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		var handle := get_node_or_null("PlacementHandle") as TablePlaceable
+		if handle != null and handle._is_frontmost_at(event.position) and begin_interaction_drag(event.position):
+			get_viewport().set_input_as_handled()
+
+
+func _on_hover(entered: bool) -> void:
+	if _can_interact():
+		get_node("/root/CursorService").set_state(&"hover_actionable" if entered else &"default")
+
+
+func _configure_in_screen() -> void:
+	if not is_inside_tree() or is_queued_for_deletion():
+		return
+	var ancestor := get_parent()
+	while ancestor != null:
+		if ancestor.has_method("configure_cup"):
+			if ancestor.is_node_ready() and not ancestor.is_queued_for_deletion():
+				ancestor.call("configure_cup", self)
+			return
+		ancestor = ancestor.get_parent()
 
 func _update_volume_marker(amount: float) -> void:
 	if not is_node_ready():

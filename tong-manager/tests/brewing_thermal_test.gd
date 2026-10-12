@@ -41,11 +41,11 @@ func run() -> void:
 	var stove := screen.get_node("WorldRoot/ToolLayer/StoveStation") as Stove
 	var controller := screen.get_node("InteractionController") as InteractionController
 	var tray := screen.get_node("WorldRoot/ToolLayer/TrayStation") as TrayStation
-	var cup := tray.cups.get_child(0) as Cup
+	var cup := tray.get_cups()[0] as Cup
 	kettle.set_process(false)
 	for burner in stove.burners:
 		burner.set_process(false)
-	for child in tray.cups.get_children():
+	for child in tray.get_cups():
 		child.set_process(false)
 
 	begin_batch(kettle)
@@ -147,17 +147,17 @@ func run() -> void:
 	var cup_transform := cup.transform
 	cup.reparent(holder, true)
 	check(cup.temperature == stable_temperature and cup.volume_ml == 100, "Reparenting keeps liquid thermal state and volume")
-	cup.reparent(tray.cups, false)
+	cup.reparent(tray.get_contents(), false)
 	cup.transform = cup_transform
 	check(cup.receive_liquid(&"black_tea", 1) == 1, "Two-argument liquid callers remain compatible")
 
 	ready_batch(kettle)
 	cup.reset_clean()
 	hold_over_cup(kettle, cup, controller)
-	tray.cups.remove_child(cup)
+	tray.get_contents().remove_child(cup)
 	kettle.update_pour(.5)
 	check(not kettle.is_pouring and cup.volume_ml == 0 and kettle.volume_ml == 500, "Detached live cup immediately stops transfer")
-	tray.cups.add_child(cup)
+	tray.get_contents().add_child(cup)
 	controller.cancel_drag()
 	hold_over_cup(kettle, cup, controller)
 	var zone := cup.get_node("PourTarget") as Node2D
@@ -173,7 +173,7 @@ func run() -> void:
 	cup.reparent(holder, true)
 	kettle.update_pour(.1)
 	check(kettle.is_pouring and cup.volume_ml == 15, "Completed synchronous reparent does not invalidate owned target")
-	cup.reparent(tray.cups, false)
+	cup.reparent(tray.get_contents(), false)
 	cup.transform = cup_transform
 	var source_before_discard := kettle.volume_ml
 	check(cup.discard_contents() == 15, "Discard returns the actual cup liquid amount")

@@ -48,6 +48,7 @@ func unlock_action(owner_node: Node) -> void:
 		action_owner = null
 
 var _drag_origin_parent: Node
+var _drag_had_origin_parent := false
 var _drag_origin_transform := Transform2D.IDENTITY
 var _drag_start_pointer := Vector2.ZERO
 var _drag_start_position := Vector2.ZERO
@@ -153,6 +154,7 @@ func start_drag(payload: HeldItemPayload, drag_node: Node2D, viewport_position: 
 	current_payload = payload
 	current_drag_node = drag_node
 	_drag_origin_parent = drag_node.get_parent()
+	_drag_had_origin_parent = _drag_origin_parent != null
 	_drag_origin_transform = drag_node.transform
 	if _drag_origin_parent == null:
 		drag_layer.add_child(drag_node)
@@ -340,6 +342,10 @@ func _restore_drag_origin() -> void:
 		if current_drag_node.get_parent() != _drag_origin_parent:
 			current_drag_node.reparent(_drag_origin_parent, false)
 		current_drag_node.transform = _drag_origin_transform
+	elif _drag_had_origin_parent:
+		# The original scene owner was destroyed while this node was held outside
+		# it. Complete that removal instead of retaining an unreachable orphan.
+		current_drag_node.queue_free()
 	elif current_drag_node.get_parent() != null:
 		current_drag_node.get_parent().remove_child(current_drag_node)
 		current_drag_node.transform = _drag_origin_transform
@@ -352,6 +358,7 @@ func _clear_drag_state() -> void:
 	current_payload = null
 	current_drag_node = null
 	_drag_origin_parent = null
+	_drag_had_origin_parent = false
 	_drag_origin_transform = Transform2D.IDENTITY
 	_drag_start_pointer = Vector2.ZERO
 	_drag_start_position = Vector2.ZERO
