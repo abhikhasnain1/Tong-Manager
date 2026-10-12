@@ -17,11 +17,14 @@ const EMPTY_OUTLINE := Color(1.0, 1.0, 1.0, 0.35)
 const OCCUPIED_FILL := Color(0.12, 0.14, 0.18, 0.5)
 const VALID_FILL := Color(0.25, 1.0, 0.4, 0.42)
 const INVALID_FILL := Color(1.0, 0.25, 0.25, 0.42)
-const TRAY_FILL := Color(1.0, 0.78, 0.2, 0.26)
+const POLYGON_AREA_EPSILON := 0.001
+const MINIMUM_CELL_OVERLAP_AREA := 1.0
+const POLYGON_COVERAGE_EPSILON := 0.0001
+const POLYGON_RATIO_EPSILON := 0.000001
 
 @export var origin := Vector2.ZERO
 @export var cell_size := Vector2(64.0, 48.0)
-@export var grid_size := Vector2i(12, 5)
+@export var grid_size := Vector2i(8, 5)
 @export_node_path("Marker2D") var top_left_path: NodePath
 @export_node_path("Marker2D") var top_right_path: NodePath
 @export_node_path("Marker2D") var bottom_left_path: NodePath
@@ -73,6 +76,11 @@ func world_to_grid_position(world_position: Vector2) -> Vector2:
 	return _local_to_grid_uv(to_local(world_position)) * Vector2(grid_size)
 
 
+func grid_position_to_world(grid_position: Vector2) -> Vector2:
+	var grid_uv := grid_position / Vector2(grid_size)
+	return to_global(_grid_uv_to_local(grid_uv))
+
+
 func world_to_footprint_origin(world_position: Vector2, footprint_size: Vector2i) -> Vector2i:
 	var grid_position := world_to_grid_position(world_position)
 	return Vector2i(
@@ -106,15 +114,96 @@ func get_cell_polygon(cell: Vector2i) -> PackedVector2Array:
 	])
 
 
+func get_cells_overlapping_world_polygon(
+	world_polygon: PackedVector2Array,
+	minimum_overlap_ratio: float
+) -> Array[Vector2i]:
+	var result: Array[Vector2i] = []
+	if world_polygon.size() < 3 or minimum_overlap_ratio <= 0.0 or minimum_overlap_ratio > 1.0:
+		return result
+
+	var local_polygon := PackedVector2Array()
+	for world_point in world_polygon:
+		local_polygon.append(to_local(world_point))
+	for y in grid_size.y:
+		for x in grid_size.x:
+			var cell := Vector2i(x, y)
+			var cell_polygon := get_cell_polygon(cell)
+			var cell_area := _polygon_area(cell_polygon)
+			if cell_area <= POLYGON_AREA_EPSILON:
+				continue
+			var cell_center := Vector2.ZERO
+			for point in cell_polygon:
+				cell_center += point
+			cell_center /= cell_polygon.size()
+			var overlap_area := 0.0
+			var intersections: Array[PackedVector2Array] = Geometry2D.intersect_polygons(
+				local_polygon,
+				cell_polygon
+			)
+			for intersection in intersections:
+				overlap_area += _polygon_area(intersection)
+			if overlap_area <= MINIMUM_CELL_OVERLAP_AREA:
+				continue
+			if (
+				Geometry2D.is_point_in_polygon(cell_center, local_polygon)
+				or overlap_area / cell_area + POLYGON_RATIO_EPSILON >= minimum_overlap_ratio
+			):
+				result.append(cell)
+	return result
+
+
+func get_world_polygon_coverage_ratio(world_polygon: PackedVector2Array) -> float:
+	if world_polygon.size() < 3:
+		return 0.0
+	var local_polygon := PackedVector2Array()
+	for world_point in world_polygon:
+		local_polygon.append(to_local(world_point))
+	var polygon_area := _polygon_area(local_polygon)
+	if polygon_area <= POLYGON_AREA_EPSILON:
+		return 0.0
+
+	var covered_area := 0.0
+	for y in grid_size.y:
+		for x in grid_size.x:
+			var intersections: Array[PackedVector2Array] = Geometry2D.intersect_polygons(
+				local_polygon,
+				get_cell_polygon(Vector2i(x, y))
+			)
+			for intersection in intersections:
+				covered_area += _polygon_area(intersection)
+	return clampf(covered_area / polygon_area, 0.0, 1.0)
+
+
+func is_world_polygon_in_bounds(
+	world_polygon: PackedVector2Array,
+	minimum_coverage_ratio: float = 1.0
+) -> bool:
+	if minimum_coverage_ratio <= 0.0 or minimum_coverage_ratio > 1.0:
+		return false
+	return (
+		get_world_polygon_coverage_ratio(world_polygon) + POLYGON_COVERAGE_EPSILON
+		>= minimum_coverage_ratio
+	)
+
+
+func can_place_cells(cells: Array[Vector2i]) -> bool:
+	if cells.is_empty():
+		return false
+	var unique_cells: Dictionary = {}
+	for cell in cells:
+		if not is_cell_in_bounds(cell) or unique_cells.has(cell) or occupied_cells.has(cell):
+			return false
+		unique_cells[cell] = true
+	return true
+
+
 func can_place(footprint: PlaceableFootprint, cell: Vector2i, rotation_quarters: int = 0) -> bool:
 	if footprint == null or footprint.size.x <= 0 or footprint.size.y <= 0:
 		return false
 	if not footprint.supports_rotation(rotation_quarters):
 		return false
-	for target_cell in footprint.cells_from(cell, rotation_quarters):
-		if not is_cell_in_bounds(target_cell) or occupied_cells.has(target_cell):
-			return false
-	return true
+	return can_place_cells(footprint.cells_from(cell, rotation_quarters))
 
 
 func reserve_cells(
@@ -170,10 +259,18 @@ func preview_placement(
 	cell: Vector2i,
 	rotation_quarters: int = 0
 ) -> DropValidation:
+	var cells: Array[Vector2i] = []
+	if footprint != null and footprint.supports_rotation(rotation_quarters):
+		cells = footprint.cells_from(cell, rotation_quarters)
+	return preview_cells(cells)
+
+
+func preview_cells(cells: Array[Vector2i], geometry_is_valid: bool = true) -> DropValidation:
 	_preview_cells.clear()
-	if footprint != null:
-		_preview_cells = footprint.cells_from(cell, rotation_quarters)
-	_preview_is_valid = can_place(footprint, cell, rotation_quarters)
+	for cell in cells:
+		if not _preview_cells.has(cell):
+			_preview_cells.append(cell)
+	_preview_is_valid = geometry_is_valid and can_place_cells(_preview_cells)
 	queue_redraw()
 	placement_preview_changed.emit(_preview_is_valid, _preview_cells.duplicate())
 	if _preview_is_valid:
@@ -293,6 +390,19 @@ func _local_to_grid_uv(local_position: Vector2) -> Vector2:
 	return uv
 
 
+func _polygon_area(polygon: PackedVector2Array) -> float:
+	if polygon.size() < 3:
+		return 0.0
+	var doubled_area := 0.0
+	for index in polygon.size():
+		var next_index := (index + 1) % polygon.size()
+		doubled_area += (
+			polygon[index].x * polygon[next_index].y
+			- polygon[next_index].x * polygon[index].y
+		)
+	return absf(doubled_area) * 0.5
+
+
 func _draw() -> void:
 	if not organize_mode_enabled and not Engine.is_editor_hint():
 		return
@@ -316,7 +426,5 @@ func _fill_for_state(state: StringName) -> Color:
 			return VALID_FILL
 		STATE_INVALID_PREVIEW:
 			return INVALID_FILL
-		STATE_TRAY_AREA:
-			return TRAY_FILL
 		_:
 			return EMPTY_FILL
