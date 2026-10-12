@@ -3,8 +3,8 @@ extends PortionStockProvider
 
 # Deliberately separate from GameState and production inventory. These counts
 # are a finite interaction fixture, not recipe doses or bag-to-gram conversion.
-const INITIAL_STOCK := {&"black_tea":6, &"sugar":12, &"condensed_milk":12}
-const UNITS := {&"black_tea":&"teabag", &"sugar":&"spoonful", &"condensed_milk":&"spoonful"}
+const INITIAL_STOCK := {&"black_tea":6, &"sugar":12, &"condensed_milk":12, &"banana":6, &"biscuits":8}
+const UNITS := {&"black_tea":&"teabag", &"sugar":&"spoonful", &"condensed_milk":&"spoonful", &"banana":&"piece", &"biscuits":&"piece"}
 
 var _stock: Dictionary = {}
 var _reservations: Dictionary = {}

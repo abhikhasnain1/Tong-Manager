@@ -1,4 +1,4 @@
-# Intent, portions, placement and brewing verification
+# Hanging sources, portions, placement and brewing verification
 
 The current interaction review is in `scenes/development/BrewingPreview.tscn`.
 Open it and press F6. The scene starts in **Neutral**, with passive hover but no
@@ -27,6 +27,17 @@ These defaults and the working labels remain adjustable after scene review.
 All scene icons, boxes and controls remain provisional.
 Bucket work is on hold.
 
+Brush the hanging banana bunches or biscuit bag to nudge them in **any mode**.
+The two banana bunches have independent fixed pins and share one banana stock.
+The bag hangs from its loop. Motion follows the pointer, is limited and damped,
+and settles when left alone. Organize keeps these sources attached.
+In **Use**, click and drag a separate banana or biscuit piece to the labelled
+**PREVIEW HANDOFF** in the middle. Release there to consume exactly one piece;
+release elsewhere, Escape or right-click returns it. Holding a piece suppresses
+new brush impulses, while existing sway continues. UI/modal coverage blocks new
+brushing and extraction. The source pictures remain present even when empty;
+the stock readout and hover hint identify depletion. All of this art is provisional.
+
 In Use, the tea box yields **one teabag**; sugar and condensed milk yield **one
 spoonful**. The source remains where it was placed, including on a moved tray.
 Release over a highlighted vessel to apply the portion. The review fixture accepts
@@ -35,9 +46,9 @@ containing black tea. An invalid or cancelled attempt consumes nothing. The near
 invalid vessel is shown as invalid instead of redirecting to a valid neighbour.
 
 The preview alone injects finite test stock: 6 teabags, 12 sugar spoonfuls and 12
-milk spoonfuls. Reservations temporarily reduce the available count; cancellation
+milk spoonfuls, 6 bananas and 8 biscuits. Reservations temporarily reduce the available count; cancellation
 returns them and successful application consumes once. The normal scene has the
-same source/target interfaces but no ingredient provider yet. This does not complete
+same source/target interfaces but no portion provider yet. This does not complete
 shared production inventory or recipes. Milk currently adds an abstract garnish,
 without changing liquid volume/temperature; the existing three-garnish limit is a
 review fixture rule. Exact doses, other destinations and recipe rules remain open.
@@ -48,9 +59,13 @@ godot --headless --path . --script res://tests/placement_geometry_test.gd
 godot --headless --path . --script res://tests/table_placement_test.gd
 godot --headless --path . --script res://tests/tray_transfer_test.gd
 godot --headless --path . --script res://tests/ingredient_portion_test.gd
+godot --headless --path . --script res://tests/ready_portion_test.gd
+godot --headless --path . --script res://tests/hanging_source_physics_test.gd
+godot --headless --path . --script res://tests/controller_ui_coverage_test.gd
 godot --path . --resolution 1920x1080 --script res://tests/table_placement_input_test.gd
 godot --path . --resolution 1920x1080 --script res://tests/tray_transfer_input_test.gd
 godot --path . --resolution 1920x1080 --script res://tests/interaction_intent_input_test.gd
+godot --path . --resolution 1920x1080 --script res://tests/hanging_source_input_test.gd
 ```
 
 The geometry suite checks concave boundaries/exclusions, compound footprints,
@@ -74,6 +89,15 @@ hover updates, source extraction, targets, UI/modal coverage and moved sources.
 It accepts initial, held-portion and final PNG paths after `--`. Intent input tests
 align the window mouse with injected events; run rendered suites one at a time.
 Modal input blocking cancels gestures without deciding future simulation pause policy.
+
+The hanging suites check real fixed joints, independent bounded/damped sway,
+direction and speed, stationary-pointer rest, viewport transforms, UI/modal
+occlusion, Use extraction from moving art, shared banana stock, finite depletion,
+cancellation and lifecycle cleanup. The rendered hanging suite accepts initial,
+held-piece and handoff PNG paths after `--`. Its preview handoff only records test
+counts: it does not implement customer eligibility, orders, money or production stock.
+The UI coverage suite checks transformed and clipped controls, input filters and
+canvas layers so a fast sweep cannot nudge a source hidden behind a panel.
 
 Run from the `tong-manager` project directory with Godot 4.7 on PATH:
 
@@ -146,4 +170,4 @@ not implement production ingredient inventory, customer orders, payments, a day
 ledger or a reputation economy. Preview controls are disabled during any drag or
 active action, and never take keyboard focus from Space-to-pour. Bucket work stays
 separate. Brewing mechanics were accepted in PR #106; artwork and presentation
-remain provisional. The intent/portion slice needs its own scene review before merge.
+remain provisional. The hanging-source slice needs scene review before merge.
