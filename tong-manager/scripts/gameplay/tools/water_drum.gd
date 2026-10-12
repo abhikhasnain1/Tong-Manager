@@ -6,6 +6,7 @@ var supply: DailyWaterSupply
 var _active_payload: HeldItemPayload
 var _origin_parent: Node
 var _origin_transform := Transform2D.IDENTITY
+var _hovered := false
 
 @onready var remaining_label: Label = $Remaining
 @onready var icon: Sprite2D = $Icon
@@ -37,13 +38,17 @@ func _find_day_config() -> Resource:
 func bind_controller(value: InteractionController) -> void:
 	if is_instance_valid(controller) and controller.drag_canceled.is_connected(_on_drag_canceled):
 		controller.drag_canceled.disconnect(_on_drag_canceled)
+	if is_instance_valid(controller) and controller.mode_changed.is_connected(_refresh_hover):
+		controller.mode_changed.disconnect(_refresh_hover)
 	controller = value
 	if is_instance_valid(controller):
 		controller.drag_canceled.connect(_on_drag_canceled)
+		controller.mode_changed.connect(_refresh_hover)
 
 
 func begin_drag(viewport_position: Vector2) -> bool:
 	if (not is_instance_valid(controller) or controller.current_mode != InteractionController.MODE_INTERACT
+		or not controller.can_start_world_action()
 		or controller.has_active_action() or controller.is_dragging() or _active_payload != null):
 		return false
 	var token := supply.reserve_transfer(self)
@@ -87,9 +92,17 @@ func _on_input_event(_viewport: Node, event: InputEvent, _shape_index: int) -> v
 
 
 func _on_hover(entered: bool) -> void:
+	_hovered = entered
 	if is_instance_valid(controller) and not controller.is_dragging() and not controller.has_active_action():
-		var actionable := entered and controller.current_mode == InteractionController.MODE_INTERACT and supply.remaining_ml > 0.0
+		var actionable := entered and controller.can_start_world_action() and controller.current_mode == InteractionController.MODE_INTERACT and supply.remaining_ml > 0.0
 		get_node("/root/CursorService").set_state(&"hover_actionable" if actionable else &"default")
+		if actionable:
+			controller.report_hint("Use · drag water drum to kettle to fill")
+
+
+func _refresh_hover(_mode: StringName) -> void:
+	if _hovered:
+		_on_hover(true)
 
 
 func _update_remaining(amount_ml: float) -> void:

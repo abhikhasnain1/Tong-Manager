@@ -16,6 +16,7 @@ var _input_area: Area2D
 var _footprints: Array[PackedVector2Array] = []
 var _available_surfaces: Array[PlacementSurface] = []
 var candidate_surface: PlacementSurface
+var _hovered := false
 
 
 func _ready() -> void:
@@ -38,7 +39,10 @@ func configure(value: PlacementSurface, interaction: InteractionController) -> b
 	if surface == value and value.is_registered(item):
 		return true
 	surface = value
+	if is_instance_valid(controller) and controller.mode_changed.is_connected(_refresh_hover):
+		controller.mode_changed.disconnect(_refresh_hover)
 	controller = interaction
+	controller.mode_changed.connect(_refresh_hover)
 	_home_parent = item.get_parent()
 	var shape := footprint
 	var authored := get_node_or_null(footprint_path) as CollisionPolygon2D
@@ -61,6 +65,7 @@ func set_available_surfaces(values: Array[PlacementSurface]) -> void:
 func begin_drag(viewport_position: Vector2) -> bool:
 	if (not is_instance_valid(controller) or not is_instance_valid(surface)
 		or controller.current_mode != InteractionController.MODE_ORGANIZE
+		or not controller.can_start_world_action()
 		or controller.is_dragging() or controller.has_active_action()
 		or not surface.is_registered(item)):
 		return false
@@ -203,7 +208,16 @@ func _contains_pointer(viewport_position: Vector2) -> bool:
 
 
 func _on_hover(entered: bool) -> void:
+	_hovered = entered
 	if (not is_instance_valid(controller) or controller.is_dragging() or controller.has_active_action()
-		or controller.current_mode != InteractionController.MODE_ORGANIZE):
+		or controller.current_mode != InteractionController.MODE_ORGANIZE
+		or controller.is_world_input_blocked() or controller.is_pointer_over_ui()):
 		return
 	get_node("/root/CursorService").set_state(&"hover_actionable" if entered else &"default")
+	if entered:
+		controller.report_hint("Organize · drag %s to clear table or tray space" % item.name)
+
+
+func _refresh_hover(_mode: StringName) -> void:
+	if _hovered:
+		_on_hover(true)

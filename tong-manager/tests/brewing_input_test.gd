@@ -61,6 +61,7 @@ func run() -> void:
 		check(root.get_texture().get_image().save_png(capture_paths[0]) == OK, "Initial review scene capture saved")
 	var kettle: Kettle = preview.kettle
 	var controller: InteractionController = preview.controller
+	controller.set_mode(InteractionController.MODE_INTERACT)
 	var drum: WaterDrum = preview.screen.get_node("WorldRoot/ToolLayer/WaterDrum")
 	var discard: DiscardDropZone = preview.screen.get_node("WorldRoot/DropZoneRoot/DiscardArea")
 	var drum_origin := drum.global_transform

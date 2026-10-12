@@ -40,6 +40,7 @@ func run() -> void:
 	var kettle := screen.get_node("WorldRoot/ToolLayer/KettleStation") as Kettle
 	var stove := screen.get_node("WorldRoot/ToolLayer/StoveStation") as Stove
 	var controller := screen.get_node("InteractionController") as InteractionController
+	controller.set_mode(InteractionController.MODE_INTERACT)
 	var tray := screen.get_node("WorldRoot/ToolLayer/TrayStation") as TrayStation
 	var cup := tray.get_cups()[0] as Cup
 	kettle.set_process(false)

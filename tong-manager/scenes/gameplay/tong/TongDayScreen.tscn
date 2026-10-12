@@ -298,8 +298,9 @@ script = ExtResource("21_hud")
 layout_mode = 0
 offset_left = 24.0
 offset_top = 20.0
-offset_right = 760.0
+offset_right = 358.0
 offset_bottom = 72.0
+mouse_filter = 2
 theme_override_constants/separation = 14
 
 [node name="ClockPanel" type="PanelContainer" parent="HUDLayer/RootUI/TopHud" unique_id=1191013464]
@@ -309,6 +310,7 @@ layout_mode = 2
 [node name="ClockLabel" type="Label" parent="HUDLayer/RootUI/TopHud/ClockPanel" unique_id=1427910004]
 unique_name_in_owner = true
 layout_mode = 2
+mouse_filter = 2
 text = "08:00"
 horizontal_alignment = 1
 vertical_alignment = 1
@@ -320,35 +322,101 @@ layout_mode = 2
 [node name="CashLabel" type="Label" parent="HUDLayer/RootUI/TopHud/CashPanel" unique_id=244215395]
 unique_name_in_owner = true
 layout_mode = 2
+mouse_filter = 2
 text = "৳ 100"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="ModePanel" type="PanelContainer" parent="HUDLayer/RootUI/TopHud" unique_id=16721331]
-custom_minimum_size = Vector2(270, 48)
-layout_mode = 2
+[node name="IntentControls" type="Control" parent="HUDLayer/RootUI"]
+layout_mode = 0
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -216.0
+offset_top = 16.0
+offset_right = 216.0
+offset_bottom = 150.0
+mouse_filter = 2
 
-[node name="ModeSegmentedControl" type="HBoxContainer" parent="HUDLayer/RootUI/TopHud/ModePanel" unique_id=1596935881]
-layout_mode = 2
-theme_override_constants/separation = 8
-alignment = 1
+[node name="ModeButtons" type="HBoxContainer" parent="HUDLayer/RootUI/IntentControls"]
+layout_mode = 0
+offset_right = 432.0
+offset_bottom = 56.0
+mouse_filter = 2
+theme_override_constants/separation = 16
 
-[node name="InteractModeLabel" type="Label" parent="HUDLayer/RootUI/TopHud/ModePanel/ModeSegmentedControl" unique_id=25748544]
+[node name="OrganizeModeButton" type="Button" parent="HUDLayer/RootUI/IntentControls/ModeButtons"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(208, 56)
 layout_mode = 2
-text = "INTERACT"
-vertical_alignment = 1
+focus_mode = 0
+mouse_default_cursor_shape = 2
+toggle_mode = true
+tooltip_text = "Move whole objects. Click again for Neutral."
 
-[node name="ModeDividerLabel" type="Label" parent="HUDLayer/RootUI/TopHud/ModePanel/ModeSegmentedControl" unique_id=100188360]
-layout_mode = 2
-text = "|"
-vertical_alignment = 1
-
-[node name="OrganizeModeLabel" type="Label" parent="HUDLayer/RootUI/TopHud/ModePanel/ModeSegmentedControl" unique_id=309420385]
+[node name="OrganizeModeLabel" type="Label" parent="HUDLayer/RootUI/IntentControls/ModeButtons/OrganizeModeButton" unique_id=309420385]
 unique_name_in_owner = true
-layout_mode = 2
-text = "ORGANIZE"
+layout_mode = 0
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 53.0
+offset_right = -6.0
+mouse_filter = 2
+theme_override_font_sizes/font_size = 18
+text = "Organize"
+horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="UseModeButton" type="Button" parent="HUDLayer/RootUI/IntentControls/ModeButtons"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(208, 56)
+layout_mode = 2
+focus_mode = 0
+mouse_default_cursor_shape = 2
+toggle_mode = true
+tooltip_text = "Take a portion or use a tool. Click again for Neutral."
+
+[node name="InteractModeLabel" type="Label" parent="HUDLayer/RootUI/IntentControls/ModeButtons/UseModeButton" unique_id=25748544]
+unique_name_in_owner = true
+layout_mode = 0
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 53.0
+offset_right = -6.0
+mouse_filter = 2
+theme_override_font_sizes/font_size = 18
+text = "Use"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="IntentStateLabel" type="Label" parent="HUDLayer/RootUI/IntentControls"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_top = 61.0
+offset_right = 432.0
+offset_bottom = 80.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.91, 0.86, 0.75, 1)
+theme_override_colors/font_outline_color = Color(0.13, 0.1, 0.08, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 12
+text = "NEUTRAL · no action selected"
+horizontal_alignment = 1
+
+[node name="ContextHintLabel" type="Label" parent="HUDLayer/RootUI/IntentControls"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_top = 84.0
+offset_right = 432.0
+offset_bottom = 134.0
+mouse_filter = 2
+theme_override_colors/font_outline_color = Color(0.13, 0.1, 0.08, 1)
+theme_override_constants/outline_size = 5
+theme_override_font_sizes/font_size = 16
+text = "Choose Organize or Use to begin."
+horizontal_alignment = 1
+autowrap_mode = 3
 
 [node name="EndDayButton" type="Button" parent="HUDLayer/RootUI" unique_id=1028714961]
 layout_mode = 0

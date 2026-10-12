@@ -17,6 +17,7 @@ func run() -> void:
 	root.add_child(screen)
 	await process_frame
 	var controller: InteractionController = screen.get_node("InteractionController")
+	controller.set_mode(InteractionController.MODE_INTERACT)
 	var kettle: Kettle = screen.get_node("WorldRoot/ToolLayer/KettleStation")
 	var tray: TrayStation = screen.get_node("WorldRoot/ToolLayer/TrayStation")
 	var discard: DiscardDropZone = screen.get_node("WorldRoot/DropZoneRoot/DiscardArea")
