@@ -34,7 +34,7 @@ editor_description = "Stable table-snap anchor. Runtime preserves this anchor's 
 position = Vector2(34, 16)
 
 [node name="TableFootprintBounds" type="Area2D" parent="." unique_id=1381225645]
-editor_description = "Authoring-only physical table footprint. Select CollisionPolygon2D and move its four points to the tray area that actually occupies table space. This is separate from TrayBody's click collision and the InternalGrid cup slots."
+editor_description = "Physical table footprint. Select CollisionPolygon2D and fit its eight points to the tray silhouette. This polygon drives runtime table occupancy and remains separate from TrayBody's click collision and the InternalGrid cup slots."
 collision_layer = 0
 collision_mask = 0
 monitoring = false
