@@ -8,7 +8,7 @@
 [ext_resource type="Script" uid="uid://cj3pt4bxvtlpx" path="res://scripts/gameplay/interactions/tray_internal_drop_zone.gd" id="6_internal_drop"]
 
 [sub_resource type="ConvexPolygonShape2D" id="ConvexPolygonShape2D_tray"]
-points = PackedVector2Array(-239, -122, 241, -119, 343, 112, -344, 120)
+points = PackedVector2Array(-239, -122, 241, -119, 339, 108, -344, 120)
 
 [node name="TrayStation" type="Node2D" unique_id=1239877257]
 editor_description = "Functional M2 tray. Edit TableFootprintBounds/CollisionPolygon2D for the physical table footprint; edit InternalGrid/AuthoredBounds only for the 3x2 cup grid."
@@ -41,7 +41,7 @@ monitoring = false
 monitorable = false
 
 [node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="TableFootprintBounds" unique_id=1671955264]
-polygon = PackedVector2Array(-239, -122, 241, -119, 343, 112, -344, 120)
+polygon = PackedVector2Array(-211, -119, 194, -124, 258, -96, 339, 81, 316, 118, -310, 120, -343, 81, -257, -95)
 
 [node name="InternalGrid" type="Node2D" parent="." unique_id=554544290]
 editor_description = "Move only the four AuthoredBounds markers to fit the tray perspective. CupSlot markers are derived automatically."

@@ -200,7 +200,8 @@ position = Vector2(25, 11)
 position = Vector2(-123, -26)
 
 [node name="TrayStation" parent="WorldRoot/ToolLayer" unique_id=1164031835 instance=ExtResource("23_tray_station")]
-position = Vector2(1210, 885)
+position = Vector2(1258.9999, 898)
+scale = Vector2(0.76, 0.68)
 tool_def = ExtResource("3_tools")
 
 [node name="BucketStation" type="Node2D" parent="WorldRoot/ToolLayer" unique_id=2061807017]
