@@ -30,6 +30,22 @@ var current_payload: HeldItemPayload
 var current_drag_node: Node2D
 var hovered_drop_zone: DropZone
 var current_mode: StringName = MODE_INTERACT
+var action_owner: Node
+
+func has_active_action() -> bool:
+	return is_instance_valid(action_owner)
+
+func lock_action(owner_node: Node) -> bool:
+	if not is_instance_valid(owner_node) or is_dragging():
+		return false
+	if has_active_action() and action_owner != owner_node:
+		return false
+	action_owner = owner_node
+	return true
+
+func unlock_action(owner_node: Node) -> void:
+	if action_owner == owner_node:
+		action_owner = null
 
 var _drag_origin_parent: Node
 var _drag_origin_transform := Transform2D.IDENTITY
@@ -46,6 +62,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(INPUT_ORGANIZE_TOGGLE):
 		toggle_mode()
 		get_viewport().set_input_as_handled()
+		return
+
+	if has_active_action():
+		if event.is_action_pressed(INPUT_CANCEL):
+			action_owner.call("cancel_action")
+			get_viewport().set_input_as_handled()
 		return
 
 	for action in FORWARDED_ACTIONS:
@@ -76,12 +98,14 @@ func register_drop_zone(drop_zone: DropZone) -> void:
 
 func unregister_drop_zone(drop_zone: DropZone) -> void:
 	_registered_drop_zones.erase(drop_zone)
-	if hovered_drop_zone == drop_zone:
+	if is_instance_valid(hovered_drop_zone) and hovered_drop_zone == drop_zone:
 		hovered_drop_zone.clear_highlight()
 		hovered_drop_zone = null
 
 
 func start_drag(payload: HeldItemPayload, drag_node: Node2D, viewport_position: Vector2) -> bool:
+	if has_active_action():
+		return false
 	if payload == null or not is_instance_valid(drag_node):
 		return false
 	if is_dragging():
@@ -128,7 +152,7 @@ func release_drop(viewport_position: Vector2) -> void:
 	if not is_dragging():
 		return
 	update_drag(viewport_position)
-	if hovered_drop_zone == null or not hovered_drop_zone.accepts(current_payload).is_valid:
+	if not is_instance_valid(hovered_drop_zone) or not hovered_drop_zone.accepts(current_payload).is_valid:
 		cancel_drag()
 		return
 
@@ -148,6 +172,8 @@ func set_mode(mode: StringName) -> void:
 	assert(mode == MODE_INTERACT or mode == MODE_ORGANIZE, "Unsupported interaction mode: %s" % mode)
 	if mode == current_mode:
 		return
+	if has_active_action():
+		action_owner.call("cancel_action")
 	if is_dragging():
 		cancel_drag()
 	current_mode = mode
@@ -161,6 +187,8 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 	var best_invalid_distance := INF
 
 	for zone in _get_available_drop_zones():
+		if not zone.is_relevant_to(current_payload):
+			continue
 		var zone_viewport_position := zone.get_global_transform_with_canvas().origin
 		var zone_belongs_to_drag_node := (
 			current_drag_node == zone
@@ -180,10 +208,10 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 			best_invalid_distance = distance
 
 	var next_zone := best_valid if best_valid != null else best_invalid
-	if hovered_drop_zone != null and hovered_drop_zone != next_zone:
+	if is_instance_valid(hovered_drop_zone) and hovered_drop_zone != next_zone:
 		hovered_drop_zone.clear_highlight()
 	hovered_drop_zone = next_zone
-	if hovered_drop_zone != null:
+	if is_instance_valid(hovered_drop_zone):
 		var is_valid := hovered_drop_zone.accepts(current_payload).is_valid
 		hovered_drop_zone.set_highlight(is_valid)
 		cursor_service.set_state(CURSOR_STATE_DRAGGING if is_valid else CURSOR_STATE_INVALID)
@@ -225,7 +253,7 @@ func _restore_drag_origin() -> void:
 
 
 func _clear_drag_state() -> void:
-	if hovered_drop_zone != null:
+	if is_instance_valid(hovered_drop_zone):
 		hovered_drop_zone.clear_highlight()
 	hovered_drop_zone = null
 	current_payload = null

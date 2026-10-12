@@ -12,6 +12,9 @@ const INVALID_HIGHLIGHT := Color(1.0, 0.25, 0.25, 0.45)
 
 @onready var debug_preview: Sprite2D = $DebugPreview
 
+func is_relevant_to(_payload: HeldItemPayload) -> bool:
+	return true
+
 
 func accepts(payload: HeldItemPayload) -> DropValidation:
 	if payload == null:

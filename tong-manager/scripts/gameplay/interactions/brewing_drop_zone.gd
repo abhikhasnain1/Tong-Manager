@@ -1,0 +1,51 @@
+class_name BrewingDropZone
+extends DropZone
+
+var target: Node2D
+var controller: InteractionController
+var is_cup_target := false
+var _highlighted := false
+var _valid := false
+
+func _init() -> void:
+	var preview := Sprite2D.new()
+	preview.name = "DebugPreview"
+	preview.visible = false
+	add_child(preview)
+
+func is_relevant_to(payload: HeldItemPayload) -> bool:
+	return payload != null and is_instance_valid(payload.world_node) and payload.world_node is Kettle
+
+func accepts(payload: HeldItemPayload) -> DropValidation:
+	if payload == null or not is_instance_valid(target) or not payload.world_node is Kettle:
+		return DropValidation.invalid("brewing.kettle_required")
+	if controller.current_mode != InteractionController.MODE_INTERACT:
+		return DropValidation.invalid("brewing.use_mode_required")
+	var kettle := payload.world_node as Kettle
+	var valid := kettle.can_pour_into(target as Cup) if is_cup_target else bool(target.call("can_seat", kettle))
+	return DropValidation.valid() if valid else DropValidation.invalid("brewing.target_unavailable")
+
+func apply_drop(payload: HeldItemPayload) -> void:
+	if not accepts(payload).is_valid:
+		return
+	var kettle := payload.world_node as Kettle
+	var applied := true
+	if is_cup_target:
+		kettle.finish_cup_interaction()
+	else:
+		applied = bool(target.call("seat", kettle))
+	if applied:
+		drop_applied.emit(payload)
+
+func set_highlight(valid: bool) -> void:
+	_highlighted = true
+	_valid = valid
+	queue_redraw()
+
+func clear_highlight() -> void:
+	_highlighted = false
+	queue_redraw()
+
+func _draw() -> void:
+	if _highlighted:
+		draw_arc(Vector2.ZERO, 28.0 if is_cup_target else 60.0, 0, TAU, 40, VALID_HIGHLIGHT if _valid else INVALID_HIGHLIGHT, 4.0, true)
