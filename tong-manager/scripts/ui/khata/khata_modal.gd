@@ -33,7 +33,9 @@ func _enter_tree() -> void:
 
 
 func _ready() -> void:
+	book.auto_fit = false
 	book.opened_changed.connect(_on_book_opened_changed)
+	book.fold_finished.connect(_on_fold_finished)
 	book.page_changed.connect(_on_page_changed)
 	book.close_requested.connect(close)
 	book_input.gui_input.connect(_on_book_input)
@@ -41,8 +43,12 @@ func _ready() -> void:
 	$CloseButton.pressed.connect(close)
 	$PeekButton.pressed.connect(open_peek)
 	if is_instance_valid(peek):
+		peek.book = book
 		peek.open_requested.connect(open)
 		peek.close_requested.connect(close_peek)
+		peek.turn_requested.connect(book.request_turn)
+		peek.book_input.connect(_on_peek_input)
+		peek.visibility_changed.connect(_on_peek_visibility_changed)
 	$PreviousButton.pressed.connect(func(): book.request_turn(-1))
 	$NextButton.pressed.connect(func(): book.request_turn(1))
 	for index in range(4):
@@ -82,9 +88,12 @@ func configure(value: InteractionController) -> void:
 func open() -> bool:
 	if _active or _closing or not is_inside_tree() or is_queued_for_deletion() or not _host_is_visible() or not _controller_is_live() or controller.is_world_input_blocked():
 		return false
-	close_peek()
+	if book.busy:
+		return false
+	var from_folded := book.opened and book.fold_amount > 0.0
 	_active = true
 	_closing = false
+	close_peek()
 	show()
 	# Establish ownership before cancellation emits callbacks into world objects.
 	controller.set_world_input_blocked(self, true)
@@ -93,13 +102,21 @@ func open() -> bool:
 	_reading_visible(true)
 	Input.set_custom_mouse_cursor(null, Input.CURSOR_ARROW)
 	Input.set_custom_mouse_cursor(null, Input.CURSOR_POINTING_HAND)
-	animation.play("reveal")
-	book.open_book()
+	if from_folded:
+		book.fold_to(0.0)
+	else:
+		animation.play("reveal")
+		book.open_book()
 	opened.emit()
 	return true
 
 
 func is_open() -> bool:
+	return _active
+
+
+func is_modal_input_active() -> bool:
+	# The renderer stays here in both poses; only Full owns the modal lock.
 	return _active
 
 
@@ -109,20 +126,26 @@ func is_peeking() -> bool:
 
 func open_peek() -> bool:
 	if (_closing or not is_inside_tree() or is_queued_for_deletion()
-		or not _host_is_visible() or not _controller_is_live() or not is_instance_valid(peek)
-		or not peek.is_inside_tree() or peek.is_queued_for_deletion()):
-		return false
-	var peek_host := peek.get_parent() as CanvasItem
-	if peek_host != null and not peek_host.is_visible_in_tree():
+		or not _peek_is_available() or not _controller_is_live()):
 		return false
 	if _active:
+		if exporting:
+			cancel_export()
+			if not _active or _closing or not _peek_is_available():
+				return false
+		if book.busy:
+			return false
 		_peek_after_close = true
-		_start_close()
-		return true
+		return book.fold_to(1.0)
 	if controller.is_world_input_blocked():
 		return false
 	if not is_peeking():
+		show()
+		if not book.opened:
+			book.open_folded()
 		peek.reveal()
+		_reading_visible(true)
+		_layout()
 	return true
 
 
@@ -130,6 +153,9 @@ func close_peek() -> void:
 	_peek_after_close = false
 	if is_instance_valid(peek):
 		peek.dismiss()
+	if not _active and is_node_ready():
+		book.reset_closed()
+		hide()
 
 
 func close() -> void:
@@ -142,14 +168,17 @@ func _start_close() -> void:
 		return
 	_closing = true
 	cancel_export()
-	if not book.opened and not book.busy:
+	if book.folding:
+		book.reset_closed()
+		_finish_close()
+	elif not book.opened and not book.busy:
 		_finish_close()
 	else:
 		book.close_book()
 
 
 func select_page(index: int) -> void:
-	if _active and not _closing and not exporting and index >= 0 and index < 4:
+	if _active and not _closing and not exporting and not book.folding and index >= 0 and index < 4:
 		book.select_page(index)
 
 
@@ -180,12 +209,15 @@ func _export_finished() -> void:
 
 func _reading_visible(value: bool) -> void:
 	$NotebookBackground.visible = value
-	book_input.visible = value
-	$TabContainer.visible = value
-	$Pages.visible = value
-	$PreviousButton.visible = value
-	$NextButton.visible = value
-	$PeekButton.visible = value
+	book_input.visible = value and _active
+	$TabContainer.visible = value and _active
+	$Pages.visible = value and _active
+	$PreviousButton.visible = value and _active
+	$NextButton.visible = value and _active
+	$PeekButton.visible = value and _active
+	$CloseButton.visible = _active
+	$Hint.visible = _active
+	dimmer.visible = _active
 	$Hint.text = "Click or drag an outer page edge · Arrow keys turn · Esc closes" if value else "Place the item · Esc returns to Khata"
 	dimmer.color.a = 0.48 if value else 0.12
 
@@ -203,6 +235,27 @@ func _on_drag_dropped(_payload: HeldItemPayload, _target: DropZone) -> void:
 func _on_book_opened_changed(value: bool) -> void:
 	if not value and _active:
 		_finish_close()
+
+
+func _on_fold_finished(folded: bool) -> void:
+	if not folded or not _active or not _peek_after_close:
+		return
+	_active = false
+	_closing = true
+	animation.stop()
+	_release_ownership()
+	_reading_visible(true)
+	_closing = false
+	closed.emit()
+	# A close/open observer may replace the requested destination.
+	if _peek_after_close and not _active and _peek_is_available() and _controller_is_live() and not controller.is_world_input_blocked():
+		_peek_after_close = false
+		peek.reveal(false)
+		_layout()
+	elif not _active and not is_peeking():
+		_peek_after_close = false
+		book.reset_closed()
+		hide()
 
 
 func _finish_close() -> void:
@@ -237,15 +290,21 @@ func _on_mode_changed(_mode: StringName) -> void:
 	if _active:
 		# Keep the deliberate new selection while releasing notebook ownership.
 		close()
+	elif is_peeking():
+		book.cancel_turn()
 
 
 func _on_visibility_changed() -> void:
-	if _active and not is_visible_in_tree():
+	if not is_visible_in_tree() and not _closing and (_active or is_peeking() or (is_instance_valid(book) and book.opened)):
+		var owned_input := _active
 		_active = false
 		_peek_after_close = false
 		_closing = true
 		hide()
-		_release_ownership()
+		if is_instance_valid(peek):
+			peek.dismiss()
+		if owned_input:
+			_release_ownership()
 		book.reset_closed()
 		_closing = false
 
@@ -264,13 +323,17 @@ func _exit_tree() -> void:
 func _on_resize() -> void:
 	if _active:
 		cancel_export()
+	if is_instance_valid(book):
+		book.cancel_turn()
 	_layout()
 
 
 func _notification(what: int) -> void:
-	if what in [NOTIFICATION_WM_WINDOW_FOCUS_OUT, NOTIFICATION_APPLICATION_FOCUS_OUT] and _active:
-		cancel_export()
-		book.cancel_turn()
+	if what in [NOTIFICATION_WM_WINDOW_FOCUS_OUT, NOTIFICATION_APPLICATION_FOCUS_OUT]:
+		if _active:
+			cancel_export()
+		if is_instance_valid(book):
+			book.cancel_turn()
 
 
 func _input(event: InputEvent) -> void:
@@ -287,11 +350,23 @@ func _input(event: InputEvent) -> void:
 		return
 	if is_peeking() and event.is_action_pressed(InteractionController.INPUT_CANCEL):
 		# A held world gesture gets first cancellation; otherwise put the page away.
-		if _controller_is_live() and (controller.is_dragging() or controller.has_active_action()):
+		if book.dragging:
+			book.cancel_turn()
+		elif _controller_is_live() and (controller.is_dragging() or controller.has_active_action()):
 			controller.cancel_world_action()
 		else:
 			close_peek()
 		get_viewport().set_input_as_handled()
+		return
+	if is_peeking():
+		# Capture an owned page drag even outside the paper; ordinary world
+		# events elsewhere continue through the normal interaction controller.
+		if book.dragging and event is InputEventMouse:
+			book.handle_book_input(event)
+			get_viewport().set_input_as_handled()
+		elif event is InputEventKey and event.keycode in [KEY_LEFT, KEY_RIGHT] and not controller.is_dragging() and not controller.has_active_action():
+			book.handle_book_input(event)
+			get_viewport().set_input_as_handled()
 		return
 	if not _active:
 		return
@@ -330,6 +405,17 @@ func _on_book_input(event: InputEvent) -> void:
 	book_input.accept_event()
 
 
+func _on_peek_input(event: InputEvent) -> void:
+	if is_peeking() and _controller_is_live() and not controller.is_dragging() and not controller.has_active_action():
+		book.handle_book_input(event)
+
+
+func _on_peek_visibility_changed() -> void:
+	if not _active and not _closing and not is_peeking() and is_node_ready():
+		book.reset_closed()
+		hide()
+
+
 func _on_dimmer_input(event: InputEvent) -> void:
 	if not exporting and event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		close()
@@ -351,9 +437,11 @@ func _make_page(index: int, paper: Texture2D) -> Node:
 
 
 func _process(_delta: float) -> void:
+	if _peek_after_close and book.folding and not _peek_is_available():
+		close()
 	if is_peeking() and (not _controller_is_live() or controller.is_world_input_blocked()):
 		close_peek()
-	if not _active:
+	if not _active and not is_peeking():
 		return
 	if not _controller_is_live():
 		hide()
@@ -372,9 +460,31 @@ func _host_is_visible() -> bool:
 	return host == null or host.is_visible_in_tree()
 
 
+func _peek_is_available() -> bool:
+	if not is_inside_tree() or is_queued_for_deletion() or not _host_is_visible() or not is_instance_valid(peek) or not peek.is_inside_tree() or peek.is_queued_for_deletion():
+		return false
+	var host := peek.get_parent() as CanvasItem
+	return host == null or host.is_visible_in_tree()
+
+
 func _layout() -> void:
-	if not is_node_ready():
+	if not is_node_ready() or not is_inside_tree():
 		return
+	var viewport_size := get_viewport_rect().size
+	var fit := minf(viewport_size.x / book.DESIGN.x, viewport_size.y / book.DESIGN.y)
+	var full_scale := Vector2.ONE * fit
+	var full_position := (viewport_size - book.DESIGN * fit) * 0.5
+	book.scale = full_scale
+	book.position = full_position
+	book.modulate.a = 1.0
+	if _peek_is_available():
+		var page_position := peek.position if is_peeking() else peek.settled_position()
+		var folded_position := page_position + peek.PAGE_RECT.position * peek.scale - book._book_origin() * peek.scale
+		book.scale = full_scale.lerp(peek.scale, book.fold_amount)
+		book.position = full_position.lerp(folded_position, book.fold_amount)
+		if is_peeking():
+			book.modulate.a = peek.modulate.a
+	dimmer.color.a = 0.12 if exporting else 0.48 * (1.0 - book.fold_amount)
 	_place(book_input, Rect2(300, 190, 1000, 704))
 	_place($Pages, Rect2(320, 209, 960, 660))
 	_place($CloseButton, book.CLOSE_RECT)
@@ -390,19 +500,24 @@ func _layout() -> void:
 		button.position = book.position + tab.position * book.scale
 		button.size = book.TAB_SIZE
 		button.scale = book.scale * tab.size / book.TAB_SIZE
-		button.visible = tab.size.x > 0.6
+		button.visible = tab.size.x > 0.6 and book.fold_amount < 0.5
 		button.disabled = book.busy or not book.opened or _closing
 		button.mouse_filter = Control.MOUSE_FILTER_IGNORE if button.disabled else Control.MOUSE_FILTER_STOP
 	$PreviousButton.disabled = book.busy or not book.opened or book.spread <= 0 or _closing
 	$NextButton.disabled = book.busy or not book.opened or book.spread >= 3 or _closing
+	$PreviousButton.visible = _active and not exporting and not book.folding
+	$NextButton.visible = _active and not exporting and not book.folding
+	$Hint.visible = _active and not book.folding
 	$PeekButton.disabled = book.busy or not book.opened or _closing
 	book_input.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if book._edge_at(book.get_local_mouse_position()) != 0 and book.opened and not book.busy else Control.CURSOR_ARROW
 
 
 func _place(control: Control, rect: Rect2) -> void:
-	control.position = book.position + rect.position * book.scale
+	var viewport_size := get_viewport_rect().size
+	var fit := minf(viewport_size.x / book.DESIGN.x, viewport_size.y / book.DESIGN.y)
+	control.position = (viewport_size - book.DESIGN * fit) * 0.5 + rect.position * fit
 	control.size = rect.size
-	control.scale = book.scale
+	control.scale = Vector2.ONE * fit
 
 
 func _style_button(button: Button, color: Color, tab := false) -> void:

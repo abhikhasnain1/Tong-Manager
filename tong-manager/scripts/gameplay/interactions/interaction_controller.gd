@@ -64,9 +64,21 @@ func is_world_input_blocked() -> bool:
 			_input_blockers.erase(id)
 	if is_instance_valid(modal_root) and modal_root.is_visible_in_tree():
 		for child in modal_root.get_children():
-			if child is CanvasItem and child.is_visible_in_tree():
+			if _modal_child_blocks_input(child):
 				return true
 	return not _input_blockers.is_empty()
+
+
+func _modal_child_blocks_input(child: Node) -> bool:
+	if not child is CanvasItem or not child.is_visible_in_tree():
+		return false
+	# A shared presentation can remain visible in a nonmodal pose. Ordinary
+	# dialogs retain the default blocking policy; explicit locks still apply.
+	if child.has_method("is_modal_input_active"):
+		var active: Variant = child.call("is_modal_input_active")
+		if active is bool:
+			return active
+	return true
 
 
 func set_world_input_blocked(owner_node: Node, blocked: bool) -> void:
@@ -163,7 +175,7 @@ func _export_owner_has_exclusive_input(owner_node: Control) -> bool:
 	if _input_blockers.size() != 1 or not _input_blockers.has(owner_node.get_instance_id()):
 		return false
 	for child in modal_root.get_children():
-		if child is CanvasItem and child.is_visible_in_tree() and child != owner_node and not child.is_ancestor_of(owner_node):
+		if _modal_child_blocks_input(child) and child != owner_node and not child.is_ancestor_of(owner_node):
 			return false
 	return true
 

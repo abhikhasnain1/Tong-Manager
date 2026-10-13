@@ -17,6 +17,7 @@ var auto_fit := true
 signal opened_changed(is_open: bool)
 signal page_changed(section_index: int)
 signal close_requested
+signal fold_finished(folded: bool)
 const CLOSE_RECT := Rect2(1260, 116, 138, 44)
 const SLOW_RECT := Rect2(1080, 43, 175, 40)
 const SOUND_RECT := Rect2(1270, 43, 128, 40)
@@ -25,6 +26,11 @@ var spread := 0
 var opened := false
 var busy := false
 var opening_amount := 0.0
+var fold_amount := 0.0:
+	set(value):
+		fold_amount = clampf(value, 0.0, 1.0)
+		queue_redraw()
+var folding := false
 var turn_progress := 0.0
 var turn_direction := 1
 var turning := false
@@ -130,7 +136,7 @@ func reset_closed() -> void:
 	# View-only teardown: never touch the world, stock, or selected spread.
 	# Publish the closed signal after all state is coherent, so repeated cleanup
 	# and observers that synchronously close again remain harmless.
-	var was_active := opened or busy or turning or dragging or opening_amount > 0.0
+	var was_active := opened or busy or turning or dragging or opening_amount > 0.0 or folding
 	if is_instance_valid(_motion):
 		_motion.kill()
 	_motion = null
@@ -146,6 +152,8 @@ func reset_closed() -> void:
 	_target_spread = -1
 	turn_progress = 0.0
 	opening_amount = 0.0
+	fold_amount = 0.0
+	folding = false
 	_drag_distance = 0.0
 	_pointer = Vector2(-1000, -1000)
 	_hover_edge = 0.0
@@ -219,7 +227,8 @@ func _edge_at(point: Vector2) -> int:
 	var local := point - _book_origin()
 	if Rect2(PAGE_SIZE.x - PAGE_EDGE_WIDTH, 0, PAGE_EDGE_WIDTH, PAGE_SIZE.y).has_point(local) and spread < section_titles.size() - 1:
 		return 1
-	if Rect2(-PAGE_SIZE.x, 0, PAGE_EDGE_WIDTH, PAGE_SIZE.y).has_point(local) and spread > 0:
+	var previous_x := 0.0 if fold_amount >= 1.0 else -PAGE_SIZE.x
+	if Rect2(previous_x, 0, PAGE_EDGE_WIDTH, PAGE_SIZE.y).has_point(local) and spread > 0:
 		return -1
 	return 0
 
@@ -237,7 +246,8 @@ func handle_book_input(event: InputEvent) -> bool:
 	if event is InputEventMouseMotion:
 		if dragging:
 			_drag_distance = maxf(_drag_distance, _pointer.distance_to(_drag_start))
-			turn_progress = clampf((_drag_start.x - _pointer.x) * turn_direction / 750.0, 0.0, 1.0)
+			var drag_span := 375.0 if fold_amount >= 1.0 else 750.0
+			turn_progress = clampf((_drag_start.x - _pointer.x) * turn_direction / drag_span, 0.0, 1.0)
 		if standalone:
 			var actionable := _edge_at(_pointer) != 0 or CLOSE_RECT.has_point(_pointer)
 			if not opened:
@@ -355,6 +365,43 @@ func open_book() -> void:
 			_continue_navigation()
 	)
 
+
+func open_folded() -> bool:
+	if _tearing_down or busy or opened or not is_inside_tree() or _pages.is_empty():
+		return false
+	opening_amount = 1.0
+	fold_amount = 1.0
+	folding = false
+	opened = true
+	_close_pending = false
+	_play_sound(0.9)
+	opened_changed.emit(true)
+	return true
+
+
+func fold_to(amount: float) -> bool:
+	if (_tearing_down or not opened or busy or not is_inside_tree()
+		or not is_finite(amount) or amount not in [0.0, 1.0]
+		or is_equal_approx(fold_amount, amount)):
+		return false
+	busy = true
+	folding = true
+	_target_spread = -1
+	_hover_edge = 0.0
+	_play_sound(0.92)
+	_motion = create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_motion.tween_property(self, "fold_amount", amount, _duration(0.72 * absf(amount - fold_amount)))
+	_motion.tween_callback(func():
+		folding = false
+		busy = false
+		fold_finished.emit(fold_amount >= 1.0)
+		if not is_inside_tree() or is_queued_for_deletion() or not opened:
+			return
+		if _close_pending:
+			close_book()
+	)
+	return true
+
 func close_book() -> void:
 	if _opening:
 		_close_pending = true
@@ -363,11 +410,17 @@ func close_book() -> void:
 	if not opened or _closing or not is_inside_tree():
 		return
 	if busy:
-		if turning:
+		if turning or folding:
 			_close_pending = true
 			_target_spread = -1
 			if dragging:
 				_finish_turn(false)
+		return
+	# Closing from the folded reading pose unfolds first, then uses the
+	# accepted cover-closing motion. Owners may reset directly for teardown.
+	if fold_amount > 0.0:
+		_close_pending = true
+		fold_to(0.0)
 		return
 	busy = true
 	_closing = true
@@ -462,26 +515,82 @@ func _play_sound(pitch: float) -> void:
 
 func make_tab_rect(index: int) -> Rect2:
 	var tab_y := 65.0 + 90.0 * index
-	if opening_amount >= 1.0:
+	if opening_amount >= 1.0 and fold_amount <= 0.0:
 		# Preserve the accepted reading layout exactly at the resting pose.
 		return Rect2(_book_origin() + Vector2(-547, tab_y), TAB_SIZE)
-	var angle := clampf(opening_amount, 0.0, 1.0) * PI
+	var angle := clampf(opening_amount, 0.0, 1.0) * PI + fold_amount * PI
 	var horizontal := cos(angle)
 	if is_zero_approx(horizontal):
 		horizontal = 0.0
-	var edge_depth := PAGE_SIZE.x * sin(angle)
+	var edge_depth := _projected_depth(PAGE_SIZE.x * sin(angle))
 	var vertical := 1.0 - edge_depth / 3100.0
 	# Five authored pixels sit inside the cover edge. The rest travels with
 	# that edge, using the same lift and height projection as the rigid cover.
 	var first_x := 475.0 * horizontal
 	var last_x := 547.0 * horizontal
 	var top_left := Vector2(minf(first_x, last_x), -edge_depth * 0.23 + tab_y * vertical)
-	return Rect2(_book_origin() + top_left, Vector2(TAB_SIZE.x * absf(horizontal), TAB_SIZE.y * vertical))
+	return Rect2(_book_origin() + _under_half_offset() + top_left, Vector2(TAB_SIZE.x * absf(horizontal), TAB_SIZE.y * vertical))
 
 
 func _tab_rect(index: int) -> Rect2:
 	# Compatibility for the accepted standalone motion test.
 	return make_tab_rect(index)
+
+
+func get_visible_page_index() -> int:
+	return spread * 2 + 1
+
+
+func get_visible_book_rect() -> Rect2:
+	# Renderer-local bounds include a leaf protruding during a folded turn.
+	# The owner uses the same geometry for its temporary UI coverage.
+	var rect := Rect2(-14, -12, 508, 700)
+	if opening_amount >= 1.0:
+		if fold_amount <= 0.0:
+			rect = rect.merge(Rect2(-494, -12, 494, 700))
+		else:
+			var folded_rect := _sheet_rect(PI + fold_amount * PI, false).grow(14)
+			folded_rect.position += _under_half_offset()
+			rect = rect.merge(folded_rect)
+		if turning:
+			var angle := _folded_turn_angle() if fold_amount >= 1.0 else (turn_progress * PI if turn_direction > 0 else (1.0 - turn_progress) * PI)
+			rect = rect.merge(_sheet_rect(angle, true).grow(3))
+	else:
+		rect = rect.merge(_sheet_rect(opening_amount * PI, false).grow(14))
+	rect.position += _book_origin()
+	return rect
+
+
+func _sheet_rect(angle: float, flexible: bool) -> Rect2:
+	var curl := sin(angle) * 0.85 if flexible else 0.0
+	var rect := Rect2(Vector2.ZERO, Vector2(0, PAGE_SIZE.y))
+	var x := 0.0
+	var depth := 0.0
+	for index in range(1, 49):
+		var u := float(index) / 48.0
+		var slope := angle + curl * (u - 0.5)
+		x += cos(slope) * PAGE_SIZE.x / 48.0
+		depth += sin(slope) * PAGE_SIZE.x / 48.0
+		var projected_depth := _projected_depth(depth)
+		var top_y := -projected_depth * 0.23
+		rect = rect.expand(Vector2(x, top_y))
+		rect = rect.expand(Vector2(x, top_y + PAGE_SIZE.y * (1.0 - projected_depth / 3100.0)))
+	return rect
+
+
+func _projected_depth(depth: float) -> float:
+	# Keep the accepted raised-sheet projection. Under the reading plane the
+	# binding compresses the apparent depth, so the tucked half stays shallow.
+	return depth if depth >= 0.0 else depth * 0.18
+
+
+func _under_half_offset() -> Vector2:
+	return Vector2(-8, 8) * fold_amount
+
+
+func _folded_turn_angle() -> float:
+	return turn_progress * TAU if turn_direction > 0 else (1.0 - turn_progress) * TAU
+
 
 func _draw() -> void:
 	if _pages.is_empty():
@@ -500,6 +609,33 @@ func _draw() -> void:
 			_draw_button(CLOSE_RECT, "Close khata", false)
 	var origin := _book_origin()
 	draw_set_transform(origin)
+	if opening_amount >= 1.0 and (fold_amount > 0.0 or folding):
+		_draw_folded_book()
+	else:
+		_draw_full_book()
+	draw_set_transform(Vector2.ZERO)
+	if standalone:
+		for index in range(section_titles.size()):
+			var tab := _tab_rect(index)
+			if tab.size.x <= 0.0:
+				continue
+			var tab_color := section_colors[index % section_colors.size()] if not section_colors.is_empty() else Color("91a878")
+			# Scale the authored bookmark and text together without mirroring the
+			# label when the cover's outer edge passes to the left of its binding.
+			draw_set_transform(tab.position, 0.0, tab.size / TAB_SIZE)
+			draw_style_box(_box(tab_color.darkened(0.12 if spread != index else 0), 4), Rect2(Vector2.ZERO, TAB_SIZE))
+			draw_string(_font, Vector2(9, 39), section_titles[index], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("243129"))
+		draw_set_transform(Vector2.ZERO)
+		if opened:
+			_draw_arrow(Vector2(250, 528), -1, spread > 0)
+			_draw_arrow(Vector2(1348, 528), 1, spread < section_titles.size() - 1)
+			draw_string(_font, Vector2(500, 934), "Click or drag either outer edge  ·  ← / → turn  ·  Esc closes", HORIZONTAL_ALIGNMENT_CENTER, 600, 18, Color("d1d6c7"))
+			draw_string(_font, Vector2(500, 968), "%s  ·  %d / %d" % [section_titles[spread], spread + 1, section_titles.size()], HORIZONTAL_ALIGNMENT_CENTER, 600, 16, Color("94a38f"))
+		else:
+			draw_string(_font, Vector2(500, 934), "Click the cover to open  ·  Space / Enter", HORIZONTAL_ALIGNMENT_CENTER, 600, 20, Color("d1d6c7"))
+
+
+func _draw_full_book() -> void:
 	# Until the front cover rests on the left, the bound paper block remains
 	# on the right. Growing a flat block during opening would expose a blank slab.
 	var resting_open := opening_amount > 0.98
@@ -533,26 +669,63 @@ func _draw() -> void:
 		# Right-hand page is revealed as the real cover rotates around the binding.
 		draw_texture_rect(_pages[spread * 2 + 1].get_texture(), Rect2(Vector2.ZERO, PAGE_SIZE), false)
 		_draw_sheet(opening_amount * PI, _cover, _pages[spread * 2].get_texture(), false, false)
-	draw_set_transform(Vector2.ZERO)
-	if standalone:
-		for index in range(section_titles.size()):
-			var tab := _tab_rect(index)
-			if tab.size.x <= 0.0:
-				continue
-			var tab_color := section_colors[index % section_colors.size()] if not section_colors.is_empty() else Color("91a878")
-			# Scale the authored bookmark and text together without mirroring the
-			# label when the cover's outer edge passes to the left of its binding.
-			draw_set_transform(tab.position, 0.0, tab.size / TAB_SIZE)
-			draw_style_box(_box(tab_color.darkened(0.12 if spread != index else 0), 4), Rect2(Vector2.ZERO, TAB_SIZE))
-			draw_string(_font, Vector2(9, 39), section_titles[index], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("243129"))
-		draw_set_transform(Vector2.ZERO)
-		if opened:
-			_draw_arrow(Vector2(250, 528), -1, spread > 0)
-			_draw_arrow(Vector2(1348, 528), 1, spread < section_titles.size() - 1)
-			draw_string(_font, Vector2(500, 934), "Click or drag either outer edge  ·  ← / → turn  ·  Esc closes", HORIZONTAL_ALIGNMENT_CENTER, 600, 18, Color("d1d6c7"))
-			draw_string(_font, Vector2(500, 968), "%s  ·  %d / %d" % [section_titles[spread], spread + 1, section_titles.size()], HORIZONTAL_ALIGNMENT_CENTER, 600, 16, Color("94a38f"))
-		else:
-			draw_string(_font, Vector2(500, 934), "Click the cover to open  ·  Space / Enter", HORIZONTAL_ALIGNMENT_CENTER, 600, 20, Color("d1d6c7"))
+
+
+func _draw_folded_book() -> void:
+	var angle := PI + fold_amount * PI
+	# The left cover/paper block stays behind the stationary right half for the
+	# entire fold. Negative depth moves its edge beneath the reading plane.
+	var edge_depth := _projected_depth(PAGE_SIZE.x * sin(angle))
+	var outer_x := 494.0 * cos(angle)
+	var top_y := -edge_depth * 0.23
+	var vertical := 1.0 - edge_depth / 3100.0
+	draw_set_transform(_book_origin() + _under_half_offset())
+	var cover_outline := PackedVector2Array([Vector2(0, -12), Vector2(outer_x, top_y - 12),
+		Vector2(outer_x, top_y + 675.0 * vertical), Vector2(0, 675)])
+	if absf(outer_x) > 0.005:
+		draw_colored_polygon(cover_outline, Color("642d29"))
+	_draw_sheet(angle, _cover, _pages[spread * 2].get_texture(), false, false)
+	# These are the exposed edges of the same tucked paper block, not another
+	# flat page. They project and disappear beneath the stationary right half.
+	for layer in range(1, 5):
+		var y := PAGE_SIZE.y + layer * 2.2
+		draw_line(Vector2(0, y), Vector2(PAGE_SIZE.x * cos(angle), top_y + y * vertical),
+			Color("a3997d").lightened(layer * 0.025), 1.0, true)
+	draw_set_transform(_book_origin())
+	if turning and _folded_turn_angle() >= PI:
+		_draw_folded_turn()
+	for layer in range(10, 0, -1):
+		draw_style_box(_box(Color(0, 0, 0, 0.013), 10), Rect2(-layer, 10 - layer, 494 + layer * 3, 680 + layer * 2))
+	draw_style_box(_box(Color("642d29"), 5), Rect2(0, -12, 494, 687))
+	for layer in range(5, 0, -1):
+		draw_rect(Rect2(0, layer * 2, 480, 660), Color("aaa38a").lightened(layer * 0.025))
+	var right_index := spread * 2 + 1
+	if turning and turn_direction > 0:
+		right_index += 2
+	draw_texture_rect(_pages[right_index].get_texture(), Rect2(Vector2.ZERO, PAGE_SIZE), false)
+	_draw_folded_binding()
+	if turning and _folded_turn_angle() < PI:
+		_draw_folded_turn()
+	elif not turning and _hover_edge > 0.0:
+		_draw_edge_hint(_edge_at(_pointer))
+
+
+func _draw_folded_turn() -> void:
+	var front_index := spread * 2 + 1 if turn_direction > 0 else (spread - 1) * 2 + 1
+	var back_index := (spread + 1) * 2 if turn_direction > 0 else spread * 2
+	_draw_sheet(_folded_turn_angle(), _pages[front_index].get_texture(), _pages[back_index].get_texture(), false, true)
+
+
+func _draw_folded_binding() -> void:
+	# The raised ridge and parallel wear lines follow the shared hinge. Their
+	# strength grows with the fold, giving the settled one-page pose a spine.
+	for index in range(25):
+		var alpha := (0.18 + 0.14 * fold_amount) * pow(1.0 - float(index) / 25.0, 2)
+		draw_line(Vector2(index, 0), Vector2(index, PAGE_SIZE.y), Color(0.20, 0.17, 0.09, alpha), 1.0)
+	var ridge := PackedVector2Array([Vector2(4, 3), Vector2(1.5, 12), Vector2(1.5, 648), Vector2(4, 657)])
+	draw_polyline(ridge, Color(0.33, 0.23, 0.15, 0.62 * fold_amount), 2.0, true)
+	draw_line(Vector2(5, 9), Vector2(5, 651), Color(0.96, 0.88, 0.67, 0.62 * fold_amount), 1.2, true)
+	draw_line(Vector2(9, 12), Vector2(9, 648), Color(0.42, 0.32, 0.19, 0.24 * fold_amount), 1.0, true)
 
 
 func _draw_sheet(angle: float, front: Texture2D, back: Texture2D, from_left: bool, flexible: bool) -> void:
@@ -569,9 +742,10 @@ func _draw_sheet(angle: float, front: Texture2D, back: Texture2D, from_left: boo
 			var slope := angle + curl * (u - 0.5)
 			x += cos(slope) * PAGE_SIZE.x / segment_count
 			depth += sin(slope) * PAGE_SIZE.x / segment_count
-		var top_y := -depth * 0.23
+		var projected_depth := _projected_depth(depth)
+		var top_y := -projected_depth * 0.23
 		top.append(Vector2(x, top_y))
-		bottom.append(Vector2(x, top_y + PAGE_SIZE.y * (1.0 - depth / 3100.0)))
+		bottom.append(Vector2(x, top_y + PAGE_SIZE.y * (1.0 - projected_depth / 3100.0)))
 	# Broad cast shadow falls across the exposed page below the lifted sheet.
 	if lift > 0.01:
 		var shadow := PackedVector2Array([Vector2.ZERO, top[-1] + Vector2(45 * lift, 55 * lift), bottom[-1] + Vector2(45 * lift, 55 * lift), Vector2(0, 660)])
@@ -588,7 +762,7 @@ func _draw_sheet(angle: float, front: Texture2D, back: Texture2D, from_left: boo
 			continue
 		var tex0 := 1.0 - u0 if facing_back else u0
 		var tex1 := 1.0 - u1 if facing_back else u1
-		var shade := 1.0 - lift * (0.10 + 0.12 * sin(u0 * PI))
+		var shade := 1.0 - absf(lift) * (0.10 + 0.12 * sin(u0 * PI))
 		draw_polygon(points, PackedColorArray([Color(shade, shade, shade)]), PackedVector2Array([Vector2(tex0, 0), Vector2(tex1, 0), Vector2(tex1, 1), Vector2(tex0, 1)]), texture)
 	draw_polyline(top, Color(0.37, 0.30, 0.19, 0.55), 1.2, true)
 	draw_polyline(bottom, Color(0.37, 0.30, 0.19, 0.65), 1.4, true)
@@ -604,7 +778,7 @@ func _draw_spine() -> void:
 func _draw_edge_hint(direction: int) -> void:
 	if direction == 0:
 		return
-	var edge_x := PAGE_SIZE.x * direction
+	var edge_x := 0.0 if direction < 0 and fold_amount >= 1.0 else PAGE_SIZE.x * direction
 	# The hint follows the full usable side, matching the click/drag region.
 	for offset in range(12):
 		var alpha := (1.0 - float(offset) / 12.0) * 0.45 * _hover_edge

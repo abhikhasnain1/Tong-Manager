@@ -157,7 +157,7 @@ func check_peek_input() -> void:
 	check(root.get_visible_rect().encloses(paper_rect), "Peek paper and footer fit this actual viewport")
 	check(peek.mouse_filter == Control.MOUSE_FILTER_STOP and paper_rect.size.x < root.size.x * 0.6,
 		"Peek covers only its page-sized rectangle, not the whole viewport")
-	for name in ["OpenButton", "CloseButton"]:
+	for name in ["OpenButton", "CloseButton", "PreviousButton", "NextButton"]:
 		check(paper_rect.encloses((peek.get_node(name) as Control).get_global_rect()), "%s remains inside Peek bounds" % name)
 	check(not (peek.get_node("OpenButton") as Control).get_global_rect().intersects(
 		(peek.get_node("CloseButton") as Control).get_global_rect()), "Peek footer actions do not overlap")
@@ -255,6 +255,102 @@ func check_peek_input() -> void:
 	check(stock.quantities == quantities and water.remaining_ml == supply and water.day_id == day,
 		"Rendered Peek gestures and transitions do not reset shared stock or water")
 	source.source_owner.global_transform = source_transform
+
+
+func check_folded_page_input() -> void:
+	await tap(KEY_K)
+	await settle_peek()
+	check(modal.is_peeking() and book.opened and is_equal_approx(book.fold_amount, 1.0),
+		"Peek renders the actual opened notebook with its left half underneath")
+	var renderer_id := book.get_instance_id()
+	var right_id: int = book._pages[book.get_visible_page_index()].get_instance_id()
+	check(book.spread == 0 and book.get_visible_page_index() == 1, "Initial Peek uses Pantry's right-hand page")
+	for y in [2.0, 330.0, 658.0]:
+		await click(book_point(Vector2(465, y)))
+		await settle()
+		check(book.spread == 1 and book.get_visible_page_index() == 3 and modal.is_peeking(),
+			"Folded outer edge advances one shared spread at y=%s" % y)
+		await click(book_point(Vector2(15, y)))
+		await settle()
+		check(book.spread == 0 and book.get_visible_page_index() == 1 and modal.is_peeking(),
+			"Folded inner edge returns one shared spread at y=%s" % y)
+	await click(book_point(Vector2(240, 330)))
+	check(book.spread == 0 and not book.busy, "Folded page interior does not accidentally turn")
+	await click((modal.peek.get_node("NextButton") as Control).get_global_rect().get_center())
+	await settle()
+	check(book.spread == 1 and modal.page_index == 1, "Peek Next button changes the one shared spread")
+	await click((modal.peek.get_node("PreviousButton") as Control).get_global_rect().get_center())
+	await settle()
+	check(book.spread == 0 and book._pages[1].get_instance_id() == right_id, "Peek Previous returns to the same cached Pantry right page")
+	var edge := book_point(Vector2(465, 330))
+	await mouse(edge, true)
+	await move_pointer(book_point(Vector2(425, 330)), true)
+	check(book.dragging, "A held folded-page edge follows the pointer")
+	await mouse(book_point(Vector2(425, 330)), false)
+	await settle()
+	check(book.spread == 0 and modal.is_peeking(), "A short folded drag returns to its selected spread")
+	await mouse(edge, true)
+	await move_pointer(book_point(Vector2(260, 330)), true)
+	check(book.dragging and book.turn_progress > 0.35, "A long folded drag crosses the turn threshold")
+	await capture("peek-turn-held")
+	await move_pointer(book_point(Vector2(-80, 330)), true)
+	check(book.dragging and not controller.is_dragging(), "A page drag crossing outside Peek retains book ownership without starting a world drag")
+	await mouse(book_point(Vector2(-80, 330)), false)
+	await settle()
+	check(book.spread == 1 and modal.is_peeking(), "Long folded drag commits one shared spread")
+	await mouse(book_point(Vector2(15, 330)), true)
+	await move_pointer(book_point(Vector2(380, 330)), true)
+	await tap(KEY_ESCAPE)
+	await settle()
+	check(book.spread == 1 and not book.dragging and modal.is_peeking(), "Escape cancels a folded page turn before closing Peek")
+	await mouse(book_point(Vector2(380, 330)), false)
+	await mouse(book_point(Vector2(465, 330)), true)
+	await move_pointer(book_point(Vector2(110, 330)), true)
+	modal.notification(Node.NOTIFICATION_WM_WINDOW_FOCUS_OUT)
+	await settle()
+	check(book.spread == 1 and not book.dragging and modal.is_peeking(), "Focus loss cancels an uncommitted folded turn without losing selection")
+	await mouse(book_point(Vector2(110, 330)), false)
+	await mouse(book_point(Vector2(465, 330)), true)
+	await move_pointer(book_point(Vector2(110, 330)), true)
+	var original_size := root.size
+	root.size = original_size + Vector2i(40, 20)
+	await settle_peek()
+	check(book.spread == 1 and not book.dragging and modal.is_peeking()
+		and root.get_visible_rect().encloses((modal.peek as Control).get_global_rect()),
+		"Resizing a held folded turn cancels it, retains selection and refits Peek")
+	await mouse(Vector2(5, 5), false)
+	root.size = original_size
+	await settle_peek()
+	right_id = book._pages[3].get_instance_id()
+	# Press Open fully and release immediately, then capture the moving book.
+	await click((modal.peek.get_node("OpenButton") as Control).get_global_rect().get_center())
+	check(book.opened and book.folding and is_equal_approx(book.opening_amount, 1.0),
+		"Open fully unfolds the existing open book instead of closing and replacing it")
+	await create_timer(0.22).timeout
+	check(book.fold_amount > 0.0 and book.fold_amount < 1.0 and book.opened,
+		"Unfold animation renders an intermediate opened-book geometry")
+	await capture("unfold-moving")
+	await settle()
+	check(book.get_instance_id() == renderer_id and book.spread == 1 and book._pages[3].get_instance_id() == right_id
+		and is_zero_approx(book.fold_amount) and modal.is_open(), "Expanded Recipes shows the matching pages of the same selected spread")
+	await capture("unfolded-recipes")
+	await click(button("PeekButton"))
+	check(book.opened and book.folding and is_equal_approx(book.opening_amount, 1.0),
+		"Peek control folds the current spread continuously from full view")
+	await create_timer(0.22).timeout
+	check(book.fold_amount > 0.0 and book.fold_amount < 1.0 and book.opened,
+		"Fold animation renders an intermediate opened-book geometry")
+	await capture("fold-moving")
+	await settle_peek()
+	check(modal.is_peeking() and book.spread == 1 and book._pages[3].get_instance_id() == right_id,
+		"Returning to Peek retains Recipes' exact right-hand page")
+	await capture("folded-recipes")
+	await click((modal.peek.get_node("PreviousButton") as Control).get_global_rect().get_center())
+	await settle()
+	await tap(KEY_ESCAPE)
+	await settle()
+	check(not modal.is_peeking() and not modal.is_open() and not controller.is_world_input_blocked(),
+		"Stable folded view closes cleanly after navigation and folding")
 
 
 func check_hotspot_and_tabs() -> void:
@@ -418,6 +514,7 @@ func run() -> void:
 	check(not modal.is_open() and not controller.is_world_input_blocked(), "Normal scene starts without notebook input ownership")
 	await capture("initial")
 	await check_peek_input()
+	await check_folded_page_input()
 	await check_hotspot_and_tabs()
 	await check_edges()
 	await check_world_and_cancellation()

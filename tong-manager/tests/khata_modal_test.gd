@@ -126,7 +126,10 @@ func check_peek_world_and_handoff() -> void:
 	await settle_peek()
 	check(modal.is_peeking() and not modal.is_open() and not controller.is_world_input_blocked(),
 		"Peek does not acquire full-notebook or world-input ownership")
-	check(not book.opened and not book.busy, "Peek leaves the full book closed and settled")
+	check(book.opened and not book.busy and is_equal_approx(book.fold_amount, 1.0),
+		"Peek retains the opened shared notebook with its left half folded underneath")
+	check(modal.visible and not modal.is_modal_input_active(),
+		"Visible shared-book host explicitly relinquishes full-modal input ownership in Peek")
 	for mode in [InteractionController.MODE_NEUTRAL, InteractionController.MODE_ORGANIZE, InteractionController.MODE_USE]:
 		controller.set_mode(mode)
 		await frames()
@@ -192,7 +195,8 @@ func check_peek_lifecycle() -> void:
 	await settle_peek()
 	(modal.peek as Control).hide()
 	await frames()
-	check(not modal.is_peeking() and not controller.is_world_input_blocked(), "Externally hiding Peek leaves no stale state or lock")
+	check(not modal.is_peeking() and not controller.is_world_input_blocked() and not book.opened and not book.busy,
+		"Externally hiding Peek retires the shared renderer as well as its input state")
 	check(modal.open_peek(), "Externally hidden Peek can open afresh")
 	await settle_peek()
 	var ui_root := modal.peek.get_parent() as Control
@@ -276,6 +280,136 @@ func check_peek_reentrant_handoff() -> void:
 	check(modal.is_open() and not modal.is_peeking() and controller.is_world_input_blocked() and book.opened,
 		"A synchronous open observer retains full ownership without a later automatic collapse")
 	await close_modal()
+
+
+func page_ids() -> Array[int]:
+	var ids: Array[int] = []
+	for page in book._pages:
+		ids.append(page.get_instance_id())
+	return ids
+
+
+func check_shared_folded_pages() -> void:
+	var renderer_id := book.get_instance_id()
+	var cached_pages := page_ids()
+	check(modal.open(), "Shared-page test opens the full book")
+	await settle()
+	modal.select_page(1)
+	await settle()
+	var right_page_id: int = book._pages[3].get_instance_id()
+	var full_rect: Rect2 = book.get_visible_book_rect()
+	check(modal.open_peek(), "Recipes spread starts its fold into Peek")
+	check(book.opened and book.busy and book.folding and is_equal_approx(book.opening_amount, 1.0),
+		"Folding keeps the opened book alive rather than closing its cover")
+	await create_timer(0.12).timeout
+	check(book.fold_amount > 0.0 and book.fold_amount < 1.0 and book.opened,
+		"Full-to-Peek passes through a continuous partial-fold state")
+	check(book.spread == 1 and book.get_visible_page_index() == 3 and book._pages[3].get_instance_id() == right_page_id,
+		"The Recipes right-hand page stays the same object throughout folding")
+	await settle_peek()
+	check(book.get_instance_id() == renderer_id and page_ids() == cached_pages,
+		"Peek reuses the exact book and cached pages instead of creating a second rendering")
+	check(book.get_visible_book_rect().size.x < full_rect.size.x and is_equal_approx(book.fold_amount, 1.0),
+		"Settled Peek displays a narrower folded book")
+	for index in range(4):
+		book.select_page(index)
+		await settle()
+		check(modal.is_peeking() and modal.page_index == index and book.get_visible_page_index() == index * 2 + 1,
+			"Peek navigation selects the current right-hand page of spread %d" % index)
+		var right_id: int = book._pages[index * 2 + 1].get_instance_id()
+		check(modal.open(), "Spread %d unfolds into full reading view" % index)
+		check(book.opened and is_equal_approx(book.opening_amount, 1.0),
+			"Unfold begins from the same open notebook without a closed-cover intermediate")
+		await settle()
+		check(modal.page_index == index and book.get_visible_page_index() == index * 2 + 1
+			and book._pages[index * 2 + 1].get_instance_id() == right_id and is_zero_approx(book.fold_amount),
+			"Unfold retains spread %d and its exact matching right page" % index)
+		check(modal.open_peek(), "Spread %d folds back into Peek" % index)
+		await settle_peek()
+		check(modal.is_peeking() and book.spread == index and page_ids() == cached_pages,
+			"Returning to Peek retains spread %d and all cached page identities" % index)
+	book.request_turn(1)
+	await frames()
+	check(book.spread == 3 and not book.busy, "Folded navigation cannot advance beyond the last spread")
+	book.select_page(0)
+	await settle()
+	book.request_turn(-1)
+	await frames()
+	check(book.spread == 0 and not book.busy, "Folded navigation cannot precede the first spread")
+	modal.close_peek()
+	await settle()
+	check(not modal.is_peeking() and not modal.is_open() and page_ids() == cached_pages,
+		"Closing the folded notebook preserves the reusable page cache")
+
+
+func settle_fixture(fixture_book: KhataBook) -> void:
+	var deadline := Time.get_ticks_msec() + 9000
+	while fixture_book.busy and Time.get_ticks_msec() < deadline:
+		await process_frame
+	check(not fixture_book.busy, "Isolated fold-lifecycle fixture settles")
+	await frames()
+
+
+func check_fold_destination_lifecycle() -> void:
+	var quantities := stock.quantities
+	var supply := water.remaining_ml
+	for action in ["detach_during", "free_during", "queue_during", "detach_closed", "queue_closed"]:
+		var fixture := load("res://scenes/gameplay/tong/TongDayScreen.tscn").instantiate() as Node2D
+		root.add_child(fixture)
+		await frames()
+		var fixture_modal: KhataModal = fixture.khata_modal
+		var fixture_book: KhataBook = fixture_modal.book
+		var fixture_controller := fixture.get_node("InteractionController") as InteractionController
+		var destination := fixture_modal.peek
+		var destination_parent := destination.get_parent()
+		fixture_book.sound_enabled = false
+		check(fixture_modal.open(), "%s fixture opens the full book" % action)
+		await settle_fixture(fixture_book)
+		if action == "detach_closed":
+			fixture_modal.closed.connect(func(): destination_parent.remove_child(destination), CONNECT_ONE_SHOT)
+		elif action == "queue_closed":
+			fixture_modal.closed.connect(destination.queue_free, CONNECT_ONE_SHOT)
+		check(fixture_modal.open_peek(), "%s fixture starts folding toward Peek" % action)
+		if action == "detach_during":
+			destination_parent.remove_child(destination)
+		elif action == "free_during":
+			destination.free()
+		elif action == "queue_during":
+			destination.queue_free()
+		await settle_fixture(fixture_book)
+		check(not fixture_modal.is_open() and not fixture_modal.is_peeking() and not fixture_modal.visible
+			and not fixture_controller.is_world_input_blocked(), "%s leaves no modal lock or orphaned visible book" % action)
+		check(not fixture_book.opened and not fixture_book.busy and not fixture_book.folding,
+			"%s retires the renderer instead of reopening a removed destination" % action)
+		if is_instance_valid(destination) and not destination.is_inside_tree():
+			destination_parent.add_child(destination)
+		fixture.queue_free()
+		await frames()
+	check(stock.quantities == quantities and water.remaining_ml == supply,
+		"Failed fold destinations never reset or replenish shared supplies")
+
+
+func check_peek_other_input_owners() -> void:
+	for kind in ["explicit owner", "ordinary ModalStack child"]:
+		check(modal.open_peek(), "%s case starts nonmodal Peek" % kind)
+		await settle_peek()
+		var blocker: Node
+		if kind == "explicit owner":
+			blocker = Node.new()
+			screen.add_child(blocker)
+			controller.set_world_input_blocked(blocker, true)
+		else:
+			blocker = Control.new()
+			controller.modal_root.add_child(blocker)
+		check(controller.is_world_input_blocked(), "%s still blocks despite visible Peek's explicit exemption" % kind)
+		await frames()
+		check(not modal.is_peeking() and not book.opened and controller.is_world_input_blocked(),
+			"%s retires Peek while retaining its own world-input ownership" % kind)
+		if kind == "explicit owner":
+			controller.set_world_input_blocked(blocker, false)
+		blocker.queue_free()
+		await frames()
+		check(not controller.is_world_input_blocked(), "%s releases cleanly without a stale Peek blocker" % kind)
 
 
 func check_live_world() -> void:
@@ -464,6 +598,30 @@ func begin_record(record: Dictionary) -> bool:
 	return modal.begin_export(record.payload, record.visual, point(record.target), allowed)
 
 
+func check_export_to_peek() -> void:
+	controller.set_mode(InteractionController.MODE_NEUTRAL)
+	check(modal.open(), "Export-to-Peek test starts a full notebook")
+	await settle()
+	var before := stock.remaining(&"sugar")
+	var record := export_record(controller, screen, screen.get_node("WorldRoot/DropZoneRoot"))
+	check(begin_record(record), "Full notebook holds a reserved export before folding")
+	check(stock.available(&"sugar") == before - 1, "Controlled export owns one reservation before transition")
+	check(modal.open_peek(), "Full notebook accepts a fold request while an export is held")
+	check(not modal.exporting and not controller.is_dragging() and not controller.is_modal_export_active()
+		and stock.remaining(&"sugar") == before and stock.available(&"sugar") == before,
+		"Folding cancels the export and releases stock immediately before the animation")
+	check(not record.portion.is_available() and not record.target.try_apply_drop(record.payload),
+		"Canceled transition export cannot be replayed at its formerly allowed target")
+	await settle_peek()
+	check(modal.is_peeking() and not modal.is_open() and not controller.is_world_input_blocked()
+		and not is_instance_valid(record.visual), "Fold completes in Peek without its old export visual or input exception")
+	modal.close_peek()
+	controller.unregister_drop_zone(record.target)
+	(record.portion.source_ref.get_ref() as Node).queue_free()
+	(record.target as Node).queue_free()
+	await frames()
+
+
 func check_controller_lifecycle() -> void:
 	controller.set_mode(InteractionController.MODE_USE)
 	check(modal.open(), "Controller replacement begins with an active notebook")
@@ -565,10 +723,14 @@ func run() -> void:
 	await check_peek_world_and_handoff()
 	await check_peek_lifecycle()
 	await check_peek_reentrant_handoff()
+	await check_shared_folded_pages()
+	await check_fold_destination_lifecycle()
+	await check_peek_other_input_owners()
 	await check_modes_and_pages()
 	await check_live_world()
 	await check_gesture_cancellation()
 	await check_export_fixture()
+	await check_export_to_peek()
 	await check_hidden_book()
 	await check_controller_lifecycle()
 	controller.set_mode(InteractionController.MODE_ORGANIZE)

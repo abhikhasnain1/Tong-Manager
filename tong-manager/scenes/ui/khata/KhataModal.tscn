@@ -125,7 +125,7 @@ text = "Close khata"
 
 [node name="PeekButton" type="Button" parent="."]
 layout_mode = 0
-text = "Pantry peek"
+text = "Fold to peek"
 
 [node name="Hint" type="Label" parent="."]
 layout_mode = 0

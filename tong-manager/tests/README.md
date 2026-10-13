@@ -41,9 +41,13 @@ click-through suppression, plus full-notebook navigation. An optional directory
 after `--` receives captures. On Windows, run with native pointer access and a
 visible window position (for example `--position 60,60`).
 
-Cover/K first opens the bounded right-side Peek. Open fully takes modal input;
-Pantry peek returns to the working view. Escape cancels an active gesture first.
-This tests empty page shells; populated pantry and Peek export belong to #58.
+Cover/K first opens the shared book's folded right-hand page. Turns in Peek and
+Full share a spread; unfolding reveals the matching left page without closing
+the book or replacing its page surfaces. Tests cover fold interruption, moving
+leaf coverage and removal of the destination view during an animation. Open fully
+takes modal input; Fold to peek returns to the working view. Escape cancels an
+active gesture first. These are empty page shells; populated pantry and Peek
+export belong to #58.
 
 ## Brewing interaction fixture
 
