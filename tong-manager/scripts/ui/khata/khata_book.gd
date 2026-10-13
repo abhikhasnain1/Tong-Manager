@@ -7,6 +7,7 @@ const TURN_SOUND: AudioStream = preload("res://assets/audio/page_turn.mp3")
 const DESIGN := Vector2(1600, 1000)
 const PAGE_SIZE := Vector2(480, 660)
 const PAGE_EDGE_WIDTH := 85.0
+const TAB_SIZE := Vector2(72, 66)
 var section_titles: Array[String] = ["Pantry", "Recipes", "Finance", "Quests"]
 var section_colors: Array[Color] = [Color("91a878"), Color("bd916b"), Color("7994a1"), Color("a58bac")]
 var page_factory: Callable
@@ -460,7 +461,22 @@ func _play_sound(pitch: float) -> void:
 
 
 func make_tab_rect(index: int) -> Rect2:
-	return Rect2(_book_origin() + Vector2(-547, 65 + 90 * index), Vector2(72, 66))
+	var tab_y := 65.0 + 90.0 * index
+	if opening_amount >= 1.0:
+		# Preserve the accepted reading layout exactly at the resting pose.
+		return Rect2(_book_origin() + Vector2(-547, tab_y), TAB_SIZE)
+	var angle := clampf(opening_amount, 0.0, 1.0) * PI
+	var horizontal := cos(angle)
+	if is_zero_approx(horizontal):
+		horizontal = 0.0
+	var edge_depth := PAGE_SIZE.x * sin(angle)
+	var vertical := 1.0 - edge_depth / 3100.0
+	# Five authored pixels sit inside the cover edge. The rest travels with
+	# that edge, using the same lift and height projection as the rigid cover.
+	var first_x := 475.0 * horizontal
+	var last_x := 547.0 * horizontal
+	var top_left := Vector2(minf(first_x, last_x), -edge_depth * 0.23 + tab_y * vertical)
+	return Rect2(_book_origin() + top_left, Vector2(TAB_SIZE.x * absf(horizontal), TAB_SIZE.y * vertical))
 
 
 func _tab_rect(index: int) -> Rect2:
@@ -519,12 +535,18 @@ func _draw() -> void:
 		_draw_sheet(opening_amount * PI, _cover, _pages[spread * 2].get_texture(), false, false)
 	draw_set_transform(Vector2.ZERO)
 	if standalone:
+		for index in range(section_titles.size()):
+			var tab := _tab_rect(index)
+			if tab.size.x <= 0.0:
+				continue
+			var tab_color := section_colors[index % section_colors.size()] if not section_colors.is_empty() else Color("91a878")
+			# Scale the authored bookmark and text together without mirroring the
+			# label when the cover's outer edge passes to the left of its binding.
+			draw_set_transform(tab.position, 0.0, tab.size / TAB_SIZE)
+			draw_style_box(_box(tab_color.darkened(0.12 if spread != index else 0), 4), Rect2(Vector2.ZERO, TAB_SIZE))
+			draw_string(_font, Vector2(9, 39), section_titles[index], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("243129"))
+		draw_set_transform(Vector2.ZERO)
 		if opened:
-			for index in range(section_titles.size()):
-				var tab := _tab_rect(index)
-				var tab_color := section_colors[index % section_colors.size()] if not section_colors.is_empty() else Color("91a878")
-				draw_style_box(_box(tab_color.darkened(0.12 if spread != index else 0), 4), tab)
-				draw_string(_font, tab.position + Vector2(9, 39), section_titles[index], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("243129"))
 			_draw_arrow(Vector2(250, 528), -1, spread > 0)
 			_draw_arrow(Vector2(1348, 528), 1, spread < section_titles.size() - 1)
 			draw_string(_font, Vector2(500, 934), "Click or drag either outer edge  ·  ← / → turn  ·  Esc closes", HORIZONTAL_ALIGNMENT_CENTER, 600, 18, Color("d1d6c7"))

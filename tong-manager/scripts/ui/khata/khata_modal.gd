@@ -314,8 +314,15 @@ func _layout() -> void:
 	_place($Hint, Rect2(310, 925, 980, 38))
 	for index in range(4):
 		var button := $TabContainer.get_node(TAB_NAMES[index]) as Button
-		_place(button, book.make_tab_rect(index))
+		var tab := book.make_tab_rect(index)
+		# Keep the authored size: Control minimum sizes would otherwise prevent
+		# the bookmark from narrowing with the rotating cover.
+		button.position = book.position + tab.position * book.scale
+		button.size = book.TAB_SIZE
+		button.scale = book.scale * tab.size / book.TAB_SIZE
+		button.visible = tab.size.x > 0.6
 		button.disabled = book.busy or not book.opened or _closing
+		button.mouse_filter = Control.MOUSE_FILTER_IGNORE if button.disabled else Control.MOUSE_FILTER_STOP
 	$PreviousButton.disabled = book.busy or not book.opened or book.spread <= 0 or _closing
 	$NextButton.disabled = book.busy or not book.opened or book.spread >= 3 or _closing
 	book_input.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if book._edge_at(book.get_local_mouse_position()) != 0 and book.opened and not book.busy else Control.CURSOR_ARROW
