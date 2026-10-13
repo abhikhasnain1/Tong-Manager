@@ -10,6 +10,8 @@ const PAGE_NAMES := ["InventoryPage", "RecipesPage", "FinancePage", "QuestsPage"
 const TAB_NAMES := ["InventoryTab", "RecipesTab", "FinanceTab", "QuestsTab"]
 const TAB_COLORS := [Color("91a878"), Color("bd916b"), Color("7994a1"), Color("ac94ab")]
 
+@export_node_path("Control") var peek_path: NodePath
+@onready var peek: KhataPeek = get_node_or_null(peek_path) as KhataPeek if not peek_path.is_empty() else null
 @onready var book: KhataBook = $NotebookBackground/Book
 @onready var dimmer: ColorRect = $Dimmer
 @onready var book_input: Control = $BookInput
@@ -22,6 +24,7 @@ var page_index: int:
 		return book.spread if is_instance_valid(book) else 0
 var _active := false
 var _closing := false
+var _peek_after_close := false
 
 
 func _enter_tree() -> void:
@@ -36,6 +39,10 @@ func _ready() -> void:
 	book_input.gui_input.connect(_on_book_input)
 	dimmer.gui_input.connect(_on_dimmer_input)
 	$CloseButton.pressed.connect(close)
+	$PeekButton.pressed.connect(open_peek)
+	if is_instance_valid(peek):
+		peek.open_requested.connect(open)
+		peek.close_requested.connect(close_peek)
 	$PreviousButton.pressed.connect(func(): book.request_turn(-1))
 	$NextButton.pressed.connect(func(): book.request_turn(1))
 	for index in range(4):
@@ -43,6 +50,7 @@ func _ready() -> void:
 		button.pressed.connect(select_page.bind(index))
 		_style_button(button, TAB_COLORS[index], true)
 	_style_button($CloseButton, Color("353f34"))
+	_style_button($PeekButton, Color("353f34"))
 	for button in [$PreviousButton, $NextButton]:
 		_style_button(button, Color(0.17, 0.22, 0.17, 0.85))
 	get_viewport().size_changed.connect(_on_resize)
@@ -54,6 +62,7 @@ func _ready() -> void:
 func configure(value: InteractionController) -> void:
 	if controller == value:
 		return
+	close_peek()
 	if _active:
 		# The old controller owns any reservation and modal lock. Finish that
 		# session before binding another controller, without transferring input.
@@ -71,8 +80,9 @@ func configure(value: InteractionController) -> void:
 
 
 func open() -> bool:
-	if _active or _closing or not is_inside_tree() or is_queued_for_deletion() or not _controller_is_live() or controller.is_world_input_blocked():
+	if _active or _closing or not is_inside_tree() or is_queued_for_deletion() or not _host_is_visible() or not _controller_is_live() or controller.is_world_input_blocked():
 		return false
+	close_peek()
 	_active = true
 	_closing = false
 	show()
@@ -93,7 +103,41 @@ func is_open() -> bool:
 	return _active
 
 
+func is_peeking() -> bool:
+	return is_instance_valid(peek) and peek.is_visible_in_tree()
+
+
+func open_peek() -> bool:
+	if (_closing or not is_inside_tree() or is_queued_for_deletion()
+		or not _host_is_visible() or not _controller_is_live() or not is_instance_valid(peek)
+		or not peek.is_inside_tree() or peek.is_queued_for_deletion()):
+		return false
+	var peek_host := peek.get_parent() as CanvasItem
+	if peek_host != null and not peek_host.is_visible_in_tree():
+		return false
+	if _active:
+		_peek_after_close = true
+		_start_close()
+		return true
+	if controller.is_world_input_blocked():
+		return false
+	if not is_peeking():
+		peek.reveal()
+	return true
+
+
+func close_peek() -> void:
+	_peek_after_close = false
+	if is_instance_valid(peek):
+		peek.dismiss()
+
+
 func close() -> void:
+	close_peek()
+	_start_close()
+
+
+func _start_close() -> void:
 	if not _active:
 		return
 	_closing = true
@@ -141,6 +185,7 @@ func _reading_visible(value: bool) -> void:
 	$Pages.visible = value
 	$PreviousButton.visible = value
 	$NextButton.visible = value
+	$PeekButton.visible = value
 	$Hint.text = "Click or drag an outer page edge · Arrow keys turn · Esc closes" if value else "Place the item · Esc returns to Khata"
 	dimmer.color.a = 0.48 if value else 0.12
 
@@ -170,6 +215,10 @@ func _finish_close() -> void:
 	_release_ownership()
 	_closing = false
 	closed.emit()
+	# Close/open observers can replace this destination during cleanup/signals.
+	if _peek_after_close:
+		_peek_after_close = false
+		open_peek()
 
 
 func _release_ownership() -> void:
@@ -193,13 +242,16 @@ func _on_mode_changed(_mode: StringName) -> void:
 func _on_visibility_changed() -> void:
 	if _active and not is_visible_in_tree():
 		_active = false
+		_peek_after_close = false
 		_closing = true
+		hide()
 		_release_ownership()
 		book.reset_closed()
 		_closing = false
 
 
 func _exit_tree() -> void:
+	close_peek()
 	_active = false
 	_closing = true
 	hide()
@@ -227,8 +279,18 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_K:
 		if _active:
 			close()
+		elif is_peeking():
+			close_peek()
 		elif not is_instance_valid(get_viewport().gui_get_focus_owner()):
-			open()
+			open_peek()
+		get_viewport().set_input_as_handled()
+		return
+	if is_peeking() and event.is_action_pressed(InteractionController.INPUT_CANCEL):
+		# A held world gesture gets first cancellation; otherwise put the page away.
+		if _controller_is_live() and (controller.is_dragging() or controller.has_active_action()):
+			controller.cancel_world_action()
+		else:
+			close_peek()
 		get_viewport().set_input_as_handled()
 		return
 	if not _active:
@@ -289,6 +351,8 @@ func _make_page(index: int, paper: Texture2D) -> Node:
 
 
 func _process(_delta: float) -> void:
+	if is_peeking() and (not _controller_is_live() or controller.is_world_input_blocked()):
+		close_peek()
 	if not _active:
 		return
 	if not _controller_is_live():
@@ -303,12 +367,18 @@ func _controller_is_live() -> bool:
 	return is_instance_valid(controller) and controller.is_inside_tree() and not controller.is_queued_for_deletion()
 
 
+func _host_is_visible() -> bool:
+	var host := get_parent() as CanvasItem
+	return host == null or host.is_visible_in_tree()
+
+
 func _layout() -> void:
 	if not is_node_ready():
 		return
 	_place(book_input, Rect2(300, 190, 1000, 704))
 	_place($Pages, Rect2(320, 209, 960, 660))
 	_place($CloseButton, book.CLOSE_RECT)
+	_place($PeekButton, Rect2(1060, 116, 182, 44))
 	_place($PreviousButton, Rect2(165, 498, 58, 58))
 	_place($NextButton, Rect2(1320, 498, 58, 58))
 	_place($Hint, Rect2(310, 925, 980, 38))
@@ -325,6 +395,7 @@ func _layout() -> void:
 		button.mouse_filter = Control.MOUSE_FILTER_IGNORE if button.disabled else Control.MOUSE_FILTER_STOP
 	$PreviousButton.disabled = book.busy or not book.opened or book.spread <= 0 or _closing
 	$NextButton.disabled = book.busy or not book.opened or book.spread >= 3 or _closing
+	$PeekButton.disabled = book.busy or not book.opened or _closing
 	book_input.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if book._edge_at(book.get_local_mouse_position()) != 0 and book.opened and not book.busy else Control.CURSOR_ARROW
 
 

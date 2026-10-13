@@ -1,0 +1,26 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/khata/khata_peek.gd" id="1"]
+
+[node name="KhataPeek" type="Control"]
+visible = false
+layout_mode = 0
+offset_right = 512.0
+offset_bottom = 746.0
+script = ExtResource("1")
+
+[node name="OpenButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 24.0
+offset_top = 691.0
+offset_right = 318.0
+offset_bottom = 733.0
+text = "Open fully"
+
+[node name="CloseButton" type="Button" parent="."]
+layout_mode = 0
+offset_left = 330.0
+offset_top = 691.0
+offset_right = 488.0
+offset_bottom = 733.0
+text = "Close"

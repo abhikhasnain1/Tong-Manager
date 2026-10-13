@@ -30,6 +30,21 @@ for the real review scene's stock, cancellation, modal, removal and reload check
 Run the same script without `--headless` at the four review sizes below; an
 optional PNG path after `--` captures the initial stock panel and scene.
 
+## Khata view and input ownership
+
+Run `godot --headless --path . --script res://tests/khata_modal_test.gd` for
+Closed/Peek/Full transitions, live simulation, state preservation and lifecycle
+cleanup. `khata_export_test.gd` separately verifies the Full-modal export seam.
+Run `khata_modal_input_test.gd` without `--headless` at 1920x1080, 1600x900,
+1366x768 and 1280x800 for real cover/button/key input, Peek world access and
+click-through suppression, plus full-notebook navigation. An optional directory
+after `--` receives captures. On Windows, run with native pointer access and a
+visible window position (for example `--position 60,60`).
+
+Cover/K first opens the bounded right-side Peek. Open fully takes modal input;
+Pantry peek returns to the working view. Escape cancels an active gesture first.
+This tests empty page shells; populated pantry and Peek export belong to #58.
+
 ## Brewing interaction fixture
 
 The isolated interaction fixture is in `scenes/development/BrewingPreview.tscn`.

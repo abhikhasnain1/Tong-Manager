@@ -1,6 +1,28 @@
 extends SceneTree
 ## Rendered viewport input for the production notebook shell, not pantry/export content.
 
+class PeekTarget extends DropZone:
+	var controller: InteractionController
+	var applied := 0
+	func _init() -> void:
+		var preview := Sprite2D.new()
+		preview.name = "DebugPreview"
+		preview.hide()
+		add_child(preview)
+		snap_radius = 35
+	func is_relevant_to(payload: HeldItemPayload) -> bool:
+		return payload != null and payload.metadata.get("category") == &"ingredient_portion"
+	func accepts(payload: HeldItemPayload) -> DropValidation:
+		if not is_relevant_to(payload) or not controller.can_address_drop_zone(payload, self):
+			return DropValidation.invalid("Inactive test target")
+		var portion := payload.metadata.get("portion") as IngredientPortion
+		return DropValidation.valid() if portion != null and portion.is_available() else DropValidation.invalid("Expired portion")
+	func try_apply_drop(payload: HeldItemPayload) -> bool:
+		return accepts(payload).is_valid and (payload.metadata.portion as IngredientPortion).commit(_apply)
+	func _apply() -> bool:
+		applied += 1
+		return true
+
 var checks := 0
 var failures: Array[String] = []
 var screen: Node2D
@@ -8,6 +30,7 @@ var controller: InteractionController
 var modal: Control
 var book: Node2D
 var capture_dir := ""
+var stock: InventoryState
 
 
 func _initialize() -> void:
@@ -96,9 +119,142 @@ func open_hotspot() -> void:
 	var hotspot := screen.get_node("WorldRoot/ToolLayer/KhataStation/KhataHotspot/InteractionAnchor") as Node2D
 	check(root.get_visible_rect().has_point(point(hotspot)), "Existing hotspot anchor remains visible at this viewport")
 	await click(point(hotspot))
-	check(modal.is_open() and controller.is_world_input_blocked(), "Real hotspot click opens modal ownership")
+	await settle_peek()
+	check(modal.is_peeking() and not modal.is_open() and not controller.is_world_input_blocked(), "Real hotspot click first opens nonmodal Peek")
+	await expand_peek()
+
+
+func settle_peek() -> void:
 	await settle()
-	check(book.opened, "Hotspot opens the shared notebook visual")
+	await create_timer(0.4).timeout
+	await frames()
+
+
+func expand_peek() -> void:
+	await click((modal.peek.get_node("OpenButton") as Control).get_global_rect().get_center())
+	check(modal.is_open() and controller.is_world_input_blocked(), "Open fully transfers Peek into full modal ownership")
+	await settle()
+	check(book.opened and not modal.is_peeking(), "Expanded view opens the shared notebook and retires Peek")
+
+
+func check_peek_input() -> void:
+	var peek := modal.peek as Control
+	var source := screen.get_node("WorldRoot/ToolLayer/ReadyItemRail/SugarCan/IngredientSource") as IngredientPortionSource
+	# Right-side jars are intentionally covered. Move this fixture source to the
+	# clear middle table before testing world gestures, then restore it below.
+	var source_transform := source.source_owner.global_transform
+	source.source_owner.global_position = Vector2(960, 700)
+	var stove := screen.get_node("WorldRoot/ToolLayer/StoveStation") as Stove
+	var kettle := screen.get_node("WorldRoot/ToolLayer/KettleStation") as Kettle
+	var water: DailyWaterSupply = root.get_node("GameState").water_supply
+	var quantities := stock.quantities
+	var supply := water.remaining_ml
+	var day := water.day_id
+	await tap(KEY_K)
+	await settle_peek()
+	check(modal.is_peeking() and not modal.is_open() and not controller.is_world_input_blocked(), "K first opens Peek without locking the world")
+	var paper_rect := peek.get_global_rect()
+	check(root.get_visible_rect().encloses(paper_rect), "Peek paper and footer fit this actual viewport")
+	check(peek.mouse_filter == Control.MOUSE_FILTER_STOP and paper_rect.size.x < root.size.x * 0.6,
+		"Peek covers only its page-sized rectangle, not the whole viewport")
+	for name in ["OpenButton", "CloseButton"]:
+		check(paper_rect.encloses((peek.get_node(name) as Control).get_global_rect()), "%s remains inside Peek bounds" % name)
+	check(not (peek.get_node("OpenButton") as Control).get_global_rect().intersects(
+		(peek.get_node("CloseButton") as Control).get_global_rect()), "Peek footer actions do not overlap")
+	await capture("peek")
+	await tap(KEY_U)
+	check(modal.is_peeking() and controller.current_mode == InteractionController.MODE_USE, "Use shortcut keeps Peek open")
+	var dial := stove.get_node("DialA") as Node2D
+	check(not paper_rect.has_point(point(dial)), "The stove dial remains outside Peek coverage")
+	var heat := stove.burners[0].heat_level
+	await click(point(dial))
+	check(stove.burners[0].heat_level != heat and modal.is_peeking(), "Real uncovered dial input still changes heat without dismissing Peek")
+	kettle.add_water(300)
+	kettle.temperature = 50
+	stove.burners[0].set_heat(1)
+	var temperature := kettle.temperature
+	await create_timer(0.15).timeout
+	check(kettle.temperature > temperature and not paused, "Heating continues while Peek and world input coexist")
+	stove.burners[0].set_heat(0)
+	kettle.discard_contents()
+	# A real target behind the page must not receive a held world release.
+	var target := PeekTarget.new()
+	target.controller = controller
+	screen.get_node("WorldRoot/DropZoneRoot").add_child(target)
+	target.global_position = (target.get_canvas_transform().affine_inverse() * paper_rect.get_center())
+	controller.register_drop_zone(target)
+	await frames()
+	await mouse(point(source.source_owner), true)
+	check(controller.is_dragging() and modal.is_peeking(), "Physical-source pickup works while Peek remains visible")
+	await move_pointer(point(target), true)
+	check(controller.is_pointer_over_ui_at(point(target)), "Peek page participates in world-input coverage checks")
+	await mouse(point(target), false)
+	check(not controller.is_dragging() and target.applied == 0 and stock.quantities == quantities
+		and stock.available(&"sugar") == stock.remaining(&"sugar"), "Release over Peek cannot consume a portion through the paper")
+	await mouse(point(source.source_owner), true)
+	check(controller.is_dragging(), "A second world portion can start beside Peek")
+	await tap(KEY_ESCAPE)
+	check(not controller.is_dragging() and modal.is_peeking() and stock.quantities == quantities,
+		"Escape first cancels a held world gesture while preserving Peek")
+	await mouse(point(source.source_owner), false)
+	controller.unregister_drop_zone(target)
+	target.queue_free()
+	# Prove page click-through suppression against an actual physics pick target.
+	var probe := Area2D.new()
+	probe.input_pickable = true
+	probe.z_index = 100
+	var shape := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = 24
+	shape.shape = circle
+	probe.add_child(shape)
+	var clicks := {"count": 0}
+	probe.input_event.connect(func(_viewport, event, _shape):
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			clicks.count += 1)
+	screen.add_child(probe)
+	probe.global_position = probe.get_canvas_transform().affine_inverse() * paper_rect.get_center()
+	modal.close_peek()
+	await frames()
+	await click(point(probe))
+	check(clicks.count == 1, "Exposed probe confirms that the covered world target is pickable")
+	check(modal.open_peek(), "Peek reopens above the known world pick target")
+	await settle_peek()
+	await click(point(probe))
+	check(clicks.count == 1 and modal.is_peeking() and not controller.is_dragging(), "Paper consumes clicks instead of activating the world target beneath it")
+	probe.queue_free()
+	await tap(KEY_G)
+	check(modal.is_peeking() and controller.current_mode == InteractionController.MODE_ORGANIZE, "Organize shortcut keeps Peek open")
+	var owner_node := source.source_owner
+	var origin := owner_node.global_transform
+	await mouse(point(owner_node), true)
+	check(controller.is_dragging() and modal.is_peeking(), "Real Organize pickup remains available beside Peek")
+	await move_pointer(point(owner_node) + Vector2(-25, -20), true)
+	controller.cancel_drag()
+	await mouse(point(owner_node), false)
+	check(modal.is_peeking() and owner_node.global_transform.is_equal_approx(origin), "Canceling the world drag preserves Peek and restores placement")
+	await expand_peek()
+	await click(button("TabContainer/InventoryTab"))
+	await settle()
+	await click(button("PeekButton"))
+	await settle_peek()
+	check(modal.is_peeking() and not modal.is_open() and not controller.is_world_input_blocked(), "Pantry Peek button releases full-modal ownership into the working view")
+	check(controller.current_mode == InteractionController.MODE_ORGANIZE, "Full-to-Peek transition preserves Organize")
+	await tap(KEY_G)
+	check(modal.is_peeking() and controller.current_mode == InteractionController.MODE_NEUTRAL, "Neutral toggle also retains Peek")
+	await click((peek.get_node("CloseButton") as Control).get_global_rect().get_center())
+	check(not modal.is_peeking() and not modal.is_open(), "Peek Close button closes the current view")
+	await tap(KEY_K)
+	await settle_peek()
+	await tap(KEY_K)
+	check(not modal.is_peeking() and not modal.is_open(), "K closes an existing Peek instead of opening full mode")
+	await tap(KEY_K)
+	await settle_peek()
+	await tap(KEY_ESCAPE)
+	check(not modal.is_peeking() and not modal.is_open() and not controller.is_world_input_blocked(), "Escape closes Peek without a stale lock")
+	check(stock.quantities == quantities and water.remaining_ml == supply and water.day_id == day,
+		"Rendered Peek gestures and transitions do not reset shared stock or water")
+	source.source_owner.global_transform = source_transform
 
 
 func check_hotspot_and_tabs() -> void:
@@ -147,8 +303,9 @@ func check_hotspot_and_tabs() -> void:
 	check(not modal.is_open() and not controller.is_world_input_blocked()
 		and controller.current_mode == InteractionController.MODE_USE, "Explicit Use shortcut closes the notebook and selects Use")
 	await tap(KEY_K)
-	await settle()
-	check(modal.is_open() and controller.is_world_input_blocked(), "K shortcut opens the notebook without changing mode")
+	await settle_peek()
+	check(modal.is_peeking() and not controller.is_world_input_blocked(), "K shortcut opens Peek without changing mode")
+	await expand_peek()
 
 
 func check_edges() -> void:
@@ -248,6 +405,8 @@ func run() -> void:
 		return
 	var args := OS.get_cmdline_user_args()
 	if not args.is_empty(): capture_dir = args[0]
+	check(root.get_node("GameState").reset_demo_state(), "Rendered fixture initializes shared supplies")
+	stock = root.get_node("GameState").inventory
 	screen = load("res://scenes/gameplay/tong/TongDayScreen.tscn").instantiate()
 	root.add_child(screen)
 	await frames(4)
@@ -255,8 +414,10 @@ func run() -> void:
 	modal = screen.khata_modal
 	book = modal.book
 	book.sound_enabled = false
+	screen.set_portion_provider(stock)
 	check(not modal.is_open() and not controller.is_world_input_blocked(), "Normal scene starts without notebook input ownership")
 	await capture("initial")
+	await check_peek_input()
 	await check_hotspot_and_tabs()
 	await check_edges()
 	await check_world_and_cancellation()

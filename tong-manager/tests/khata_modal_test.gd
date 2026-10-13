@@ -105,6 +105,179 @@ func check_modes_and_pages() -> void:
 	await close_modal()
 
 
+func settle_peek() -> void:
+	await settle()
+	await create_timer(0.4).timeout
+	await frames()
+
+
+func check_peek_world_and_handoff() -> void:
+	var peek := modal.peek as Control
+	# Put the source beside the page; covered sources are intentionally unavailable.
+	var source_transform := sugar().source_owner.global_transform
+	sugar().source_owner.global_position = Vector2(960, 700)
+	check(peek.get_parent() == controller.modal_root.get_parent()
+		and not controller.modal_root.is_ancestor_of(peek), "Peek is a paper-sized sibling outside the blocking ModalStack")
+	var quantities := stock.quantities
+	var supply := water.remaining_ml
+	var day := water.day_id
+	var identity := [screen.get_instance_id(), kettle.get_instance_id()]
+	check(modal.open_peek(), "Closed notebook can open its nonmodal Peek")
+	await settle_peek()
+	check(modal.is_peeking() and not modal.is_open() and not controller.is_world_input_blocked(),
+		"Peek does not acquire full-notebook or world-input ownership")
+	check(not book.opened and not book.busy, "Peek leaves the full book closed and settled")
+	for mode in [InteractionController.MODE_NEUTRAL, InteractionController.MODE_ORGANIZE, InteractionController.MODE_USE]:
+		controller.set_mode(mode)
+		await frames()
+		check(modal.is_peeking() and controller.current_mode == mode and not controller.is_world_input_blocked(),
+			"Peek survives a deliberate %s mode change without blocking the stall" % mode)
+	check(sugar().begin_portion(point(sugar().source_owner)), "Use can reserve a physical-source portion while Peek remains open")
+	check(modal.is_peeking() and controller.is_dragging(), "A world gesture does not dismiss Peek")
+	modal.close_peek()
+	check(controller.is_dragging() and stock.available(&"sugar") == stock.remaining(&"sugar") - 1,
+		"Closing nonmodal Peek does not cancel an unrelated world reservation")
+	check(modal.open_peek(), "Peek can reopen without interrupting a held world portion")
+	await settle_peek()
+	check(controller.is_dragging(), "Peek arrival leaves the held world portion intact")
+	controller.cancel_drag()
+	await frames()
+	check(stock.quantities == quantities and stock.available(&"sugar") == stock.remaining(&"sugar"),
+		"Canceling a world portion in Peek preserves stock and releases its reservation")
+	controller.set_mode(InteractionController.MODE_ORGANIZE)
+	var owner_node := sugar().placement_handle.item
+	var original := owner_node.transform
+	var original_parent := owner_node.get_parent()
+	check(sugar().placement_handle.begin_drag(point(owner_node)), "Organize can move a whole source while Peek remains open")
+	controller.update_drag(point(owner_node) + Vector2(-90, -35))
+	check(modal.is_peeking(), "Moving a whole source leaves Peek open")
+	check(modal.open(), "Peek expands into the full notebook during a world gesture")
+	check(not controller.is_dragging() and owner_node.get_parent() == original_parent
+		and owner_node.transform.is_equal_approx(original), "Expanding cancels and restores the preexisting world drag")
+	await settle()
+	check(modal.is_open() and not modal.is_peeking() and controller.is_world_input_blocked(),
+		"Expansion transfers ownership to only the full notebook")
+	check(not sugar().placement_handle.begin_drag(point(owner_node)), "Expanded notebook blocks ordinary placement")
+	check(modal.open_peek(), "Full notebook can collapse into Peek")
+	await settle_peek()
+	check(modal.is_peeking() and not modal.is_open() and not controller.is_world_input_blocked(),
+		"Collapse relinquishes full modal ownership before Peek becomes interactive")
+	check(controller.current_mode == InteractionController.MODE_ORGANIZE, "Full-to-Peek transition preserves the selected mode")
+	controller.set_mode(InteractionController.MODE_USE)
+	kettle.discard_contents()
+	kettle.add_water(300)
+	kettle.temperature = 50
+	stove.burners[0].set_heat(1)
+	var progress := ProgressFixture.new()
+	screen.add_child(progress)
+	var temperature := kettle.temperature
+	var elapsed := progress.elapsed
+	var patience := progress.patience
+	await create_timer(0.15).timeout
+	check(kettle.temperature > temperature and progress.elapsed > elapsed and progress.patience < patience and not paused,
+		"Peek leaves real heat and explicit clock/patience contract fixtures advancing")
+	check(identity == [screen.get_instance_id(), kettle.get_instance_id()] and stock.quantities == quantities
+		and water.remaining_ml == supply and water.day_id == day, "Peek transitions preserve live identity, stock and same-day water")
+	stove.burners[0].set_heat(0)
+	progress.queue_free()
+	modal.close_peek()
+	await frames()
+	check(not modal.is_peeking() and not modal.is_open() and not controller.is_world_input_blocked(),
+		"Closing Peek leaves neither notebook view nor a world lock")
+	sugar().source_owner.global_transform = source_transform
+
+
+func check_peek_lifecycle() -> void:
+	check(modal.open_peek(), "Peek opens for external visibility cleanup")
+	await settle_peek()
+	(modal.peek as Control).hide()
+	await frames()
+	check(not modal.is_peeking() and not controller.is_world_input_blocked(), "Externally hiding Peek leaves no stale state or lock")
+	check(modal.open_peek(), "Externally hidden Peek can open afresh")
+	await settle_peek()
+	var ui_root := modal.peek.get_parent() as Control
+	ui_root.hide()
+	await frames()
+	check(not modal.is_peeking() and not modal.peek.visible, "Hiding the UI ancestor clears Peek rather than retaining an invisible session")
+	var key := InputEventKey.new()
+	key.keycode = KEY_K
+	key.pressed = true
+	modal._input(key)
+	check(not modal.is_peeking() and not modal.is_open() and not modal.open_peek() and not modal.open(),
+		"Hidden HUD rejects K and direct open requests without acquiring ownership")
+	ui_root.show()
+	await frames()
+	check(not modal.is_peeking() and not controller.is_world_input_blocked(), "Showing the scene UI again does not resurrect stale Peek")
+	check(modal.open_peek(), "Peek can start afresh after its ancestor was hidden")
+	await settle_peek()
+	controller.set_mode(InteractionController.MODE_USE)
+	var fixture := replacement_controller(InteractionController.MODE_ORGANIZE)
+	var replacement := fixture.controller as InteractionController
+	modal.configure(replacement)
+	await frames()
+	check(not modal.is_peeking() and not modal.is_open() and not replacement.is_world_input_blocked(),
+		"Controller replacement closes Peek without transferring an input lock")
+	check(controller.current_mode == InteractionController.MODE_USE and replacement.current_mode == InteractionController.MODE_ORGANIZE,
+		"Peek controller replacement preserves both selections")
+	check(modal.open_peek(), "Replacement controller can start a new Peek session")
+	await settle_peek()
+	(fixture.host as Node).remove_child(replacement)
+	await frames()
+	check(not modal.is_peeking() and not modal.open_peek(), "Removed controller retires Peek and cannot reopen it")
+	modal.configure(controller)
+	replacement.queue_free()
+	(fixture.host as Node).queue_free()
+	check(modal.open_peek(), "Original controller can reopen Peek after replacement removal")
+	await settle_peek()
+	root.remove_child(screen)
+	await frames()
+	root.add_child(screen)
+	await frames()
+	check(not modal.is_peeking() and not modal.is_open() and not controller.is_world_input_blocked(),
+		"Scene exit/reentry clears Peek as well as full modal ownership")
+	check(modal.open_peek(), "Reentered live scene can start Peek again")
+	await settle_peek()
+	modal.close_peek()
+	await frames()
+	check(modal.open(), "Ancestor visibility test starts a full notebook")
+	await settle()
+	ui_root.hide()
+	await frames()
+	check(not modal.is_open() and not modal.visible and not book.busy and not book.opened,
+		"Hiding the full notebook's ancestor clears its local visibility and active motion")
+	ui_root.show()
+	await frames()
+	check(not controller.is_world_input_blocked() and not modal.is_open() and not modal.is_peeking(),
+		"Restoring the HUD after full-modal hide leaves no invisible modal blocker")
+	check(modal.open(), "Pending-collapse visibility test opens full notebook")
+	await settle()
+	check(modal.open_peek(), "Full notebook requests a delayed Peek before ancestor hide")
+	ui_root.hide()
+	await frames()
+	ui_root.show()
+	await settle_peek()
+	check(not modal.is_open() and not modal.is_peeking() and not controller.is_world_input_blocked(),
+		"Hidden pending collapse cannot resurrect Peek after the HUD returns")
+
+
+func check_peek_reentrant_handoff() -> void:
+	check(modal.open(), "Reentrant close test begins a full notebook")
+	await settle()
+	modal.closed.connect(modal.close, CONNECT_ONE_SHOT)
+	check(modal.open_peek(), "Full-to-Peek starts before a close observer")
+	await settle_peek()
+	check(not modal.is_open() and not modal.is_peeking() and not controller.is_world_input_blocked(),
+		"A synchronous close observer cancels the pending Peek instead of resurrecting it")
+	check(modal.open(), "Reentrant open test begins a full notebook")
+	await settle()
+	modal.closed.connect(modal.open, CONNECT_ONE_SHOT)
+	check(modal.open_peek(), "Full-to-Peek starts before an open observer")
+	await settle_peek()
+	check(modal.is_open() and not modal.is_peeking() and controller.is_world_input_blocked() and book.opened,
+		"A synchronous open observer retains full ownership without a later automatic collapse")
+	await close_modal()
+
+
 func check_live_world() -> void:
 	controller.set_mode(InteractionController.MODE_USE)
 	kettle.discard_contents()
@@ -389,6 +562,9 @@ func run() -> void:
 	screen.set_portion_provider(stock)
 	check(not modal.is_open() and not controller.is_world_input_blocked(), "Normal Tong scene begins without a modal lock")
 	check(modal.get_parent() == controller.modal_root, "Production notebook belongs to the existing ModalStack")
+	await check_peek_world_and_handoff()
+	await check_peek_lifecycle()
+	await check_peek_reentrant_handoff()
 	await check_modes_and_pages()
 	await check_live_world()
 	await check_gesture_cancellation()

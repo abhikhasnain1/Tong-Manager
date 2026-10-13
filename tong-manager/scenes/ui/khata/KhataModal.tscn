@@ -123,6 +123,10 @@ text = "›"
 layout_mode = 0
 text = "Close khata"
 
+[node name="PeekButton" type="Button" parent="."]
+layout_mode = 0
+text = "Pantry peek"
+
 [node name="Hint" type="Label" parent="."]
 layout_mode = 0
 mouse_filter = 2

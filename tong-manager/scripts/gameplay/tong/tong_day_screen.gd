@@ -37,7 +37,7 @@ func _ready() -> void:
 
 func _on_khata_input(_viewport: Node, event: InputEvent, _shape_index: int) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		if khata_modal.open():
+		if khata_modal.open_peek():
 			get_viewport().set_input_as_handled()
 
 
