@@ -89,6 +89,7 @@ anchor_bottom = 1.0
 mouse_filter = 2
 
 [node name="TabContainer" type="Control" parent="."]
+z_index = 1
 layout_mode = 0
 mouse_filter = 2
 

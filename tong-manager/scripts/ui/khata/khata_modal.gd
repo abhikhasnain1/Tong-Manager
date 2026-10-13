@@ -691,7 +691,8 @@ func _layout() -> void:
 	_place_ink($PreviousButton, Vector2(-420, 590))
 	_place_ink($NextButton, Vector2(390, 590))
 	var reading := book.opened and not book.busy and not _closing and not is_traveling() and not exporting
-	$TabContainer.visible = not exporting and not is_traveling()
+	# Bookmarks stay attached during travel, with input disabled until reading.
+	$TabContainer.visible = not exporting
 	for index in range(4):
 		var button := $TabContainer.get_node(TAB_NAMES[index]) as Button
 		var tab := book.make_tab_rect(index)
