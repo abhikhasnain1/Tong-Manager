@@ -1,0 +1,412 @@
+extends SceneTree
+## Production modal ownership and live-world checks; clock/patience are explicit contract fixtures.
+
+class ProgressFixture extends Node:
+	var elapsed := 0.0
+	var patience := 100.0
+	func _process(delta: float) -> void:
+		elapsed += delta
+		patience -= delta
+
+class ExportTarget extends DropZone:
+	var controller: InteractionController
+	var applied := 0
+	func _init() -> void:
+		var preview := Sprite2D.new()
+		preview.name = "DebugPreview"
+		preview.hide()
+		add_child(preview)
+		snap_radius = 35
+	func is_relevant_to(payload: HeldItemPayload) -> bool:
+		return payload != null and payload.metadata.get("category") == &"ingredient_portion"
+	func accepts(payload: HeldItemPayload) -> DropValidation:
+		if not is_inside_tree() or is_queued_for_deletion() or not controller.can_address_drop_zone(payload, self):
+			return DropValidation.invalid("Inactive contract target")
+		var portion := payload.metadata.get("portion") as IngredientPortion
+		return DropValidation.valid() if portion != null and portion.is_available() else DropValidation.invalid("Expired portion")
+	func try_apply_drop(payload: HeldItemPayload) -> bool:
+		return accepts(payload).is_valid and (payload.metadata.portion as IngredientPortion).commit(_apply)
+	func _apply() -> bool:
+		applied += 1
+		return true
+
+var checks := 0
+var failures: Array[String] = []
+var screen: Node2D
+var controller: InteractionController
+var modal: Control
+var book: Node2D
+var kettle: Kettle
+var stove: Stove
+var stock: InventoryState
+var water: DailyWaterSupply
+
+
+func _initialize() -> void:
+	call_deferred("run")
+
+
+func check(ok: bool, label: String) -> void:
+	checks += 1
+	if not ok:
+		failures.append(label)
+		push_error(label)
+
+
+func frames(count := 3) -> void:
+	for index in count:
+		await process_frame
+		await physics_frame
+
+
+func settle() -> void:
+	var deadline := Time.get_ticks_msec() + 9000
+	while book.busy and Time.get_ticks_msec() < deadline:
+		await process_frame
+	check(not book.busy, "Notebook animation settles")
+	await frames()
+
+
+func point(node: Node2D) -> Vector2:
+	return node.get_global_transform_with_canvas().origin
+
+
+func close_modal() -> void:
+	modal.close()
+	await settle()
+	check(not modal.is_open() and not controller.is_world_input_blocked(), "Closing relinquishes modal input ownership")
+
+
+func sugar() -> IngredientPortionSource:
+	return screen.get_node("WorldRoot/ToolLayer/ReadyItemRail/SugarCan/IngredientSource") as IngredientPortionSource
+
+
+func check_modes_and_pages() -> void:
+	for mode in [InteractionController.MODE_NEUTRAL, InteractionController.MODE_ORGANIZE, InteractionController.MODE_USE]:
+		controller.set_mode(mode)
+		check(modal.open(), "%s can open the notebook" % mode)
+		check(modal.is_open() and controller.is_world_input_blocked(), "Opening animation already owns modal input")
+		await settle()
+		check(controller.current_mode == mode, "Opening preserves the selected interaction mode")
+		check(not sugar().begin_portion(point(sugar().source_owner)), "Modal prevents ordinary source extraction")
+		check(not kettle.begin_drag(point(kettle.get_node("GripAnchor"))), "Modal prevents ordinary kettle pickup")
+		await close_modal()
+		check(controller.current_mode == mode, "Close restores the prior %s selection" % mode)
+	check(modal.open(), "Notebook opens for shell page selection")
+	await settle()
+	for index in range(4):
+		modal.select_page(index)
+		await settle()
+		check(modal.page_index == index and book.spread == index, "Shell page %d follows the shared notebook spread" % index)
+		var pages := modal.get_node("Pages")
+		for child_index in pages.get_child_count():
+			var child := pages.get_child(child_index) as Control
+			check(child.visible == (child_index == index), "Only the selected shell page is active")
+	await close_modal()
+
+
+func check_live_world() -> void:
+	controller.set_mode(InteractionController.MODE_USE)
+	kettle.discard_contents()
+	kettle.add_water(600)
+	kettle.temperature = 45
+	stove.burners[0].set_heat(1)
+	var cup := screen.get_cups()[0] as Cup
+	cup.receive_liquid(&"black_tea", 120, 80)
+	cup.add_relish(&"sugar")
+	var progress := ProgressFixture.new()
+	screen.add_child(progress)
+	var rig: HangingSourceBody = screen.hanging_sources[0]
+	rig.body.angular_velocity = 0.7
+	rig.body.sleeping = false
+	var ids := [screen.get_instance_id(), kettle.get_instance_id(), cup.get_instance_id()]
+	var kettle_transform := kettle.global_transform
+	var cup_transform := cup.global_transform
+	var quantities := stock.quantities
+	var supply_before := water.remaining_ml
+	var day := water.day_id
+	check(modal.open(), "Live simulation opens its notebook")
+	await settle()
+	var heat := kettle.temperature
+	var cooling := cup.temperature
+	var angle := rig.body.rotation
+	var clock_before := progress.elapsed
+	var patience_before := progress.patience
+	rig.body.angular_velocity = 0.7
+	rig.body.sleeping = false
+	await create_timer(0.18).timeout
+	check(kettle.temperature > heat and cup.temperature < cooling, "Applied heat and cup cooling continue under the modal")
+	check(not is_equal_approx(rig.body.rotation, angle), "Existing pinned-body motion continues under the modal")
+	check(not rig.can_brush(), "Modal blocks new hanging impulses while existing motion advances")
+	check(progress.elapsed > clock_before and progress.patience < patience_before and not paused,
+		"Clock/patience contract fixtures continue; the scene tree is not paused")
+	kettle.temperature = kettle.config.boiling_temperature
+	check(kettle.add_tea_leaves(), "Test establishes a brewing transition while the notebook is open")
+	var steep := kettle.steep_progress
+	await create_timer(0.12).timeout
+	check(kettle.steep_progress > steep, "Steep progression continues independently while Khata owns input")
+	await close_modal()
+	check(ids == [screen.get_instance_id(), kettle.get_instance_id(), cup.get_instance_id()], "Opening and closing retain the exact live scene and vessels")
+	check(kettle.global_transform.is_equal_approx(kettle_transform) and cup.global_transform.is_equal_approx(cup_transform), "Notebook ownership preserves committed placements")
+	check(kettle.volume_ml == 600 and cup.volume_ml == 120 and cup.relish_item_ids == [&"sugar"], "Notebook does not reset liquid or ingredient contents")
+	check(stock.quantities == quantities and water.remaining_ml == supply_before and water.day_id == day, "Notebook never replenishes stock/water or begins a new day")
+	stove.burners[0].set_heat(0)
+	progress.queue_free()
+
+
+func check_gesture_cancellation() -> void:
+	controller.set_mode(InteractionController.MODE_ORGANIZE)
+	var handle := sugar().placement_handle
+	var owner_node := handle.item
+	var parent := owner_node.get_parent()
+	var original := owner_node.transform
+	check(handle.begin_drag(point(owner_node)), "Organize test begins a whole-container drag")
+	controller.update_drag(point(owner_node) + Vector2(-250, 50))
+	check(modal.open(), "Opening cancels an Organize gesture")
+	check(not controller.is_dragging() and owner_node.get_parent() == parent and owner_node.transform.is_equal_approx(original), "Container cancellation restores its owner and exact placement")
+	await settle()
+	await close_modal()
+	check(controller.current_mode == InteractionController.MODE_ORGANIZE, "Organize selection survives interruption")
+	controller.set_mode(InteractionController.MODE_USE)
+	var before := stock.remaining(&"sugar")
+	check(sugar().begin_portion(point(sugar().source_owner)), "Use test reserves an ingredient portion")
+	var held := controller.current_drag_node
+	check(modal.open(), "Opening cancels a reserved physical-source portion")
+	check(stock.remaining(&"sugar") == before and stock.available(&"sugar") == before, "Opening returns reserved stock without debiting or refunding prior use")
+	await settle()
+	check(not is_instance_valid(held) and Input.mouse_mode == Input.MOUSE_MODE_VISIBLE, "Opening disposes the held visual and restores cursor ownership")
+	await close_modal()
+	kettle.advance_brewing(kettle.config.steep_seconds)
+	var cup := screen.get_cups()[1] as Cup
+	cup.reset_clean()
+	var kettle_origin := kettle.global_transform
+	check(kettle.begin_drag(point(kettle.get_node("GripAnchor"))), "Held-pour test picks up the kettle")
+	var target := point(cup.get_node("PourTarget"))
+	controller.update_drag(point(kettle.get_node("GripAnchor")) + target - kettle.get_pour_probe_viewport())
+	kettle.update_held_pour(true)
+	check(kettle.is_pouring, "Spout-targeted held pouring starts before modal interruption")
+	kettle.update_pour(0.1)
+	var kettle_volume := kettle.volume_ml
+	var cup_volume := cup.volume_ml
+	check(modal.open(), "Notebook interrupts held pouring")
+	check(not kettle.is_pouring and not kettle.is_held and not controller.is_dragging() and not controller.has_active_action(), "Opening ends pour and drag ownership")
+	await settle()
+	check(kettle.volume_ml == kettle_volume and cup.volume_ml == cup_volume, "Already transferred liquid remains conserved and hidden pouring does not continue")
+	check(kettle.global_transform.is_equal_approx(kettle_origin), "Kettle returns to its pre-drag placement")
+	await close_modal()
+
+
+func check_export_fixture() -> void:
+	controller.set_mode(InteractionController.MODE_NEUTRAL)
+	check(modal.open(), "Neutral notebook opens for contract-only export")
+	await settle()
+	var owner_node := Node2D.new()
+	screen.add_child(owner_node)
+	var target := ExportTarget.new()
+	target.controller = controller
+	screen.get_node("WorldRoot/DropZoneRoot").add_child(target)
+	target.position = Vector2(980, 660)
+	controller.register_drop_zone(target)
+	for action in ["success", "cancel", "close"]:
+		var before := stock.remaining(&"sugar")
+		var portion := IngredientPortion.new(&"sugar", &"spoonful", owner_node, stock)
+		portion.token = stock.reserve(portion.item_id, portion.unit, 1, portion.source_id)
+		var visual := IngredientPortionVisual.new(&"sugar", &"spoonful")
+		var payload := portion.create_payload(visual)
+		var allowed: Array[DropZone] = [target]
+		check(modal.begin_export(payload, visual, point(target), allowed), "Modal begins a controlled %s export" % action)
+		check(modal.exporting and controller.current_mode == InteractionController.MODE_NEUTRAL, "Export does not overwrite the prior selected mode")
+		match action:
+			"success": controller.release_drop(point(target))
+			"cancel": modal.cancel_export()
+			"close": modal.close()
+		await frames()
+		check(not modal.exporting and not controller.is_dragging(), "%s retires modal export ownership" % action)
+		check(stock.remaining(&"sugar") == before - (1 if action == "success" else 0)
+			and stock.available(&"sugar") == stock.remaining(&"sugar"), "%s resolves shared stock exactly once" % action)
+		check(not target.try_apply_drop(payload), "Resolved export cannot be replayed")
+		if action != "close": check(modal.is_open() and controller.is_world_input_blocked(), "Resolving export restores modal blocking")
+	await settle()
+	check(target.applied == 1 and not modal.is_open() and not controller.is_world_input_blocked(), "Only accepted contract export applies; close clears its lock")
+	controller.unregister_drop_zone(target)
+	target.queue_free()
+	owner_node.queue_free()
+
+
+func check_hidden_book() -> void:
+	check(modal.open(), "Visibility test opens the notebook")
+	await settle()
+	modal.select_page(0)
+	await settle()
+	book.request_turn(1)
+	check(book.busy, "Visibility test interrupts a live page animation")
+	modal.hide()
+	await frames()
+	check(not modal.is_open() and not controller.is_world_input_blocked(), "External hiding releases modal ownership")
+	check(not book.busy and not book.opened and not book.dragging, "External hiding retires unfinished book motion")
+	check(modal.open(), "Notebook can reopen after hidden animation cancellation")
+	await settle()
+	check(book.opened and controller.is_world_input_blocked(), "Reopened notebook restores visual and input ownership together")
+	await close_modal()
+	check(modal.open(), "Opening animation can be interrupted by external hiding")
+	modal.hide()
+	await frames()
+	check(not modal.is_open() and not book.busy and not controller.is_world_input_blocked(), "Hiding during cover opening leaves no stale tween or lock")
+
+
+func replacement_controller(mode: StringName) -> Dictionary:
+	var host := Node2D.new()
+	var drag_layer := Node2D.new()
+	drag_layer.name = "DragLayer"
+	host.add_child(drag_layer)
+	var zones := Node2D.new()
+	zones.name = "Zones"
+	host.add_child(zones)
+	var replacement := InteractionController.new()
+	replacement.drag_layer_path = NodePath("../DragLayer")
+	replacement.drop_zone_root_path = NodePath("../Zones")
+	host.add_child(replacement)
+	screen.add_child(host)
+	replacement.modal_root = controller.modal_root
+	replacement.set_mode(mode)
+	return {"host": host, "controller": replacement, "zones": zones}
+
+
+func export_record(interaction: InteractionController, host: Node, zones: Node) -> Dictionary:
+	var owner_node := Node2D.new()
+	host.add_child(owner_node)
+	var target := ExportTarget.new()
+	target.controller = interaction
+	zones.add_child(target)
+	target.position = Vector2(980, 660)
+	interaction.register_drop_zone(target)
+	var portion := IngredientPortion.new(&"sugar", &"spoonful", owner_node, stock)
+	portion.token = stock.reserve(portion.item_id, portion.unit, 1, portion.source_id)
+	var visual := IngredientPortionVisual.new(&"sugar", &"spoonful")
+	return {"portion": portion, "visual": visual, "payload": portion.create_payload(visual), "target": target}
+
+
+func begin_record(record: Dictionary) -> bool:
+	var allowed: Array[DropZone] = [record.target]
+	return modal.begin_export(record.payload, record.visual, point(record.target), allowed)
+
+
+func check_controller_lifecycle() -> void:
+	controller.set_mode(InteractionController.MODE_USE)
+	check(modal.open(), "Controller replacement begins with an active notebook")
+	await settle()
+	var before := stock.remaining(&"sugar")
+	var record := export_record(controller, screen, screen.get_node("WorldRoot/DropZoneRoot"))
+	check(begin_record(record), "Old controller owns a reserved export before replacement")
+	var fixture := replacement_controller(InteractionController.MODE_ORGANIZE)
+	var replacement := fixture.controller as InteractionController
+	modal.configure(replacement)
+	await frames()
+	check(not controller.is_dragging() and not controller.is_modal_export_active()
+		and not controller.is_world_input_blocked(), "Rebinding releases the old controller's gesture and modal lock")
+	check(stock.remaining(&"sugar") == before and stock.available(&"sugar") == before
+		and not record.portion.is_available() and not is_instance_valid(record.visual), "Rebinding retires the old reservation and transient visual without consumption")
+	check(not modal.is_open() and not modal.visible and not modal.exporting and not book.busy and not book.opened,
+		"Rebinding closes and resets the previous notebook session")
+	check(replacement.current_mode == InteractionController.MODE_ORGANIZE
+		and controller.current_mode == InteractionController.MODE_USE, "Rebinding preserves each controller's distinct mode")
+	check(modal.open(), "New controller opens a fresh notebook session")
+	await settle()
+	check(replacement.is_world_input_blocked() and replacement.current_mode == InteractionController.MODE_ORGANIZE,
+		"Fresh session belongs to the new controller without forcing its mode")
+	controller.set_mode(InteractionController.MODE_NEUTRAL)
+	check(modal.is_open(), "Disconnected old-controller signals cannot close the replacement session")
+	modal.close()
+	await settle()
+	check(not replacement.is_world_input_blocked() and replacement.current_mode == InteractionController.MODE_ORGANIZE,
+		"Closing the replacement session releases its own lock and preserves its mode")
+	modal.configure(controller)
+	controller.unregister_drop_zone(record.target)
+	(record.portion.source_ref.get_ref() as Node).queue_free()
+	(record.target as Node).queue_free()
+	(fixture.host as Node).queue_free()
+	await frames()
+	for action in ["detach_active", "detach_export", "free_active", "free_export"]:
+		fixture = replacement_controller(InteractionController.MODE_ORGANIZE)
+		replacement = fixture.controller
+		modal.configure(replacement)
+		check(modal.open(), "%s begins a fresh active session" % action)
+		await settle()
+		before = stock.remaining(&"sugar")
+		record = {}
+		if action.ends_with("export"):
+			record = export_record(replacement, fixture.host, fixture.zones)
+			check(begin_record(record), "%s begins a reserved export" % action)
+		if action.begins_with("detach"):
+			(fixture.host as Node).remove_child(replacement)
+		else:
+			replacement.queue_free()
+		# An input event can arrive before the modal's next process callback.
+		var key := InputEventKey.new()
+		key.keycode = KEY_K
+		key.pressed = true
+		modal._input(key)
+		check(not modal.open(), "%s cannot reopen through stale controller input" % action)
+		await frames()
+		check(not modal.is_open() and not modal.visible and not modal.exporting
+			and not book.busy and not book.opened, "%s leaves no stale book or export state" % action)
+		check(stock.remaining(&"sugar") == before and stock.available(&"sugar") == before
+			and Input.mouse_mode == Input.MOUSE_MODE_VISIBLE, "%s preserves stock and releases pointer ownership" % action)
+		if not record.is_empty():
+			check(not record.portion.is_available() and not is_instance_valid(record.visual), "%s retires its payload and held visual" % action)
+		check(not controller.is_world_input_blocked(), "%s leaves no orphaned visible modal blocking the live world" % action)
+		if action.begins_with("detach"):
+			check(not replacement.is_dragging() and not replacement.is_modal_export_active(), "Detached controller retains no gesture or export session")
+			(fixture.host as Node).add_child(replacement)
+			await frames()
+			check(modal.open(), "Reentered controller can acquire a new modal session")
+			await settle()
+			modal.close()
+			await settle()
+		modal.configure(controller)
+		(fixture.host as Node).queue_free()
+		await frames()
+	check(modal.controller == controller and not modal.is_open(), "Controller lifecycle fixtures restore the original normal-scene binding")
+
+
+func run() -> void:
+	root.size = Vector2i(1920, 1080)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var state := root.get_node("GameState")
+	check(state.reset_demo_state(), "Test initializes authoritative supplies")
+	stock = state.inventory
+	water = state.water_supply
+	screen = load("res://scenes/gameplay/tong/TongDayScreen.tscn").instantiate()
+	root.add_child(screen)
+	await frames()
+	controller = screen.get_node("InteractionController")
+	modal = screen.khata_modal
+	book = modal.book
+	book.sound_enabled = false
+	kettle = screen.get_node("WorldRoot/ToolLayer/KettleStation")
+	stove = screen.get_node("WorldRoot/ToolLayer/StoveStation")
+	# Source injection is a fixture here; it does not implement the later pantry UI.
+	screen.set_portion_provider(stock)
+	check(not modal.is_open() and not controller.is_world_input_blocked(), "Normal Tong scene begins without a modal lock")
+	check(modal.get_parent() == controller.modal_root, "Production notebook belongs to the existing ModalStack")
+	await check_modes_and_pages()
+	await check_live_world()
+	await check_gesture_cancellation()
+	await check_export_fixture()
+	await check_hidden_book()
+	await check_controller_lifecycle()
+	controller.set_mode(InteractionController.MODE_ORGANIZE)
+	check(modal.open(), "Teardown fixture opens the modal")
+	await settle()
+	root.remove_child(screen)
+	await frames()
+	root.add_child(screen)
+	await frames()
+	check(not modal.is_open() and not controller.is_world_input_blocked(), "Scene exit/reentry leaves no stale modal lock")
+	check(modal.open(), "The reentered scene can open its notebook again")
+	await settle()
+	screen.queue_free()
+	await frames()
+	check(Input.mouse_mode == Input.MOUSE_MODE_VISIBLE and stock.available(&"sugar") == stock.remaining(&"sugar"), "Final teardown clears cursor and reservations")
+	print("KHATA_MODAL: %d checks; %d failures" % [checks, failures.size()])
+	quit(0 if failures.is_empty() else 1)

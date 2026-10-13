@@ -43,6 +43,12 @@ var _resolving_drag := false
 var _queued_mode: StringName = &""
 var _was_world_blocked := false
 var _portion_mouse_mode := -1
+var _modal_export_owner: Control
+var _modal_export_payload: HeldItemPayload
+var _modal_export_targets: Array[DropZone] = []
+var _modal_export_ignored_ui: Array[Control] = []
+var _active_drag_layer: Node2D
+var _starting_modal_export := false
 
 
 func report_hint(text: String) -> void:
@@ -71,8 +77,108 @@ func set_world_input_blocked(owner_node: Node, blocked: bool) -> void:
 		cancel_world_action()
 		report_hint("Close the open panel to interact")
 	else:
+		end_modal_export(owner_node)
 		_input_blockers.erase(owner_node.get_instance_id())
 		_report_mode_hint()
+
+
+func begin_modal_export(owner_node: Control, payload: HeldItemPayload, visual: Node2D, point: Vector2,
+		export_layer: Node2D, allowed_targets: Array[DropZone], ignored_ui: Array[Control]) -> bool:
+	# A modal lends one exact portion access to an explicit set of targets. Its
+	# ordinary world-input lock remains held throughout the export.
+	if (_resolving_drag or _starting_modal_export or current_payload != null or has_active_action()
+		or not point.is_finite() or not _export_owner_has_exclusive_input(owner_node)
+		or not _live_node(export_layer) or not owner_node.is_ancestor_of(export_layer)
+		or not export_layer.is_visible_in_tree() or is_zero_approx(export_layer.get_global_transform_with_canvas().determinant())
+		or not is_instance_valid(visual) or visual.is_queued_for_deletion()
+		or visual == export_layer or visual.is_ancestor_of(export_layer)
+		or payload == null or payload.world_node != visual or not bool(payload.metadata.get("transient", false))):
+		return false
+	var portion := payload.metadata.get("portion") as IngredientPortion
+	if (portion == null or not portion.is_available() or payload.item_id != portion.item_id
+		or payload.quantity != portion.quantity or payload.metadata.get("unit") != portion.unit
+		or payload.metadata.get("item_id") != portion.item_id or payload.metadata.get("quantity") != portion.quantity
+		or payload.metadata.get("source_id") != portion.source_id
+		or payload.metadata.get("cleanup_callback") != Callable(portion, "cancel")):
+		return false
+	for control in ignored_ui:
+		if not _live_node(control) or (control != owner_node and not owner_node.is_ancestor_of(control)):
+			return false
+	var targets: Array[DropZone] = []
+	for zone in allowed_targets:
+		if not _live_node(zone):
+			return false
+		if not targets.has(zone):
+			targets.append(zone)
+	if targets.is_empty():
+		return false
+	_starting_modal_export = true
+	_modal_export_owner = owner_node
+	_modal_export_payload = payload
+	_modal_export_targets = targets
+	_modal_export_ignored_ui = ignored_ui.duplicate()
+	_start_drag_in_layer(payload, visual, point, export_layer)
+	_starting_modal_export = false
+	var active := is_modal_export_active(owner_node)
+	if not active and current_payload == payload:
+		cancel_drag()
+	return active
+
+
+func end_modal_export(owner_node: Node) -> void:
+	if _modal_export_payload == null or owner_node != _modal_export_owner:
+		return
+	# A synchronous target/stock callback cannot interrupt its own commit. Every
+	# resolution clears the session before its final drag signal is delivered.
+	if not _resolving_drag:
+		cancel_drag()
+
+
+func is_modal_export_active(owner_node: Control = null) -> bool:
+	return (_modal_export_payload != null and current_payload == _modal_export_payload
+		and (owner_node == null or owner_node == _modal_export_owner)
+		and _export_owner_has_exclusive_input(_modal_export_owner))
+
+
+func can_address_drop_zone(payload: HeldItemPayload, zone: DropZone) -> bool:
+	if (payload == null or payload != current_payload or not _live_node(zone)
+		or not _live_node(current_drag_node) or payload.world_node != current_drag_node):
+		return false
+	if _modal_export_payload != null:
+		return is_modal_export_active() and payload == _modal_export_payload and _modal_export_targets.has(zone) and zone.is_visible_in_tree()
+	return current_mode != MODE_NEUTRAL and not is_world_input_blocked()
+
+
+func _live_node(node: Node) -> bool:
+	return is_instance_valid(node) and node.is_inside_tree() and not node.is_queued_for_deletion()
+
+
+func _export_owner_has_exclusive_input(owner_node: Control) -> bool:
+	if (not _live_node(owner_node) or not owner_node.is_visible_in_tree()
+		or not _live_node(modal_root) or not modal_root.is_visible_in_tree()
+		or not modal_root.is_ancestor_of(owner_node)):
+		return false
+	# Reuse blocker cleanup, but never use its boolean to unblock ordinary input.
+	is_world_input_blocked()
+	if _input_blockers.size() != 1 or not _input_blockers.has(owner_node.get_instance_id()):
+		return false
+	for child in modal_root.get_children():
+		if child is CanvasItem and child.is_visible_in_tree() and child != owner_node and not child.is_ancestor_of(owner_node):
+			return false
+	return true
+
+
+func _drag_input_allowed() -> bool:
+	if _modal_export_payload == null:
+		return not is_world_input_blocked()
+	var portion := _modal_export_payload.metadata.get("portion") as IngredientPortion
+	return is_modal_export_active() and portion != null and portion.is_available()
+
+
+func _drag_pointer_over_ui(point: Vector2) -> bool:
+	if _modal_export_payload != null:
+		return _ui_branch_covers_point(get_viewport(), point, _modal_export_ignored_ui)
+	return is_pointer_over_ui()
 
 
 func is_pointer_over_ui() -> bool:
@@ -92,13 +198,13 @@ func is_pointer_over_ui_at(viewport_position: Vector2) -> bool:
 	return _ui_branch_covers_point(get_viewport(), viewport_position)
 
 
-func _ui_branch_covers_point(node: Node, viewport_position: Vector2) -> bool:
+func _ui_branch_covers_point(node: Node, viewport_position: Vector2, ignored: Array[Control] = []) -> bool:
 	if node.is_queued_for_deletion() or (node is Viewport and node != get_viewport()):
 		return false
-	if node is Control and _control_covers_point(node as Control, viewport_position):
+	if node is Control and not ignored.has(node) and _control_covers_point(node as Control, viewport_position):
 		return true
 	for child in node.get_children():
-		if _ui_branch_covers_point(child, viewport_position):
+		if _ui_branch_covers_point(child, viewport_position, ignored):
 			return true
 	return false
 
@@ -175,6 +281,12 @@ func _enter_tree() -> void:
 func _ready() -> void:
 	assert(drag_layer != null, "InteractionController requires a DragLayer reference.")
 	assert(drop_zone_root != null, "InteractionController requires a DropZoneRoot reference.")
+	get_viewport().size_changed.connect(_on_export_viewport_resized)
+
+
+func _on_export_viewport_resized() -> void:
+	if _modal_export_payload != null:
+		cancel_world_action()
 
 
 func _exit_tree() -> void:
@@ -199,7 +311,7 @@ func _input(event: InputEvent) -> void:
 		return
 	# Gameplay owns both edges of Space during a drag, before focused GUI buttons.
 	if (is_dragging() or has_active_action()) and event.is_action(INPUT_POUR):
-		if event.is_action_pressed(INPUT_POUR):
+		if _modal_export_payload == null and event.is_action_pressed(INPUT_POUR):
 			action_requested.emit(INPUT_POUR)
 		get_viewport().set_input_as_handled()
 		return
@@ -223,7 +335,8 @@ func _notification(what: int) -> void:
 
 func _process(_delta: float) -> void:
 	var blocked := is_world_input_blocked()
-	if blocked and (not _was_world_blocked or has_active_action() or current_payload != null):
+	var valid_export := _modal_export_payload != null and _drag_input_allowed()
+	if blocked and not valid_export and (not _was_world_blocked or has_active_action() or current_payload != null):
 		cancel_world_action()
 		report_hint("Close the open panel to interact")
 	elif _was_world_blocked and not blocked:
@@ -232,7 +345,7 @@ func _process(_delta: float) -> void:
 	if current_payload == null:
 		return
 	if (not is_instance_valid(current_drag_node) or not current_drag_node.is_inside_tree()
-		or current_drag_node.is_queued_for_deletion() or is_world_input_blocked()):
+		or current_drag_node.is_queued_for_deletion() or not _live_node(_active_drag_layer) or not _drag_input_allowed()):
 		cancel_drag()
 		return
 	_update_hovered_drop_zone(_last_pointer)
@@ -296,37 +409,46 @@ func start_drag(payload: HeldItemPayload, drag_node: Node2D, viewport_position: 
 		return false
 	if current_payload != null:
 		cancel_drag()
+	_start_drag_in_layer(payload, drag_node, viewport_position, drag_layer)
+	return true
+
+
+func _start_drag_in_layer(payload: HeldItemPayload, drag_node: Node2D, viewport_position: Vector2, layer: Node2D) -> void:
 
 	current_payload = payload
 	current_drag_node = drag_node
+	_active_drag_layer = layer
 	if is_portion_drag():
 		_portion_mouse_mode = Input.mouse_mode
 	_drag_origin_parent = drag_node.get_parent()
 	_drag_had_origin_parent = _drag_origin_parent != null
 	_drag_origin_transform = drag_node.transform
 	if _drag_origin_parent == null:
-		drag_layer.add_child(drag_node)
-		drag_node.position = drag_layer.get_global_transform_with_canvas().affine_inverse() * viewport_position
-	elif _drag_origin_parent != drag_layer:
-		reparent_preserving_transform(drag_node, drag_layer)
+		layer.add_child(drag_node)
+		drag_node.position = layer.get_global_transform_with_canvas().affine_inverse() * viewport_position
+	elif _drag_origin_parent != layer:
+		reparent_preserving_transform(drag_node, layer)
 	_drag_start_pointer = viewport_position
 	_drag_start_position = drag_node.position
 
 	cursor_service.set_state(CURSOR_STATE_DRAGGING)
 	update_drag(viewport_position)
-	drag_started.emit(current_payload, current_drag_node)
-	return true
+	if current_payload == payload:
+		drag_started.emit(current_payload, current_drag_node)
 
 
 func update_drag(viewport_position: Vector2) -> void:
 	if not is_dragging():
+		return
+	if not _live_node(_active_drag_layer) or not _drag_input_allowed():
+		cancel_drag()
 		return
 	_last_pointer = viewport_position
 	# Transform a displacement instead of round-tripping the large absolute
 	# authored position through canvas coordinates. A stationary pickup or a
 	# return to its starting pointer keeps an exact touching base unchanged.
 	var displacement := viewport_position - _drag_start_pointer
-	var canvas_inverse := drag_layer.get_global_transform_with_canvas().affine_inverse()
+	var canvas_inverse := _active_drag_layer.get_global_transform_with_canvas().affine_inverse()
 	current_drag_node.position = _drag_start_position + canvas_inverse.basis_xform(displacement)
 	drag_moved.emit(current_payload, viewport_position)
 	_update_hovered_drop_zone(viewport_position)
@@ -389,16 +511,20 @@ func release_drop(viewport_position: Vector2) -> void:
 	if not current_drag_node.is_inside_tree() or current_drag_node.is_queued_for_deletion():
 		cancel_drag()
 		return
-	if is_world_input_blocked() or is_pointer_over_ui():
+	if not _drag_input_allowed() or _drag_pointer_over_ui(viewport_position):
 		cancel_drag()
 		return
 	update_drag(viewport_position)
-	if not is_instance_valid(hovered_drop_zone) or not hovered_drop_zone.accepts(current_payload).is_valid:
+	if (not is_instance_valid(hovered_drop_zone) or not can_address_drop_zone(current_payload, hovered_drop_zone)
+		or not hovered_drop_zone.accepts(current_payload).is_valid):
 		cancel_drag()
 		return
 
 	var dropped_payload := current_payload
 	var target_zone := hovered_drop_zone
+	if not can_address_drop_zone(dropped_payload, target_zone):
+		cancel_drag()
+		return
 	# Target/stock signals are synchronous. A command owns its gesture until all
 	# observers finish, so a listener cannot replace the payload mid-commit.
 	_resolving_drag = true
@@ -483,7 +609,7 @@ func _apply_drag_cursor(state: StringName) -> void:
 
 
 func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
-	if is_pointer_over_ui() or is_world_input_blocked():
+	if _drag_pointer_over_ui(viewport_position) or not _drag_input_allowed():
 		if is_instance_valid(hovered_drop_zone):
 			hovered_drop_zone.clear_highlight()
 		hovered_drop_zone = null
@@ -497,7 +623,9 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 	var best_invalid_distance := INF
 
 	for zone in _get_available_drop_zones():
-		if not zone.is_inside_tree() or zone.is_queued_for_deletion():
+		if not is_instance_valid(zone) or not zone.is_inside_tree() or zone.is_queued_for_deletion():
+			continue
+		if not can_address_drop_zone(current_payload, zone):
 			continue
 		if not zone.is_relevant_to(current_payload):
 			continue
@@ -552,6 +680,10 @@ func _collect_drop_zones(parent: Node) -> Array[DropZone]:
 
 
 func _get_available_drop_zones() -> Array[DropZone]:
+	if _modal_export_payload != null:
+		# The modal's explicit target contract does not require registering these
+		# temporary adapters as ordinary world targets.
+		return _modal_export_targets.duplicate()
 	var zones := _collect_drop_zones(drop_zone_root)
 	for index in range(_registered_drop_zones.size() - 1, -1, -1):
 		var registered_zone := _registered_drop_zones[index]
@@ -602,3 +734,8 @@ func _clear_drag_state() -> void:
 	_drag_origin_transform = Transform2D.IDENTITY
 	_drag_start_pointer = Vector2.ZERO
 	_drag_start_position = Vector2.ZERO
+	_active_drag_layer = null
+	_modal_export_owner = null
+	_modal_export_payload = null
+	_modal_export_targets.clear()
+	_modal_export_ignored_ui.clear()

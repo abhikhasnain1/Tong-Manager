@@ -13,6 +13,7 @@ const CROP_SAFE_RECT := Rect2(96.0, 0.0, 1728.0, 1080.0)
 var portion_sources: Array[IngredientPortionSource] = []
 var hanging_sources: Array[HangingSourceBody] = []
 var _portion_provider: PortionStockProvider
+var khata_modal: KhataModal
 
 
 func _ready() -> void:
@@ -28,7 +29,16 @@ func _ready() -> void:
 	_configure_portion_sources()
 	_configure_hanging_sources()
 	_configure_portion_target($WorldRoot/ToolLayer/KettleStation)
+	khata_modal = $HUDLayer/RootUI/ModalStack/KhataModal
+	khata_modal.configure(interaction)
+	$WorldRoot/ToolLayer/KhataStation/KhataHotspot.input_event.connect(_on_khata_input)
 	_verify_layout_contract()
+
+
+func _on_khata_input(_viewport: Node, event: InputEvent, _shape_index: int) -> void:
+	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		if khata_modal.open():
+			get_viewport().set_input_as_handled()
 
 
 func set_portion_provider(provider: PortionStockProvider) -> void:

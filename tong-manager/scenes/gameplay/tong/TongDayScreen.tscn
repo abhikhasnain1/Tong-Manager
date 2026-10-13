@@ -30,6 +30,7 @@
 
 [ext_resource type="Script" path="res://scripts/gameplay/interactions/placement_surface.gd" id="31_surface"]
 [ext_resource type="Script" path="res://scripts/gameplay/interactions/table_placeable.gd" id="32_placeable"]
+[ext_resource type="PackedScene" path="res://scenes/ui/khata/KhataModal.tscn" id="33_khata_modal"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_khata"]
 size = Vector2(117, 360)
@@ -456,6 +457,8 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
+
+[node name="KhataModal" parent="HUDLayer/RootUI/ModalStack" instance=ExtResource("33_khata_modal")]
 
 [node name="ToastLayer" type="Control" parent="HUDLayer/RootUI" unique_id=810629054]
 layout_mode = 1
