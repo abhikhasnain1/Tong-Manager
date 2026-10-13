@@ -463,6 +463,7 @@ mouse_filter = 2
 
 [node name="KhataModal" parent="HUDLayer/RootUI/ModalStack" instance=ExtResource("33_khata_modal")]
 peek_path = NodePath("../../KhataPeek")
+cover_path = NodePath("../../../../WorldRoot/ToolLayer/KhataStation/KhataHotspot/Sprite")
 
 [node name="ToastLayer" type="Control" parent="HUDLayer/RootUI" unique_id=810629054]
 layout_mode = 1

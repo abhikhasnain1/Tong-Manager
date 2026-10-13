@@ -1,7 +1,8 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/khata/khata_modal.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/ui/khata/khata_book.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/ui/khata/khata_ink_button.gd" id="3_ink"]
 
 [sub_resource type="Animation" id="Animation_reset"]
 length = 0.001
@@ -94,45 +95,70 @@ mouse_filter = 2
 [node name="InventoryTab" type="Button" parent="TabContainer"]
 layout_mode = 0
 toggle_mode = true
-text = "Pantry"
+tooltip_text = "Pantry"
+script = ExtResource("3_ink")
+ink_icon = &"pantry"
+paper_tab = true
+tab_color = Color(0.568627, 0.658824, 0.470588, 1)
 
 [node name="RecipesTab" type="Button" parent="TabContainer"]
 layout_mode = 0
 toggle_mode = true
-text = "Recipes"
+tooltip_text = "Recipes"
+script = ExtResource("3_ink")
+ink_icon = &"recipes"
+paper_tab = true
+tab_color = Color(0.741176, 0.568627, 0.419608, 1)
 
 [node name="FinanceTab" type="Button" parent="TabContainer"]
 layout_mode = 0
 toggle_mode = true
-text = "Finance"
+tooltip_text = "Finance"
+script = ExtResource("3_ink")
+ink_icon = &"finance"
+paper_tab = true
+tab_color = Color(0.474510, 0.580392, 0.631373, 1)
 
 [node name="QuestsTab" type="Button" parent="TabContainer"]
 layout_mode = 0
 toggle_mode = true
-text = "Quests"
+tooltip_text = "Quests"
+script = ExtResource("3_ink")
+ink_icon = &"quests"
+paper_tab = true
+tab_color = Color(0.674510, 0.580392, 0.670588, 1)
 
 [node name="PreviousButton" type="Button" parent="."]
 layout_mode = 0
-text = "‹"
+tooltip_text = "Previous page"
+script = ExtResource("3_ink")
+ink_icon = &"previous"
 
 [node name="NextButton" type="Button" parent="."]
 layout_mode = 0
-text = "›"
+tooltip_text = "Next page"
+script = ExtResource("3_ink")
+ink_icon = &"next"
 
 [node name="CloseButton" type="Button" parent="."]
 layout_mode = 0
-text = "Close khata"
+tooltip_text = "Put notebook away"
+script = ExtResource("3_ink")
+ink_icon = &"close"
 
 [node name="PeekButton" type="Button" parent="."]
 layout_mode = 0
-text = "Fold to peek"
+tooltip_text = "Fold to peek"
+script = ExtResource("3_ink")
+ink_icon = &"fold"
 
 [node name="Hint" type="Label" parent="."]
+visible = false
 layout_mode = 0
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.90, 0.91, 0.83, 1)
 theme_override_font_sizes/font_size = 17
-text = "Click or drag an outer page edge · Arrow keys turn · Esc closes"
+text = ""
 horizontal_alignment = 1
 
 [node name="DragExportLayer" type="Node2D" parent="."]

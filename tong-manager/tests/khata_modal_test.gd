@@ -61,9 +61,9 @@ func frames(count := 3) -> void:
 
 func settle() -> void:
 	var deadline := Time.get_ticks_msec() + 9000
-	while book.busy and Time.get_ticks_msec() < deadline:
+	while (book.busy or modal.is_traveling()) and Time.get_ticks_msec() < deadline:
 		await process_frame
-	check(not book.busy, "Notebook animation settles")
+	check(not book.busy and not modal.is_traveling(), "Notebook animation and cover journey settle")
 	await frames()
 
 
@@ -140,6 +140,9 @@ func check_peek_world_and_handoff() -> void:
 	modal.close_peek()
 	check(controller.is_dragging() and stock.available(&"sugar") == stock.remaining(&"sugar") - 1,
 		"Closing nonmodal Peek does not cancel an unrelated world reservation")
+	await settle()
+	check(controller.is_dragging() and not controller.is_world_input_blocked(),
+		"Nonmodal return journey preserves the independent gesture without borrowing a world lock")
 	check(modal.open_peek(), "Peek can reopen without interrupting a held world portion")
 	await settle_peek()
 	check(controller.is_dragging(), "Peek arrival leaves the held world portion intact")
@@ -184,7 +187,7 @@ func check_peek_world_and_handoff() -> void:
 	stove.burners[0].set_heat(0)
 	progress.queue_free()
 	modal.close_peek()
-	await frames()
+	await settle()
 	check(not modal.is_peeking() and not modal.is_open() and not controller.is_world_input_blocked(),
 		"Closing Peek leaves neither notebook view nor a world lock")
 	sugar().source_owner.global_transform = source_transform
@@ -219,8 +222,9 @@ func check_peek_lifecycle() -> void:
 	var replacement := fixture.controller as InteractionController
 	modal.configure(replacement)
 	await frames()
-	check(not modal.is_peeking() and not modal.is_open() and not replacement.is_world_input_blocked(),
-		"Controller replacement closes Peek without transferring an input lock")
+	check(not modal.is_peeking() and not modal.is_open() and not replacement.is_world_input_blocked()
+		and not modal.visible and not book.is_visible_in_tree() and modal.cover.visible,
+		"Controller replacement retires the Peek renderer and restores its world cover without transferring a lock")
 	check(controller.current_mode == InteractionController.MODE_USE and replacement.current_mode == InteractionController.MODE_ORGANIZE,
 		"Peek controller replacement preserves both selections")
 	check(modal.open_peek(), "Replacement controller can start a new Peek session")
@@ -242,7 +246,7 @@ func check_peek_lifecycle() -> void:
 	check(modal.open_peek(), "Reentered live scene can start Peek again")
 	await settle_peek()
 	modal.close_peek()
-	await frames()
+	await settle()
 	check(modal.open(), "Ancestor visibility test starts a full notebook")
 	await settle()
 	ui_root.hide()
@@ -270,8 +274,9 @@ func check_peek_reentrant_handoff() -> void:
 	modal.closed.connect(modal.close, CONNECT_ONE_SHOT)
 	check(modal.open_peek(), "Full-to-Peek starts before a close observer")
 	await settle_peek()
-	check(not modal.is_open() and not modal.is_peeking() and not controller.is_world_input_blocked(),
-		"A synchronous close observer cancels the pending Peek instead of resurrecting it")
+	check(not modal.is_open() and not modal.is_peeking() and not controller.is_world_input_blocked()
+		and not modal.visible and modal.cover.visible,
+		"A synchronous close observer cancels pending Peek and restores the world cover instead of resurrecting it")
 	check(modal.open(), "Reentrant open test begins a full notebook")
 	await settle()
 	modal.closed.connect(modal.open, CONNECT_ONE_SHOT)
@@ -280,6 +285,21 @@ func check_peek_reentrant_handoff() -> void:
 	check(modal.is_open() and not modal.is_peeking() and controller.is_world_input_blocked() and book.opened,
 		"A synchronous open observer retains full ownership without a later automatic collapse")
 	await close_modal()
+	check(modal.open(), "Reentrant Peek observer begins a full notebook")
+	await settle()
+	var observation := {"accepted": false, "traveled": true, "page": -1}
+	modal.closed.connect(func():
+		observation.accepted = modal.open_peek()
+		observation.traveled = modal.is_traveling()
+		observation.page = book.spread, CONNECT_ONE_SHOT)
+	var spread: int = book.spread
+	check(modal.open_peek(), "Full-to-Peek starts before a Peek observer")
+	await settle_peek()
+	check(observation.accepted and not observation.traveled and observation.page == spread
+		and modal.is_peeking() and not modal.is_open() and book.spread == spread,
+		"A synchronous Peek observer keeps the folded page in place without replaying a world departure")
+	modal.close_peek()
+	await settle()
 
 
 func page_ids() -> Array[int]:
@@ -312,7 +332,7 @@ func check_shared_folded_pages() -> void:
 	check(book.get_visible_book_rect().size.x < full_rect.size.x and is_equal_approx(book.fold_amount, 1.0),
 		"Settled Peek displays a narrower folded book")
 	for index in range(4):
-		book.select_page(index)
+		modal.select_page(index)
 		await settle()
 		check(modal.is_peeking() and modal.page_index == index and book.get_visible_page_index() == index * 2 + 1,
 			"Peek navigation selects the current right-hand page of spread %d" % index)
@@ -342,11 +362,154 @@ func check_shared_folded_pages() -> void:
 		"Closing the folded notebook preserves the reusable page cache")
 
 
-func settle_fixture(fixture_book: KhataBook) -> void:
+func wait_for_return(value: KhataModal) -> void:
 	var deadline := Time.get_ticks_msec() + 9000
-	while fixture_book.busy and Time.get_ticks_msec() < deadline:
+	while value.book.busy and not value.is_traveling() and Time.get_ticks_msec() < deadline:
 		await process_frame
-	check(not fixture_book.busy, "Isolated fold-lifecycle fixture settles")
+	check(value.is_traveling(), "Closed cover begins its return journey")
+
+
+func check_cover_journey() -> void:
+	var cover := modal.cover as Sprite2D
+	check(is_instance_valid(cover) and cover.is_visible_in_tree(), "Normal scene binds its authored world notebook cover")
+	if not is_instance_valid(cover):
+		return
+	var home := cover.get_global_transform_with_canvas()
+	var authored := cover.transform
+	var quantities := stock.quantities
+	var supply := water.remaining_ml
+	var selected_mode := controller.current_mode
+	check(modal.open(), "Full reading begins with a cover departure")
+	check(modal.is_traveling() and not cover.visible and modal.is_open() and controller.is_world_input_blocked(),
+		"Full departure leases the world cover and owns input from the beginning")
+	var flying := modal._travel_cover as Sprite2D
+	check(is_instance_valid(flying) and flying.texture == cover.texture
+		and flying.get_global_transform_with_canvas().is_equal_approx(home),
+		"Departure uses the exact authored cover art and canvas transform")
+	check(not modal.open() and not modal.open_peek(), "Repeated open requests cannot start a second departure")
+	await settle()
+	check(book.opened and not cover.visible and cover.transform.is_equal_approx(authored),
+		"Reading retains one leased cover without changing its world placement")
+	modal.close()
+	check(book.busy and not modal.is_traveling() and modal.is_open(),
+		"Full close first animates the cover in the reading position")
+	await wait_for_return(modal)
+	check(not book.opened and not book.busy and is_zero_approx(book.opening_amount),
+		"The full notebook is closed before its return flight starts")
+	check(modal.is_open() and controller.is_world_input_blocked() and not cover.visible,
+		"The full return retains exclusive input until its world handoff")
+	flying = modal._travel_cover as Sprite2D
+	var departure := flying.get_global_transform_with_canvas() if is_instance_valid(flying) else home
+	check(not departure.is_equal_approx(home), "Return begins at the reading cover rather than teleporting home")
+	await create_timer(0.18).timeout
+	check(modal.is_traveling() and is_instance_valid(flying)
+		and not flying.get_global_transform_with_canvas().is_equal_approx(departure),
+		"The closed cover visibly moves between reading and world positions")
+	modal.close()
+	check(not modal.open_peek() and modal.is_open(), "Repeated close and reopen requests cannot release the return lock early")
+	await settle()
+	check(cover.visible and cover.transform.is_equal_approx(authored)
+		and cover.get_global_transform_with_canvas().is_equal_approx(home),
+		"Arrival restores the authored cover visibility and exact world transform")
+	check(not modal.is_open() and not modal.is_peeking() and not controller.is_world_input_blocked()
+		and (not is_instance_valid(modal._travel_cover) or not modal._travel_cover.visible),
+		"Arrival leaves one world cover and no flying copy or modal lock")
+	check(stock.quantities == quantities and water.remaining_ml == supply and controller.current_mode == selected_mode,
+		"Round-trip motion preserves stock, water and interaction mode")
+
+
+func check_travel_lifecycle() -> void:
+	var quantities := stock.quantities
+	var supply := water.remaining_ml
+	for action in ["hide_return", "ancestor_full_return", "ancestor_peek_return", "rebind_peek_return", "detach_controller", "detach_cover", "free_cover", "exit_departure", "resize_focus"]:
+		var fixture := load("res://scenes/gameplay/tong/TongDayScreen.tscn").instantiate() as Node2D
+		root.add_child(fixture)
+		await frames()
+		var fixture_modal: KhataModal = fixture.khata_modal
+		var fixture_controller := fixture.get_node("InteractionController") as InteractionController
+		var cover := fixture_modal.cover as Sprite2D
+		var cover_parent := cover.get_parent()
+		var controller_parent := fixture_controller.get_parent()
+		fixture_modal.book.sound_enabled = false
+		check(fixture_modal.open_peek() if action in ["ancestor_peek_return", "rebind_peek_return"] else fixture_modal.open(),
+			"%s fixture begins cover departure" % action)
+		if action == "exit_departure":
+			root.remove_child(fixture)
+			await frames()
+			root.add_child(fixture)
+		else:
+			await settle_fixture(fixture_modal)
+			fixture_modal.close()
+			await wait_for_return(fixture_modal)
+			match action:
+				"hide_return": fixture_modal.hide()
+				"ancestor_full_return", "ancestor_peek_return": (fixture_modal.peek.get_parent() as Control).hide()
+				"rebind_peek_return": fixture_modal.configure(null)
+				"detach_controller": controller_parent.remove_child(fixture_controller)
+				"detach_cover": cover_parent.remove_child(cover)
+				"free_cover": cover.queue_free()
+				"resize_focus":
+					fixture_modal._on_resize()
+					fixture_modal.notification(Node.NOTIFICATION_WM_WINDOW_FOCUS_OUT)
+		await settle_fixture(fixture_modal)
+		check(not fixture_modal.is_open() and not fixture_modal.is_peeking() and not fixture_modal.is_traveling()
+			and not fixture_controller.is_world_input_blocked(), "%s finishes without an orphaned flight or lock" % action)
+		check(not fixture_modal.book.opened and not fixture_modal.book.busy
+			and not fixture_modal.visible
+			and (not is_instance_valid(fixture_modal._travel_cover) or not fixture_modal._travel_cover.visible),
+			"%s retires the book and temporary cover" % action)
+		if is_instance_valid(cover):
+			check(cover.visible, "%s releases the authored cover visibility lease" % action)
+			if not cover.is_inside_tree(): cover_parent.add_child(cover)
+		if not fixture_controller.is_inside_tree(): controller_parent.add_child(fixture_controller)
+		if action == "rebind_peek_return":
+			fixture_modal.configure(fixture_controller)
+			check(fixture_modal.open_peek(), "Controller rebind after Peek return cancellation can open a fresh session")
+			await settle_fixture(fixture_modal)
+			check(fixture_modal.is_peeking() and not fixture_controller.is_world_input_blocked(),
+				"Rebound Peek has neither a stale closing flag nor modal ownership")
+			fixture_modal.close_peek()
+			await settle_fixture(fixture_modal)
+		fixture.queue_free()
+		await frames()
+	check(stock.quantities == quantities and water.remaining_ml == supply,
+		"Interrupted cover journeys never reset shared supplies")
+
+
+func check_peek_travel_coverage() -> void:
+	check(modal.open_peek(), "Moving-input fixture opens Peek")
+	await settle_peek()
+	var peek := modal.peek as Control
+	var old_paper := (peek.get_node("Page") as Control).get_global_rect()
+	modal.close_peek()
+	await create_timer(0.28).timeout
+	check(modal.is_traveling() and not modal.is_open() and not controller.is_world_input_blocked(),
+		"Peek return keeps bounded pointer coverage without acquiring full modal ownership")
+	var book_transform := book.get_global_transform_with_canvas()
+	var moving_bounds: Rect2 = book.get_visible_book_rect()
+	var moving_point := book_transform * moving_bounds.get_center()
+	check(controller.is_pointer_over_ui_at(moving_point), "The visible travelling notebook blocks input through its moving footprint")
+	var old_point := Vector2.INF
+	for ratio in [Vector2(0.1, 0.1), Vector2(0.9, 0.9), Vector2(0.1, 0.9), Vector2(0.9, 0.1)]:
+		var candidate: Vector2 = old_paper.position + old_paper.size * ratio
+		if not moving_bounds.has_point(book_transform.affine_inverse() * candidate):
+			old_point = candidate
+			break
+	check(old_point.is_finite(), "Return movement exposes part of the old Peek position")
+	if old_point.is_finite():
+		check(not peek._has_point(peek.get_global_transform_with_canvas().affine_inverse() * old_point)
+			and not controller.is_pointer_over_ui_at(old_point),
+			"The old Peek rectangle stops blocking once the paper has moved away")
+	await settle()
+	check(not modal.is_peeking() and modal.cover.visible, "Peek return ends at the restored world cover")
+
+
+func settle_fixture(fixture_modal: KhataModal) -> void:
+	var fixture_book := fixture_modal.book
+	var deadline := Time.get_ticks_msec() + 9000
+	while (fixture_book.busy or fixture_modal.is_traveling()) and Time.get_ticks_msec() < deadline:
+		await process_frame
+	check(not fixture_book.busy and not fixture_modal.is_traveling(), "Isolated notebook fixture settles")
 	await frames()
 
 
@@ -364,7 +527,7 @@ func check_fold_destination_lifecycle() -> void:
 		var destination_parent := destination.get_parent()
 		fixture_book.sound_enabled = false
 		check(fixture_modal.open(), "%s fixture opens the full book" % action)
-		await settle_fixture(fixture_book)
+		await settle_fixture(fixture_modal)
 		if action == "detach_closed":
 			fixture_modal.closed.connect(func(): destination_parent.remove_child(destination), CONNECT_ONE_SHOT)
 		elif action == "queue_closed":
@@ -376,11 +539,12 @@ func check_fold_destination_lifecycle() -> void:
 			destination.free()
 		elif action == "queue_during":
 			destination.queue_free()
-		await settle_fixture(fixture_book)
+		await settle_fixture(fixture_modal)
 		check(not fixture_modal.is_open() and not fixture_modal.is_peeking() and not fixture_modal.visible
 			and not fixture_controller.is_world_input_blocked(), "%s leaves no modal lock or orphaned visible book" % action)
 		check(not fixture_book.opened and not fixture_book.busy and not fixture_book.folding,
 			"%s retires the renderer instead of reopening a removed destination" % action)
+		check(fixture_modal.cover.visible, "%s restores the authored world cover after the failed handoff" % action)
 		if is_instance_valid(destination) and not destination.is_inside_tree():
 			destination_parent.add_child(destination)
 		fixture.queue_free()
@@ -403,6 +567,7 @@ func check_peek_other_input_owners() -> void:
 			controller.modal_root.add_child(blocker)
 		check(controller.is_world_input_blocked(), "%s still blocks despite visible Peek's explicit exemption" % kind)
 		await frames()
+		await settle()
 		check(not modal.is_peeking() and not book.opened and controller.is_world_input_blocked(),
 			"%s retires Peek while retaining its own world-input ownership" % kind)
 		if kind == "explicit owner":
@@ -616,6 +781,7 @@ func check_export_to_peek() -> void:
 	check(modal.is_peeking() and not modal.is_open() and not controller.is_world_input_blocked()
 		and not is_instance_valid(record.visual), "Fold completes in Peek without its old export visual or input exception")
 	modal.close_peek()
+	await settle()
 	controller.unregister_drop_zone(record.target)
 	(record.portion.source_ref.get_ref() as Node).queue_free()
 	(record.target as Node).queue_free()
@@ -720,6 +886,9 @@ func run() -> void:
 	screen.set_portion_provider(stock)
 	check(not modal.is_open() and not controller.is_world_input_blocked(), "Normal Tong scene begins without a modal lock")
 	check(modal.get_parent() == controller.modal_root, "Production notebook belongs to the existing ModalStack")
+	await check_cover_journey()
+	await check_travel_lifecycle()
+	await check_peek_travel_coverage()
 	await check_peek_world_and_handoff()
 	await check_peek_lifecycle()
 	await check_peek_reentrant_handoff()

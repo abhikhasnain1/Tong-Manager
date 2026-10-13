@@ -8,8 +8,13 @@ signal book_input(event: InputEvent)
 signal turn_requested(direction: int)
 
 const PAGE_RECT := Rect2(16, 16, 480, 660)
-const VIEW_SIZE := Vector2(512, 746)
+const VIEW_SIZE := Vector2(584, 710)
 var book: KhataBook
+var input_suspended := false:
+	set(value):
+		input_suspended = value
+		if is_node_ready():
+			_refresh_buttons()
 var _arrival := 1.0
 var _motion: Tween
 
@@ -21,17 +26,6 @@ func _ready() -> void:
 	$CloseButton.pressed.connect(func(): close_requested.emit())
 	$PreviousButton.pressed.connect(func(): turn_requested.emit(-1))
 	$NextButton.pressed.connect(func(): turn_requested.emit(1))
-	for button in [$OpenButton, $CloseButton, $PreviousButton, $NextButton]:
-		button.focus_mode = Control.FOCUS_NONE
-		button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		button.add_theme_font_size_override("font_size", 18)
-		button.add_theme_color_override("font_color", Color("f0e9d4"))
-		button.add_theme_color_override("font_disabled_color", Color("897d70"))
-		for state in ["normal", "hover", "pressed", "disabled"]:
-			var style := StyleBoxFlat.new()
-			style.bg_color = Color("795149") if state == "hover" else Color("51382f")
-			style.set_corner_radius_all(4)
-			button.add_theme_stylebox_override(state, style)
 	visibility_changed.connect(_on_visibility_changed)
 	get_viewport().size_changed.connect(_layout)
 	_layout()
@@ -77,14 +71,26 @@ func _layout() -> void:
 func _process(_delta: float) -> void:
 	if not is_visible_in_tree() or not is_instance_valid(book):
 		return
-	$PreviousButton.disabled = book.busy or book.spread == 0
-	$NextButton.disabled = book.busy or book.spread == book.section_titles.size() - 1
-	$OpenButton.disabled = book.busy
+	_refresh_buttons()
 	var point := book.get_local_mouse_position()
-	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if book._edge_at(point) != 0 and not book.busy else Control.CURSOR_ARROW
+	mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if book._edge_at(point) != 0 and not book.busy and not input_suspended else Control.CURSOR_ARROW
+
+
+func _refresh_buttons() -> void:
+	if not is_instance_valid(book):
+		return
+	$PreviousButton.disabled = input_suspended or book.busy or book.spread == 0
+	$NextButton.disabled = input_suspended or book.busy or book.spread == book.section_titles.size() - 1
+	$OpenButton.disabled = input_suspended or book.busy
+	$CloseButton.disabled = input_suspended
+	for button in [$PreviousButton, $NextButton, $OpenButton, $CloseButton]:
+		button.visible = not input_suspended and not book.busy
 
 
 func _gui_input(event: InputEvent) -> void:
+	if input_suspended:
+		accept_event()
+		return
 	var forwarded := event.duplicate() as InputEvent
 	if forwarded is InputEventMouse:
 		forwarded.position = get_global_transform_with_canvas() * event.position
@@ -93,7 +99,7 @@ func _gui_input(event: InputEvent) -> void:
 
 
 func _has_point(point: Vector2) -> bool:
-	if Rect2(Vector2.ZERO, size).has_point(point):
+	if not input_suspended and PAGE_RECT.has_point(point):
 		return true
 	if not is_instance_valid(book) or not book.is_visible_in_tree():
 		return false
@@ -118,11 +124,3 @@ func _stop_motion() -> void:
 	if is_instance_valid(_motion):
 		_motion.kill()
 	_motion = null
-
-
-func _draw() -> void:
-	# Paper, folded cover, binding and curls are all drawn by the same Book.
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color("642d29")
-	style.set_corner_radius_all(5)
-	draw_style_box(style, Rect2(0, 679, VIEW_SIZE.x, VIEW_SIZE.y - 679))

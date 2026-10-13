@@ -44,8 +44,11 @@ visible window position (for example `--position 60,60`).
 Cover/K first opens the shared book's folded right-hand page. Turns in Peek and
 Full share a spread; unfolding reveals the matching left page without closing
 the book or replacing its page surfaces. Tests cover fold interruption, moving
-leaf coverage and removal of the destination view during an animation. Open fully
-takes modal input; Fold to peek returns to the working view. Escape cancels an
+leaf coverage and removal of the destination view during an animation. Sketched
+page-margin icons expand, fold and close; paper bookmarks select sections in both
+views. Tests verify cover travel, exact authored-cover handoff, bounded moving
+input coverage, and cleanup during hide, resize, controller removal and scene exit.
+Expanding takes modal input; folding returns to the working view. Escape cancels an
 active gesture first. These are empty page shells; populated pantry and Peek
 export belong to #58.
 

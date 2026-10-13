@@ -8,10 +8,11 @@ signal page_selected(index: int)
 const ShellPage := preload("res://scripts/ui/khata/khata_shell_page.gd")
 const PAGE_NAMES := ["InventoryPage", "RecipesPage", "FinancePage", "QuestsPage"]
 const TAB_NAMES := ["InventoryTab", "RecipesTab", "FinanceTab", "QuestsTab"]
-const TAB_COLORS := [Color("91a878"), Color("bd916b"), Color("7994a1"), Color("ac94ab")]
 
 @export_node_path("Control") var peek_path: NodePath
+@export_node_path("Sprite2D") var cover_path: NodePath
 @onready var peek: KhataPeek = get_node_or_null(peek_path) as KhataPeek if not peek_path.is_empty() else null
+@onready var cover: Sprite2D = get_node_or_null(cover_path) as Sprite2D if not cover_path.is_empty() else null
 @onready var book: KhataBook = $NotebookBackground/Book
 @onready var dimmer: ColorRect = $Dimmer
 @onready var book_input: Control = $BookInput
@@ -25,6 +26,15 @@ var page_index: int:
 var _active := false
 var _closing := false
 var _peek_after_close := false
+var _travel_kind: StringName = &""
+var _travel_progress := 0.0
+var _travel_motion: Tween
+var _travel_cover: Sprite2D
+var _travel_from := Transform2D.IDENTITY
+var _travel_book_rect := Rect2()
+var _cover_leased := false
+var _cover_was_visible := true
+var _retiring := false
 
 
 func _enter_tree() -> void:
@@ -54,11 +64,6 @@ func _ready() -> void:
 	for index in range(4):
 		var button := $TabContainer.get_node(TAB_NAMES[index]) as Button
 		button.pressed.connect(select_page.bind(index))
-		_style_button(button, TAB_COLORS[index], true)
-	_style_button($CloseButton, Color("353f34"))
-	_style_button($PeekButton, Color("353f34"))
-	for button in [$PreviousButton, $NextButton]:
-		_style_button(button, Color(0.17, 0.22, 0.17, 0.85))
 	get_viewport().size_changed.connect(_on_resize)
 	visibility_changed.connect(_on_visibility_changed)
 	_on_page_changed(0)
@@ -68,16 +73,24 @@ func _ready() -> void:
 func configure(value: InteractionController) -> void:
 	if controller == value:
 		return
-	close_peek()
+	_dismiss_peek()
+	_stop_travel()
+	_restore_cover()
 	if _active:
 		# The old controller owns any reservation and modal lock. Finish that
 		# session before binding another controller, without transferring input.
+		hide()
+	elif is_node_ready():
+		book.reset_closed()
 		hide()
 	if is_instance_valid(controller):
 		_release_ownership()
 		for pair in [[controller.mode_changed, _on_mode_changed], [controller.drag_canceled, _on_drag_canceled], [controller.drag_dropped, _on_drag_dropped]]:
 			if pair[0].is_connected(pair[1]):
 				pair[0].disconnect(pair[1])
+	_active = false
+	_closing = false
+	_peek_after_close = false
 	controller = value
 	if is_instance_valid(controller):
 		controller.mode_changed.connect(_on_mode_changed)
@@ -88,12 +101,12 @@ func configure(value: InteractionController) -> void:
 func open() -> bool:
 	if _active or _closing or not is_inside_tree() or is_queued_for_deletion() or not _host_is_visible() or not _controller_is_live() or controller.is_world_input_blocked():
 		return false
-	if book.busy:
+	if book.busy or is_traveling():
 		return false
 	var from_folded := book.opened and book.fold_amount > 0.0
 	_active = true
 	_closing = false
-	close_peek()
+	_dismiss_peek()
 	show()
 	# Establish ownership before cancellation emits callbacks into world objects.
 	controller.set_world_input_blocked(self, true)
@@ -106,7 +119,9 @@ func open() -> bool:
 		book.fold_to(0.0)
 	else:
 		animation.play("reveal")
-		book.open_book()
+		_layout()
+		if not _begin_travel(&"open_full"):
+			book.open_book()
 	opened.emit()
 	return true
 
@@ -124,8 +139,12 @@ func is_peeking() -> bool:
 	return is_instance_valid(peek) and peek.is_visible_in_tree()
 
 
+func is_traveling() -> bool:
+	return _travel_kind != &""
+
+
 func open_peek() -> bool:
-	if (_closing or not is_inside_tree() or is_queued_for_deletion()
+	if (_closing or is_traveling() or not is_inside_tree() or is_queued_for_deletion()
 		or not _peek_is_available() or not _controller_is_live()):
 		return false
 	if _active:
@@ -141,21 +160,48 @@ func open_peek() -> bool:
 		return false
 	if not is_peeking():
 		show()
-		if not book.opened:
+		var from_closed := not book.opened
+		if from_closed:
 			book.open_folded()
-		peek.reveal()
+		peek.reveal(false)
 		_reading_visible(true)
 		_layout()
+		if from_closed:
+			_begin_travel(&"open_peek")
 	return true
 
 
 func close_peek() -> void:
 	_peek_after_close = false
+	if _active:
+		_dismiss_peek()
+		return
+	if _closing:
+		return
+	if is_peeking() and is_node_ready():
+		_closing = true
+		book.cancel_turn()
+		if _begin_travel(&"return_peek"):
+			return
+		_finish_peek_close()
+
+
+func _dismiss_peek() -> void:
 	if is_instance_valid(peek):
+		# The shared renderer is still needed during a fold or return flight.
+		var was_closing := _closing
+		_closing = true
 		peek.dismiss()
-	if not _active and is_node_ready():
-		book.reset_closed()
-		hide()
+		_closing = was_closing
+
+
+func _finish_peek_close() -> void:
+	_stop_travel()
+	_dismiss_peek()
+	book.reset_closed()
+	_restore_cover()
+	hide()
+	_closing = false
 
 
 func close() -> void:
@@ -164,26 +210,27 @@ func close() -> void:
 
 
 func _start_close() -> void:
-	if not _active:
+	if not _active or _closing:
 		return
 	_closing = true
 	cancel_export()
+	_stop_travel()
 	if book.folding:
 		book.reset_closed()
-		_finish_close()
+		_begin_return()
 	elif not book.opened and not book.busy:
-		_finish_close()
+		_begin_return()
 	else:
 		book.close_book()
 
 
 func select_page(index: int) -> void:
-	if _active and not _closing and not exporting and not book.folding and index >= 0 and index < 4:
+	if (_active or is_peeking()) and not _closing and not exporting and not book.folding and not is_traveling() and index >= 0 and index < 4:
 		book.select_page(index)
 
 
 func begin_export(payload: HeldItemPayload, visual: Node2D, point: Vector2, allowed_targets: Array[DropZone]) -> bool:
-	if not _active or _closing or exporting or book.busy or not book.opened or not _controller_is_live():
+	if not _active or _closing or is_traveling() or exporting or book.busy or not book.opened or not _controller_is_live():
 		return false
 	exporting = true
 	_reading_visible(false)
@@ -210,15 +257,14 @@ func _export_finished() -> void:
 func _reading_visible(value: bool) -> void:
 	$NotebookBackground.visible = value
 	book_input.visible = value and _active
-	$TabContainer.visible = value and _active
+	$TabContainer.visible = value
 	$Pages.visible = value and _active
 	$PreviousButton.visible = value and _active
 	$NextButton.visible = value and _active
 	$PeekButton.visible = value and _active
 	$CloseButton.visible = _active
-	$Hint.visible = _active
+	$Hint.hide()
 	dimmer.visible = _active
-	$Hint.text = "Click or drag an outer page edge · Arrow keys turn · Esc closes" if value else "Place the item · Esc returns to Khata"
 	dimmer.color.a = 0.48 if value else 0.12
 
 
@@ -233,7 +279,14 @@ func _on_drag_dropped(_payload: HeldItemPayload, _target: DropZone) -> void:
 
 
 func _on_book_opened_changed(value: bool) -> void:
-	if not value and _active:
+	if not value and _active and not _retiring:
+		_begin_return()
+
+
+func _begin_return() -> void:
+	if _travel_kind == &"return_full":
+		return
+	if not _begin_travel(&"return_full"):
 		_finish_close()
 
 
@@ -255,6 +308,7 @@ func _on_fold_finished(folded: bool) -> void:
 	elif not _active and not is_peeking():
 		_peek_after_close = false
 		book.reset_closed()
+		_restore_cover()
 		hide()
 
 
@@ -263,6 +317,9 @@ func _finish_close() -> void:
 		return
 	_active = false
 	_closing = true
+	_stop_travel()
+	_restore_cover()
+	book.reset_closed()
 	animation.stop()
 	hide()
 	_release_ownership()
@@ -295,11 +352,14 @@ func _on_mode_changed(_mode: StringName) -> void:
 
 
 func _on_visibility_changed() -> void:
-	if not is_visible_in_tree() and not _closing and (_active or is_peeking() or (is_instance_valid(book) and book.opened)):
+	if not is_visible_in_tree() and not _retiring and (_active or is_peeking() or is_traveling() or (is_instance_valid(book) and book.opened)):
+		_retiring = true
 		var owned_input := _active
 		_active = false
 		_peek_after_close = false
 		_closing = true
+		_stop_travel()
+		_restore_cover()
 		hide()
 		if is_instance_valid(peek):
 			peek.dismiss()
@@ -307,17 +367,22 @@ func _on_visibility_changed() -> void:
 			_release_ownership()
 		book.reset_closed()
 		_closing = false
+		_retiring = false
 
 
 func _exit_tree() -> void:
-	close_peek()
+	_retiring = true
+	_dismiss_peek()
 	_active = false
 	_closing = true
+	_stop_travel()
+	_restore_cover()
 	hide()
 	_release_ownership()
 	if is_instance_valid(book):
 		book.reset_closed()
 	_closing = false
+	_retiring = false
 
 
 func _on_resize() -> void:
@@ -348,6 +413,12 @@ func _input(event: InputEvent) -> void:
 			open_peek()
 		get_viewport().set_input_as_handled()
 		return
+	if is_traveling() and _active:
+		# Keep modal ownership until the cover has reached its resting place.
+		if event.is_action_pressed(InteractionController.INPUT_CANCEL):
+			close()
+		get_viewport().set_input_as_handled()
+		return
 	if is_peeking() and event.is_action_pressed(InteractionController.INPUT_CANCEL):
 		# A held world gesture gets first cancellation; otherwise put the page away.
 		if book.dragging:
@@ -364,7 +435,7 @@ func _input(event: InputEvent) -> void:
 		if book.dragging and event is InputEventMouse:
 			book.handle_book_input(event)
 			get_viewport().set_input_as_handled()
-		elif event is InputEventKey and event.keycode in [KEY_LEFT, KEY_RIGHT] and not controller.is_dragging() and not controller.has_active_action():
+		elif not is_traveling() and event is InputEventKey and event.keycode in [KEY_LEFT, KEY_RIGHT] and not controller.is_dragging() and not controller.has_active_action():
 			book.handle_book_input(event)
 			get_viewport().set_input_as_handled()
 		return
@@ -396,7 +467,7 @@ func _input(event: InputEvent) -> void:
 
 
 func _on_book_input(event: InputEvent) -> void:
-	if exporting or _closing:
+	if exporting or _closing or is_traveling():
 		return
 	var forwarded := event.duplicate() as InputEvent
 	if forwarded is InputEventMouse:
@@ -406,12 +477,14 @@ func _on_book_input(event: InputEvent) -> void:
 
 
 func _on_peek_input(event: InputEvent) -> void:
-	if is_peeking() and _controller_is_live() and not controller.is_dragging() and not controller.has_active_action():
+	if is_peeking() and not is_traveling() and _controller_is_live() and not controller.is_dragging() and not controller.has_active_action():
 		book.handle_book_input(event)
 
 
 func _on_peek_visibility_changed() -> void:
 	if not _active and not _closing and not is_peeking() and is_node_ready():
+		_stop_travel()
+		_restore_cover()
 		book.reset_closed()
 		hide()
 
@@ -437,18 +510,142 @@ func _make_page(index: int, paper: Texture2D) -> Node:
 
 
 func _process(_delta: float) -> void:
+	if is_traveling() and not _cover_is_live():
+		if _active:
+			_finish_close()
+		else:
+			_finish_peek_close()
+		return
+	if _travel_kind == &"open_peek" and not _peek_is_available():
+		_finish_peek_close()
+		return
 	if _peek_after_close and book.folding and not _peek_is_available():
 		close()
 	if is_peeking() and (not _controller_is_live() or controller.is_world_input_blocked()):
 		close_peek()
-	if not _active and not is_peeking():
+	if not _active and not is_peeking() and not is_traveling():
 		return
 	if not _controller_is_live():
+		_stop_travel()
+		_restore_cover()
 		hide()
 		return
 	if exporting and not controller.is_modal_export_active(self):
 		_export_finished()
 	_layout()
+
+
+func _cover_is_live() -> bool:
+	return is_instance_valid(cover) and cover.is_inside_tree() and not cover.is_queued_for_deletion()
+
+
+func _lease_cover() -> void:
+	if not _cover_is_live() or _cover_leased:
+		return
+	_cover_was_visible = cover.visible
+	_cover_leased = true
+	cover.hide()
+
+
+func _restore_cover() -> void:
+	if _cover_leased and is_instance_valid(cover):
+		cover.visible = _cover_was_visible
+	_cover_leased = false
+
+
+func _cover_ui_transform() -> Transform2D:
+	return get_global_transform_with_canvas().affine_inverse() * cover.get_global_transform_with_canvas()
+
+
+func _begin_travel(kind: StringName) -> bool:
+	if not _cover_is_live() or not is_inside_tree() or not _host_is_visible():
+		return false
+	_stop_travel()
+	if not is_instance_valid(_travel_cover):
+		_travel_cover = Sprite2D.new()
+		_travel_cover.name = "TravellingCover"
+		_travel_cover.texture = cover.texture
+		_travel_cover.region_enabled = cover.region_enabled
+		_travel_cover.region_rect = cover.region_rect
+		_travel_cover.centered = cover.centered
+		_travel_cover.offset = cover.offset
+		_travel_cover.flip_h = cover.flip_h
+		_travel_cover.flip_v = cover.flip_v
+		add_child(_travel_cover)
+	_travel_book_rect = book.get_visible_book_rect()
+	var book_to_ui := get_global_transform_with_canvas().affine_inverse() * book.get_global_transform_with_canvas()
+	_travel_from = book_to_ui * _cover_to_book_transform()
+	_travel_kind = kind
+	_travel_progress = 0.0
+	_lease_cover()
+	_travel_cover.show()
+	if is_instance_valid(peek):
+		peek.input_suspended = true
+	_layout()
+	_travel_motion = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	_travel_motion.tween_method(_set_travel_progress, 0.0, 1.0, 0.55)
+	_travel_motion.tween_callback(_travel_finished)
+	return true
+
+
+func _cover_to_book_transform() -> Transform2D:
+	var source := _travel_cover.get_rect()
+	var ratio := _travel_book_rect.size / source.size
+	return Transform2D(Vector2(ratio.x, 0), Vector2(0, ratio.y), _travel_book_rect.position - source.position * ratio)
+
+
+func _set_travel_progress(value: float) -> void:
+	_travel_progress = value
+	_layout()
+
+
+func _layout_travel() -> void:
+	if not is_traveling() or not _cover_is_live():
+		return
+	var returning := _travel_kind in [&"return_full", &"return_peek"]
+	var home_pose := _cover_ui_transform()
+	var book_to_ui := get_global_transform_with_canvas().affine_inverse() * book.get_global_transform_with_canvas()
+	var reading_pose := book_to_ui * _cover_to_book_transform()
+	_travel_cover.transform = _travel_from.interpolate_with(home_pose, _travel_progress) if returning else home_pose.interpolate_with(reading_pose, _travel_progress)
+	# The rendered book and the authored cover share one travelling footprint.
+	# Cross-blend their cloth details while approaching/leaving the stall.
+	var ink_amount := 1.0 - smoothstep(0.0, 0.8, _travel_progress) if returning else smoothstep(0.2, 1.0, _travel_progress)
+	book.transform = _travel_cover.transform * _cover_to_book_transform().affine_inverse()
+	# Keep the paper stack opaque beneath the cover blend; fading every draw
+	# would make the closed cover translucent and reveal printed pages inside.
+	book.modulate.a = 1.0
+	# Once Full has shut, travel with the exact authored cover. Blending two
+	# differently proportioned cover labels would draw the handwriting twice.
+	_travel_cover.modulate.a = 1.0 if _travel_kind == &"return_full" else 1.0 - ink_amount
+	if _active:
+		dimmer.color.a *= 1.0 - _travel_progress if returning else _travel_progress
+
+
+func _travel_finished() -> void:
+	var destination := _travel_kind
+	_stop_travel()
+	if destination == &"return_full":
+		_finish_close()
+	elif destination == &"return_peek":
+		_finish_peek_close()
+	elif destination == &"open_full":
+		_layout()
+		book.open_book()
+	else:
+		_layout()
+
+
+func _stop_travel() -> void:
+	if is_instance_valid(_travel_motion):
+		_travel_motion.kill()
+	_travel_motion = null
+	_travel_kind = &""
+	if is_instance_valid(_travel_cover):
+		_travel_cover.hide()
+	if is_instance_valid(book):
+		book.modulate.a = 1.0
+	if is_instance_valid(peek):
+		peek.input_suspended = false
 
 
 func _controller_is_live() -> bool:
@@ -475,6 +672,7 @@ func _layout() -> void:
 	var full_scale := Vector2.ONE * fit
 	var full_position := (viewport_size - book.DESIGN * fit) * 0.5
 	book.scale = full_scale
+	book.rotation = 0.0
 	book.position = full_position
 	book.modulate.a = 1.0
 	if _peek_is_available():
@@ -485,31 +683,42 @@ func _layout() -> void:
 		if is_peeking():
 			book.modulate.a = peek.modulate.a
 	dimmer.color.a = 0.12 if exporting else 0.48 * (1.0 - book.fold_amount)
+	_layout_travel()
 	_place(book_input, Rect2(300, 190, 1000, 704))
 	_place($Pages, Rect2(320, 209, 960, 660))
-	_place($CloseButton, book.CLOSE_RECT)
-	_place($PeekButton, Rect2(1060, 116, 182, 44))
-	_place($PreviousButton, Rect2(165, 498, 58, 58))
-	_place($NextButton, Rect2(1320, 498, 58, 58))
-	_place($Hint, Rect2(310, 925, 980, 38))
+	_place_ink($CloseButton, Vector2(390, 12))
+	_place_ink($PeekButton, Vector2(280, 590))
+	_place_ink($PreviousButton, Vector2(-420, 590))
+	_place_ink($NextButton, Vector2(390, 590))
+	var reading := book.opened and not book.busy and not _closing and not is_traveling() and not exporting
+	$TabContainer.visible = not exporting and not is_traveling()
 	for index in range(4):
 		var button := $TabContainer.get_node(TAB_NAMES[index]) as Button
 		var tab := book.make_tab_rect(index)
+		button.set_pressed_no_signal(book.spread == index)
 		# Keep the authored size: Control minimum sizes would otherwise prevent
 		# the bookmark from narrowing with the rotating cover.
 		button.position = book.position + tab.position * book.scale
 		button.size = book.TAB_SIZE
 		button.scale = book.scale * tab.size / book.TAB_SIZE
-		button.visible = tab.size.x > 0.6 and book.fold_amount < 0.5
-		button.disabled = book.busy or not book.opened or _closing
-		button.mouse_filter = Control.MOUSE_FILTER_IGNORE if button.disabled else Control.MOUSE_FILTER_STOP
+		button.visible = tab.size.x > 0.6
+		button.disabled = not reading or (_controller_is_live() and (controller.is_dragging() or controller.has_active_action()))
+		button.mouse_filter = Control.MOUSE_FILTER_STOP
 	$PreviousButton.disabled = book.busy or not book.opened or book.spread <= 0 or _closing
 	$NextButton.disabled = book.busy or not book.opened or book.spread >= 3 or _closing
-	$PreviousButton.visible = _active and not exporting and not book.folding
-	$NextButton.visible = _active and not exporting and not book.folding
-	$Hint.visible = _active and not book.folding
+	$PreviousButton.visible = _active and reading
+	$NextButton.visible = _active and reading
+	$PeekButton.visible = _active and reading
+	$CloseButton.visible = _active and reading
+	$Hint.hide()
 	$PeekButton.disabled = book.busy or not book.opened or _closing
 	book_input.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if book._edge_at(book.get_local_mouse_position()) != 0 and book.opened and not book.busy else Control.CURSOR_ARROW
+
+
+func _place_ink(control: Control, offset: Vector2) -> void:
+	control.position = book.position + (book._book_origin() + offset) * book.scale
+	control.size = Vector2(56, 56)
+	control.scale = book.scale
 
 
 func _place(control: Control, rect: Rect2) -> void:
@@ -518,17 +727,3 @@ func _place(control: Control, rect: Rect2) -> void:
 	control.position = (viewport_size - book.DESIGN * fit) * 0.5 + rect.position * fit
 	control.size = rect.size
 	control.scale = Vector2.ONE * fit
-
-
-func _style_button(button: Button, color: Color, tab := false) -> void:
-	button.focus_mode = Control.FOCUS_NONE
-	button.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	for state in ["normal", "hover", "pressed", "disabled"]:
-		var style := StyleBoxFlat.new()
-		style.bg_color = color.lightened(0.1) if state == "hover" else color
-		style.set_corner_radius_all(4)
-		button.add_theme_stylebox_override(state, style)
-	button.add_theme_color_override("font_color", Color("243129") if tab else Color("f0e9d4"))
-	button.add_theme_color_override("font_pressed_color", Color("243129") if tab else Color("f0e9d4"))
-	button.add_theme_color_override("font_disabled_color", Color("52604e") if tab else Color("8a9684"))
-	button.add_theme_font_size_override("font_size", 15 if tab else 17)

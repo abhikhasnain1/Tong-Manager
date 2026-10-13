@@ -52,9 +52,9 @@ func frames(count := 3) -> void:
 
 func settle() -> void:
 	var deadline := Time.get_ticks_msec() + 9000
-	while book.busy and Time.get_ticks_msec() < deadline:
+	while (book.busy or modal.is_traveling()) and Time.get_ticks_msec() < deadline:
 		await process_frame
-	check(not book.busy, "Notebook motion settles")
+	check(not book.busy and not modal.is_traveling(), "Notebook motion and cover journey settle")
 	await frames()
 
 
@@ -154,14 +154,38 @@ func check_peek_input() -> void:
 	await settle_peek()
 	check(modal.is_peeking() and not modal.is_open() and not controller.is_world_input_blocked(), "K first opens Peek without locking the world")
 	var paper_rect := peek.get_global_rect()
-	check(root.get_visible_rect().encloses(paper_rect), "Peek paper and footer fit this actual viewport")
+	var page_rect := (peek.get_node("Page") as Control).get_global_rect()
+	check(root.get_visible_rect().encloses(paper_rect), "Peek paper and attached bookmarks fit this actual viewport")
 	check(peek.mouse_filter == Control.MOUSE_FILTER_STOP and paper_rect.size.x < root.size.x * 0.6,
 		"Peek covers only its page-sized rectangle, not the whole viewport")
 	for name in ["OpenButton", "CloseButton", "PreviousButton", "NextButton"]:
-		check(paper_rect.encloses((peek.get_node(name) as Control).get_global_rect()), "%s remains inside Peek bounds" % name)
+		var ink := peek.get_node(name) as Button
+		check(page_rect.encloses(ink.get_global_rect()) and ink.text.is_empty(), "%s is an icon within the actual paper" % name)
 	check(not (peek.get_node("OpenButton") as Control).get_global_rect().intersects(
-		(peek.get_node("CloseButton") as Control).get_global_rect()), "Peek footer actions do not overlap")
+		(peek.get_node("CloseButton") as Control).get_global_rect()), "Peek ink actions do not overlap")
 	await capture("peek")
+	var tabs := ["InventoryTab", "RecipesTab", "FinanceTab", "QuestsTab"]
+	var cached_ids: Array[int] = []
+	for page in book._pages:
+		cached_ids.append(page.get_instance_id())
+	for index in tabs.size():
+		var tab := modal.get_node("TabContainer/" + tabs[index]) as Button
+		var tab_rect := tab.get_global_rect()
+		check(tab.is_visible_in_tree() and not tab.disabled and root.get_visible_rect().encloses(tab_rect),
+			"Peek %s bookmark is visible, enabled and inside the viewport" % tabs[index])
+		check(page_rect.grow(14.0 * peek.scale.x).intersects(tab_rect)
+			and controller.is_pointer_over_ui_at(tab_rect.get_center()),
+			"Peek %s remains attached to the paper and owns its pointer area" % tabs[index])
+		await click(tab_rect.get_center())
+		await settle()
+		check(book.spread == index and modal.page_index == index and modal.is_peeking()
+			and not controller.is_world_input_blocked(), "Peek bookmark selects %s without acquiring a world lock" % tabs[index])
+		check(book._pages[index * 2 + 1].get_instance_id() == cached_ids[index * 2 + 1],
+			"Peek bookmark retains the actual cached right-hand page")
+	await capture("peek-bookmarks")
+	await click(button("TabContainer/InventoryTab"))
+	await settle()
+	check(book.spread == 0, "Peek bookmarks restore Pantry for subsequent input checks")
 	await tap(KEY_U)
 	check(modal.is_peeking() and controller.current_mode == InteractionController.MODE_USE, "Use shortcut keeps Peek open")
 	var dial := stove.get_node("DialA") as Node2D
@@ -215,7 +239,7 @@ func check_peek_input() -> void:
 	screen.add_child(probe)
 	probe.global_position = probe.get_canvas_transform().affine_inverse() * paper_rect.get_center()
 	modal.close_peek()
-	await frames()
+	await settle()
 	await click(point(probe))
 	check(clicks.count == 1, "Exposed probe confirms that the covered world target is pickable")
 	check(modal.open_peek(), "Peek reopens above the known world pick target")
@@ -243,14 +267,17 @@ func check_peek_input() -> void:
 	await tap(KEY_G)
 	check(modal.is_peeking() and controller.current_mode == InteractionController.MODE_NEUTRAL, "Neutral toggle also retains Peek")
 	await click((peek.get_node("CloseButton") as Control).get_global_rect().get_center())
+	await settle()
 	check(not modal.is_peeking() and not modal.is_open(), "Peek Close button closes the current view")
 	await tap(KEY_K)
 	await settle_peek()
 	await tap(KEY_K)
+	await settle()
 	check(not modal.is_peeking() and not modal.is_open(), "K closes an existing Peek instead of opening full mode")
 	await tap(KEY_K)
 	await settle_peek()
 	await tap(KEY_ESCAPE)
+	await settle()
 	check(not modal.is_peeking() and not modal.is_open() and not controller.is_world_input_blocked(), "Escape closes Peek without a stale lock")
 	check(stock.quantities == quantities and water.remaining_ml == supply and water.day_id == day,
 		"Rendered Peek gestures and transitions do not reset shared stock or water")
@@ -364,6 +391,12 @@ func check_hotspot_and_tabs() -> void:
 			"Close button releases input and restores %s" % mode)
 	await open_hotspot()
 	await capture("open")
+	var full_paper := Rect2(book_point(Vector2(-480, 0)), book_point(Vector2(480, 660)) - book_point(Vector2(-480, 0)))
+	for ink_name in ["CloseButton", "PeekButton", "PreviousButton", "NextButton"]:
+		var ink := modal.get_node(ink_name) as Button
+		check(ink.text.is_empty() and full_paper.encloses(ink.get_global_rect()),
+			"Full %s is an icon inside the open notebook paper" % ink_name)
+	check(not (modal.get_node("Hint") as Control).is_visible_in_tree(), "Full reading view has no detached navigation hint strip")
 	var names := ["InventoryTab", "RecipesTab", "FinanceTab", "QuestsTab"]
 	var previous_rect := (modal.get_node("PreviousButton") as Control).get_global_rect()
 	for tab_name in names:
@@ -436,9 +469,36 @@ func check_edges() -> void:
 	check(book.spread == 1 and not book.dragging and modal.is_open(), "Escape cancels a held turn before closing the notebook")
 	await mouse(book_point(Vector2(50, 330)), false)
 	await tap(KEY_RIGHT)
-	await click(button("CloseButton"))
+	await tap(KEY_ESCAPE)
 	await settle()
-	check(not modal.is_open() and not controller.is_world_input_blocked(), "Close during animated navigation settles and relinquishes input")
+	check(not modal.is_open() and not controller.is_world_input_blocked(), "Escape during animated navigation settles and relinquishes input")
+
+
+func check_full_return_input() -> void:
+	var cover := modal.cover as Sprite2D
+	var home := cover.get_global_transform_with_canvas()
+	check(modal.open(), "Return input fixture opens from the authored cover")
+	await settle()
+	await click(button("CloseButton"))
+	check(modal.is_open() and controller.is_world_input_blocked() and book.busy and not modal.is_traveling(),
+		"Close icon starts the cover animation while retaining full input ownership")
+	await create_timer(0.18).timeout
+	await capture("cover-closing")
+	var deadline := Time.get_ticks_msec() + 9000
+	while book.busy and not modal.is_traveling() and Time.get_ticks_msec() < deadline:
+		await process_frame
+	check(modal.is_traveling() and not book.opened and not book.busy and not cover.visible,
+		"Real Close input completes cover closure before flying home")
+	await capture("return-start")
+	await create_timer(0.15).timeout
+	check(modal.is_traveling() and modal.is_open() and controller.is_world_input_blocked(),
+		"Return midpoint still blocks world actions")
+	await capture("return-moving")
+	await settle()
+	check(cover.is_visible_in_tree() and cover.get_global_transform_with_canvas().is_equal_approx(home)
+		and not modal.is_open() and not controller.is_world_input_blocked(),
+		"Real Close input hands the notebook back to its exact stall position")
+	await capture("return-arrived")
 
 
 func check_world_and_cancellation() -> void:
@@ -517,6 +577,7 @@ func run() -> void:
 	await check_folded_page_input()
 	await check_hotspot_and_tabs()
 	await check_edges()
+	await check_full_return_input()
 	await check_world_and_cancellation()
 	screen.queue_free()
 	await frames()
