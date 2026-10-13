@@ -11,16 +11,16 @@ also injects it into existing physical sources to verify cancellation, removal,
 scene recreation and no refund on disposal. Explicit demo reset is tested with
 the separate measured-water authority, including invalid and reentrant resets.
 
-These are stock and adapter checks. They do not complete final recipe
-destinations or doses, customer handoff, payments or persistence.
-The existing ingredient targets remain provisional review behavior, and
-`BrewingPreview.tscn` keeps its separate finite development stock fixture.
+These are stock and adapter checks. Ingredient destinations and doses are
+covered by the shared command tests below; customer handoff, payments and
+persistence remain separate work. `BrewingPreview.tscn` keeps its separate
+finite development stock fixture.
 
 For the visible inventory review, open
 `scenes/development/InventoryPreview.tscn` and press **F6**. This scene injects
-the real `GameState.inventory` into the accepted physical portions and displays
-shared on-hand/available counts. Its kettle/cup destinations and sample handoffs
-still use provisional review targets; they are not the completed #59/#66 commands.
+the real `GameState.inventory` into physical portions and displays shared
+on-hand/available counts. Its kettle/cup destinations use the same ingredient
+commands as the normal Tong scene. Customer and snack handoffs remain #66 fixtures.
 **Reload** recreates the scene and vessels while preserving current stock and
 water. **Reset · new day** deliberately replenishes both from `DayConfig` and
 invalidates old portions. Neither operation implements persistence or day scheduling.
@@ -58,7 +58,7 @@ The right-hand pantry page contains Tea, Sugar, Milk, Banana and Biscuit in a
 Tea exports one teabag, sugar and milk one spoonful, and snacks one piece.
 Pickup reserves a portion; only a successful permitted drop consumes it. Empty
 stock stays visible and cannot be picked up. Physical-source reservations and
-commits update this same page in the inventory review scene.
+commits update this same page in both the normal and inventory review scenes.
 
 Open `scenes/development/InventoryPreview.tscn` with **F6**, then click the
 notebook or press **K**. Drag directly from a pantry cell in either view and
@@ -70,13 +70,10 @@ Peek open. Closing Peek preserves independently held world objects. Full
 retains its existing modal behavior and closes on a deliberate mode change.
 Heat, steeping, cooling and hanging physics continue throughout.
 
-The review scene explicitly permits the existing provisional targets: a teabag
-into boiling kettle water, sugar/milk into tea in a cup, and a ready piece into
-the sample handoff. Fill the kettle from the water drum and heat it on the
-stove before adding a teabag; pour brewed tea into a cup before adding a spoonful.
-These targets do not finalize #59 ingredient rules or #66 customer service.
-The normal Tong scene binds the live pantry but does not authorize production
-destinations yet; its portions can be carried and returned without consumption.
+The normal Tong scene and inventory review both accept teabags in boiling kettle
+water, and sugar/milk in a clean empty cup or an unserved tea cup. The review
+scene additionally permits ready pieces in its sample handoff. The normal scene
+has no customer handoff yet; unused snack portions can be returned without loss.
 
 Run `khata_inventory_test.gd` headless for shared display, reservations,
 exact-once export, interrupted pickup, target invalidation and lifecycle checks.
@@ -85,6 +82,45 @@ Run `khata_inventory_input_test.gd` with a rendered window at 1920x1080,
 feedback, origin-view restoration and page-edge/bookmark navigation. An
 optional directory after `--` receives captures; use `--position 60,60` on
 Windows. Run native input suites sequentially so their pointers do not compete.
+
+## Shared ingredient commands and recipe portions
+
+Open `scenes/gameplay/tong/TongDayScreen.tscn` with **F6** for the normal scene, or
+`scenes/development/InventoryPreview.tscn` for visible stock counts. Select **Use**
+and drag from a physical container; alternatively open the pantry with **K** and
+drag from a cell in either Peek or Full. Both routes use the same validation and
+stock transaction. Valid drops consume exactly one reserved unit; invalid drops,
+Escape and right-click return it. Ingredient anchors follow cups and the kettle,
+including cups rearranged onto or off the tray. Removed vessels stop accepting.
+
+| Ingredient | Destination | Approved adjustable rule |
+| --- | --- | --- |
+| Tea | Kettle | One teabag after water boils, for one batch up to 1.5 L; no second bag in that batch |
+| Sugar | Cup | One spoonful for a sweet recipe; may be added before or after tea |
+| Condensed milk | Cup | One spoonful for a milk recipe; may be added before or after tea |
+
+Extra spoonfuls are allowed and counted, including more than three and in a full
+cup. Spoonfuls do not change liquid volume or temperature. Water-only, served and
+dirty cups reject them. Emptying a cup removes both tea and spoonfuls without
+refunding stock; ingredients alone also count as contents for disposal.
+
+The four supported black-tea/milk-tea recipe resources record portion quantities,
+units, the boiling requirement, a 1500 ml maximum batch, a 250 ml target cup and a
+225 ml minimum serving amount. Existing recipe IDs, prices and unlock flags stay
+unchanged. Ginger and lemon resources remain unsupported by this ingredient path;
+no extra sources are introduced. Customer recipe evaluation is still separate work.
+
+For manual review, add sugar and milk to an empty cup, brew one bag, then pour
+into it. Try extra spoonfuls, a second bag, sugar into the kettle and a teabag into
+a cup. Repeat from both pantry views and after moving a cup in Organize. Check
+that successful drops reduce shared stock once and rejected drops preserve it.
+Drag an ingredient-only cup to Discard and confirm it empties without a refund.
+
+Run `ingredient_commands_test.gd` and `recipe_portion_data_test.gd` headless for
+destination rules, transaction rollback/reentry, moving/removing vessels, recipe
+metadata and per-cup counts. Run `ingredient_commands_input_test.gd` rendered at
+all four review sizes for real physical and pantry pointer input through this
+command path; pass a capture directory after `--` and use `--position 60,60`.
 
 ## Brewing interaction fixture
 
@@ -128,19 +164,18 @@ the stock readout and hover hint identify depletion. All of this art is provisio
 
 In Use, the tea box yields **one teabag**; sugar and condensed milk yield **one
 spoonful**. The source remains where it was placed, including on a moved tray.
-Release over a highlighted vessel to apply the portion. The review fixture accepts
-a teabag in a kettle of boiling water without existing tea, and sugar/milk in a cup
-containing black tea. An invalid or cancelled attempt consumes nothing. The nearest
+Release over a highlighted vessel to apply the portion. The shared command accepts
+a teabag in a kettle of boiling water without existing tea, and sugar/milk in a clean
+empty cup or an unserved cup containing black tea. An invalid or cancelled attempt
+consumes nothing. The nearest
 invalid vessel is shown as invalid instead of redirecting to a valid neighbour.
 
 `BrewingPreview` injects its own finite test stock: 6 teabags, 12 sugar spoonfuls and 12
 milk spoonfuls, 6 bananas and 8 biscuits. Reservations temporarily reduce the available count; cancellation
-returns them and successful application consumes once. The normal scene has the
-same source/target interfaces but no portion provider yet. This does not complete
-shared production inventory or recipes. Milk currently adds an abstract garnish,
-without changing liquid volume/temperature; the existing three-garnish limit is a
-review fixture rule. Exact doses, other destinations and recipe rules remain open.
-Ground-tea/coffee jars are not included.
+returns them and successful application consumes once. The normal scene binds
+physical sources and pantry cells to `GameState.inventory`. Sugar and milk are
+counted abstract spoonfuls without changing liquid volume/temperature, and there
+is no three-garnish cap. Ground-tea/coffee jars are not included.
 
 ```sh
 godot --headless --path . --script res://tests/placement_geometry_test.gd
@@ -240,7 +275,8 @@ sample with a fresh day allocation, finite ingredient stock, empty kettle and cl
 cups. Reset returns to Neutral and preserves arranged positions.
 
 The upper-right **SAMPLE CUSTOMER** is a preview-only black-tea order requiring
-at least 150 ml and no garnishes. Drag a filled cup there: warm tea produces a
+at least 225 ml and no garnishes, using the plain-tea recipe's adjustable minimum.
+Drag a filled cup there: warm tea produces a
 happy sample; cold tea is accepted but produces an unhappy sample and the readable
 bad review “My tea was cold.” The temperature at actual handoff decides the result,
 including tea that cooled after pouring. The cup returns to its previous surface and position
@@ -249,8 +285,8 @@ refilling supplies or cleaning cups. Repeated or rejected handoffs add no review
 
 The current review defaults use a 45°C cold threshold, 2°C/s cup cooling and a
 90-second ready-to-oversteep interval so cooling can be explored. These values,
-review wording and the 150 ml sample are provisional tuning, not final recipe or
-customer balancing. Discard or reset an oversteeped batch; degraded-tea eligibility
+review wording and serving amounts remain adjustable tuning; customer recipe
+evaluation is not implemented here. Discard or reset an oversteeped batch; degraded-tea eligibility
 is still a separate design decision.
 
 Ingredient stock and sample customers are explicit development fixtures. This scene does

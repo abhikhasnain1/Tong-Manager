@@ -208,7 +208,7 @@ func run() -> void:
 	check(cup.begin_interaction_drag(cup.get_global_transform_with_canvas().origin), "Moved cup can start disposal")
 	controller.release_drop(discard.get_global_transform_with_canvas().origin)
 	check(cup.volume_ml == 0 and cup.get_parent() == rail and cup.transform.is_equal_approx(table_pose), "Disposal empties the relocated cup and restores its actual table pose")
-	cup.receive_liquid(&"black_tea",170,40)
+	cup.receive_liquid(&"black_tea",preview.service_zone.SERVING_RECIPE.minimum_serving_volume_ml,40)
 	check(cup.begin_interaction_drag(cup.get_global_transform_with_canvas().origin), "Moved cup can start sample handoff")
 	controller.release_drop(preview.service_zone.get_global_transform_with_canvas().origin)
 	check(cup.state == Cup.CupState.SERVED and preview.service_zone.review.accepted_count() == 1 and preview.service_zone.review.bad_review_count() == 1, "Moved cold cup remains accepted once with the cold review")

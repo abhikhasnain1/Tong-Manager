@@ -113,9 +113,10 @@ func check_physical_commands() -> void:
 		"The second sugar picture immediately observes the same depleted stock")
 	var milk_before := stock.remaining(&"condensed_milk")
 	cup.reset_clean()
+	cup.receive_liquid(&"water", 100, 60)
 	take(source_named("CondensedMilkCan"))
 	controller.release_drop(point(cup.get_node("IngredientTarget")))
-	returned(&"condensed_milk", milk_before, "Empty cup rejects a spoon")
+	returned(&"condensed_milk", milk_before, "Incompatible water cup rejects a spoon")
 	check(cup.relish_item_ids.is_empty(), "Rejected spoon has no target effect")
 	for index in [0, 1, 2]:
 		var source := ready_source(index)
@@ -302,11 +303,13 @@ func check_pantry_review_targets() -> void:
 			"Replayed Khata teabag cannot apply or debit twice")
 		check_pantry_fixture_view(modal, peeking)
 		before = stock.remaining(&"sugar")
+		cup.receive_liquid(&"water", 100, 60)
 		take_from_pantry(modal, &"sugar")
 		controller.release_drop(point(cup_target))
-		returned(&"sugar", before, "Pantry spoon rejected by the actual empty-cup fixture")
+		returned(&"sugar", before, "Pantry spoon rejected by incompatible water in the actual cup")
 		check(cup.relish_item_ids.is_empty(), "Invalid pantry spoon has no cup effect")
 		check_pantry_fixture_view(modal, peeking)
+		cup.reset_clean()
 		cup.receive_liquid(&"black_tea", 150, 65)
 		for item_id: StringName in [&"sugar", &"condensed_milk"]:
 			before = stock.remaining(item_id)
@@ -346,6 +349,33 @@ func check_pantry_review_targets() -> void:
 		await settle_inventory(modal)
 
 
+func check_sample_serving_volume() -> void:
+	# The customer remains a plain-black-tea fixture; only its serving minimum
+	# now follows the approved recipe metadata, without production order logic.
+	var recipe: Resource = root.get_node("Catalog").get_recipe(&"cha_no_sugar")
+	var minimum: float = recipe.minimum_serving_volume_ml
+	check(minimum == 225.0, "Sample service reads the approved 225ml minimum metadata")
+	var cup := screen.get_cups()[0] as Cup
+	cup.reset_clean()
+	cup.receive_liquid(&"black_tea", minimum - 1, 70)
+	controller.set_mode(InteractionController.MODE_USE)
+	var quantities := stock.quantities
+	var water_before := supply.remaining_ml
+	check(cup.begin_interaction_drag(point(cup)), "Underfilled sample cup starts a real serving gesture")
+	var target := preview.service_zone as DropZone
+	check(not target.accepts(controller.current_payload).is_valid, "Sample service rejects volume just below its recipe minimum")
+	controller.release_drop(point(target))
+	check(not controller.is_dragging() and cup.state == Cup.CupState.FILLED and cup.assigned_order_id.is_empty(),
+		"Rejected underfilled sample keeps the cup and records no service")
+	cup.receive_liquid(&"black_tea", 1, 70)
+	check(cup.begin_interaction_drag(point(cup)), "Minimum-volume sample starts a real serving gesture")
+	check(target.accepts(controller.current_payload).is_valid, "Sample service accepts exactly the approved minimum")
+	controller.release_drop(point(target))
+	check(not controller.is_dragging() and cup.state == Cup.CupState.SERVED and not cup.assigned_order_id.is_empty(),
+		"Accepted sample records its normal served lifecycle")
+	check(stock.quantities == quantities and supply.remaining_ml == water_before, "Service never charges ingredients or water again")
+
+
 func run() -> void:
 	if DisplayServer.get_name() == "headless":
 		root.size = Vector2i(1920, 1080)
@@ -369,6 +399,7 @@ func run() -> void:
 	await check_interruptions()
 	await check_scene_lifecycle()
 	await check_pantry_review_targets()
+	check_sample_serving_volume()
 	preview.queue_free()
 	await frames(3)
 	check(Input.mouse_mode == Input.MOUSE_MODE_VISIBLE, "Final scene teardown restores the cursor")

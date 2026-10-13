@@ -211,7 +211,13 @@ func run() -> void:
 	var production_controller := production.get_node("InteractionController") as InteractionController
 	production_controller.set_mode(InteractionController.MODE_INTERACT)
 	for source in production.portion_sources:
-		check(source.provider == null and not source.begin_portion(source.source_owner.get_global_transform_with_canvas().origin),"Normal scene source waits for an injected production provider")
+		var shared: InventoryState = root.get_node("GameState").inventory
+		var before := shared.remaining(source.item_id)
+		check(source.provider == shared and source.begin_portion(source.source_owner.get_global_transform_with_canvas().origin),
+			"Normal scene source extracts from its automatically bound production provider")
+		production_controller.cancel_drag()
+		check(shared.remaining(source.item_id) == before and shared.available(source.item_id) == before,
+			"Normal scene cancellation returns stock without consumption")
 	production.queue_free()
 	await process_frame
 	preview = load("res://scenes/development/BrewingPreview.tscn").instantiate()
@@ -261,8 +267,11 @@ func run() -> void:
 	var tea_zone := kettle.get_node("IngredientTarget") as IngredientPortionTarget
 	check(not tea_zone.try_apply_drop(payload) and stock.remaining(&"black_tea") == 5,"Duplicate accepted drop cannot add or debit another teabag")
 	reject_at(tea,kettle,"Already brewed kettle")
-	reject_at(sugar,kettle,"Spoon-to-kettle remains outside this fixture")
-	reject_at(milk,cup,"Empty cup")
+	reject_at(sugar,kettle,"Approved spoon destination excludes kettle")
+	apply_to(milk,cup,&"condensed_milk","Milk before tea")
+	check(cup.volume_ml == 0 and cup.get_relish_count(&"condensed_milk") == 1,
+		"Empty cup accepts and counts a spoon before the tea base")
+	cup.reset_clean()
 	cup.receive_liquid(&"water",100,60)
 	reject_at(sugar,cup,"Cup contains incompatible liquid")
 	cup.reset_clean()
@@ -275,10 +284,12 @@ func run() -> void:
 	check(not cup_zone.try_apply_drop(payload) and cup.relish_item_ids.size() == 1,"Duplicate spoon payload cannot repeat target mutation")
 	apply_to(milk,cup,&"condensed_milk","Milk spoon")
 	check(cup.relish_item_ids == [&"sugar",&"condensed_milk"] and cup.volume_ml == volume and cup.temperature == temperature,"Abstract fixture spoon preserves liquid volume and temperature")
-	reject_at(tea,cup,"Cup teabag brewing remains outside this fixture")
+	reject_at(tea,cup,"Approved teabag destination excludes cups")
 	apply_to(sugar_other,cup,&"sugar","Other sugar source")
-	reject_at(milk,cup,"Current garnish capacity")
-	check(cup.relish_item_ids.size() == 3,"Rejected fourth portion leaves existing garnishes intact")
+	apply_to(milk,cup,&"condensed_milk","Fourth counted spoon")
+	check(cup.relish_item_ids.size() == 4 and cup.get_relish_count(&"sugar") == 2
+		and cup.get_relish_count(&"condensed_milk") == 2,
+		"Repeated spoons remain counted without the obsolete three-garnish cap")
 	cup.mark_served()
 	reject_at(milk,cup,"Served cup")
 	cup.mark_dirty()

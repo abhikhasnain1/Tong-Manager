@@ -19,7 +19,6 @@ enum CupState {
 	DIRTY,
 }
 
-const MAX_RELISH_ITEMS := 3
 const ALLOWED_TRANSITIONS: Dictionary = {
 	CupState.CLEAN: [CupState.IN_USE, CupState.FILLED],
 	CupState.IN_USE: [CupState.FILLED],
@@ -227,20 +226,46 @@ func set_state(next_state: CupState) -> bool:
 
 
 func can_accept_relish(item_id: StringName) -> bool:
-	if item_id.is_empty() or relish_item_ids.size() >= MAX_RELISH_ITEMS:
+	if item_id.is_empty():
 		return false
 	return state == CupState.CLEAN or state == CupState.IN_USE or state == CupState.FILLED
+
+
+func get_relish_count(item_id: StringName) -> int:
+	return 0 if item_id.is_empty() else relish_item_ids.count(item_id)
+
+
+func get_relish_counts() -> Dictionary[StringName, int]:
+	# Each entry is one committed spoon. Keep the existing list authoritative;
+	# callers receive a fresh count snapshot rather than a second mutable store.
+	var counts: Dictionary[StringName, int] = {}
+	for item_id in relish_item_ids:
+		if not item_id.is_empty():
+			counts[item_id] = counts.get(item_id, 0) + 1
+	return counts
+
+
+func has_contents() -> bool:
+	return volume_ml > 0.0 or not contents_base_id.is_empty() or not relish_item_ids.is_empty()
 
 
 func add_relish(item_id: StringName) -> bool:
 	if not can_accept_relish(item_id):
 		return false
 
+	# Commit the complete vessel update before observers see it. Once committed,
+	# a later observer's discard/removal is not a failed ingredient transaction.
+	var previous_state := state
 	relish_item_ids.append(item_id)
-	if state == CupState.CLEAN and not set_state(CupState.IN_USE):
-		relish_item_ids.pop_back()
-		return false
-	contents_changed.emit(contents_base_id, relish_item_ids.duplicate(), assigned_order_id)
+	if state == CupState.CLEAN:
+		state = CupState.IN_USE
+	_apply_state_visuals()
+	var self_ref: WeakRef = weakref(self)
+	if state != previous_state:
+		state_changed.emit(previous_state, state)
+	var live := self_ref.get_ref() as Cup
+	if live != null:
+		live.contents_changed.emit(live.contents_base_id, live.relish_item_ids.duplicate(), live.assigned_order_id)
 	return true
 
 

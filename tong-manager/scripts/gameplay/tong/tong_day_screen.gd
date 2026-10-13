@@ -14,6 +14,8 @@ var portion_sources: Array[IngredientPortionSource] = []
 var hanging_sources: Array[HangingSourceBody] = []
 var _portion_provider: PortionStockProvider
 var khata_modal: KhataModal
+var _extra_portion_targets: Array[DropZone] = []
+var _export_targets: Array[DropZone] = []
 
 
 func _ready() -> void:
@@ -33,7 +35,8 @@ func _ready() -> void:
 	khata_modal.configure(interaction)
 	var game_state := get_node("/root/GameState")
 	if game_state.ensure_inventory(day_config):
-		khata_modal.configure_inventory(game_state.inventory)
+		set_portion_provider(game_state.inventory)
+	_sync_inventory_targets()
 	$WorldRoot/ToolLayer/KhataStation/KhataHotspot.input_event.connect(_on_khata_input)
 	_verify_layout_contract()
 
@@ -45,13 +48,38 @@ func _on_khata_input(_viewport: Node, event: InputEvent, _shape_index: int) -> v
 
 
 func set_portion_provider(provider: PortionStockProvider) -> void:
-	# Normal scenes have no portion supply until the shared inventory binds it.
+	# Physical containers and the pantry use the same run inventory.
 	_portion_provider = provider
 	if is_instance_valid(khata_modal):
 		khata_modal.configure_inventory(provider)
 	for source in portion_sources:
 		if is_instance_valid(source):
 			source.set_provider(provider)
+
+
+func set_extra_portion_targets(targets: Array[DropZone]) -> void:
+	# Development scenes may explicitly add their labelled snack fixtures.
+	_extra_portion_targets = targets.duplicate()
+	_sync_inventory_targets()
+
+
+func _sync_inventory_targets() -> void:
+	if not is_inside_tree() or not is_instance_valid(khata_modal):
+		return
+	var targets: Array[DropZone] = []
+	var kettle_zone := get_node_or_null("WorldRoot/ToolLayer/KettleStation/IngredientTarget") as DropZone
+	if is_instance_valid(kettle_zone) and kettle_zone.is_inside_tree() and not kettle_zone.is_queued_for_deletion():
+		targets.append(kettle_zone)
+	for cup in get_cups():
+		var zone := cup.get_node_or_null("IngredientTarget") as DropZone
+		if is_instance_valid(zone) and zone.is_inside_tree() and not zone.is_queued_for_deletion():
+			targets.append(zone)
+	for zone in _extra_portion_targets:
+		if is_instance_valid(zone) and zone.is_inside_tree() and not zone.is_queued_for_deletion() and not targets.has(zone):
+			targets.append(zone)
+	if targets != _export_targets:
+		_export_targets = targets
+		khata_modal.configure_export_targets(targets)
 
 
 func _configure_portion_sources() -> void:
@@ -108,8 +136,13 @@ func _configure_portion_target(target: Node2D) -> void:
 		zone = IngredientPortionTarget.new()
 		zone.name = "IngredientTarget"
 		target.add_child(zone)
-	zone.position = Vector2(26, -70) if target is Kettle else Vector2(0, -12)
+	var anchor := target.get_node_or_null("IngredientAnchor") as Marker2D
+	zone.position = anchor.position if anchor != null else (Vector2(26, -70) if target is Kettle else Vector2(0, -12))
 	zone.configure($InteractionController, target)
+	if not zone.tree_exited.is_connected(_sync_inventory_targets):
+		zone.tree_exited.connect(_sync_inventory_targets, CONNECT_DEFERRED)
+		zone.tree_entered.connect(_sync_inventory_targets, CONNECT_DEFERRED)
+	_sync_inventory_targets()
 
 
 func set_composition_guides_visible(is_visible: bool) -> void:

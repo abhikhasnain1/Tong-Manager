@@ -229,7 +229,9 @@ func run() -> void:
 	screen.add_child(target)
 	controller.register_drop_zone(target)
 	var allowed: Array[DropZone] = [target]
-	modal.configure_export_targets(allowed)
+	# Keep this contract fixture alongside the scene's live vessel targets. Kettle
+	# dragging refreshes that list as its target exits and returns to the stall.
+	screen.set_extra_portion_targets(allowed)
 	await check_view(true)
 	await check_peek_mode_and_world()
 	await check_view(false)

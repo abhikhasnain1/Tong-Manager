@@ -46,6 +46,9 @@ footprint = PackedVector2Array(14.625000, 32.625000, 14.354072, 33.561434, 13.55
 
 [node name="RelishMarkers" type="Node2D" parent="."]
 
+[node name="IngredientAnchor" type="Marker2D" parent="."]
+position = Vector2(0, -12)
+
 [node name="Slot1" type="Marker2D" parent="RelishMarkers"]
 position = Vector2(-18, -14)
 
