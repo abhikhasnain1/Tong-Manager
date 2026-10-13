@@ -6,13 +6,13 @@ Run `godot --headless --path . --script res://tests/inventory_state_test.gd` fro
 the project directory after the editor import. The suite checks resource-driven
 integer stock, defensive snapshots, unit validation, reservation availability,
 safe mutations, overflow, exact-once commit, rollback and synchronous callbacks.
-Physical and future Khata contract adapters use the same authority; the test
+Physical and Khata contract adapters use the same authority; the test
 also injects it into existing physical sources to verify cancellation, removal,
 scene recreation and no refund on disposal. Explicit demo reset is tested with
 the separate measured-water authority, including invalid and reentrant resets.
 
-These are stock and adapter checks. They do not complete the Khata shell/export,
-final recipe destinations or doses, customer handoff, payments or persistence.
+These are stock and adapter checks. They do not complete final recipe
+destinations or doses, customer handoff, payments or persistence.
 The existing ingredient targets remain provisional review behavior, and
 `BrewingPreview.tscn` keeps its separate finite development stock fixture.
 
@@ -49,8 +49,42 @@ page-margin icons expand, fold and close; paper bookmarks select sections in bot
 views. Tests verify cover travel, exact authored-cover handoff, bounded moving
 input coverage, and cleanup during hide, resize, controller removal and scene exit.
 Expanding takes modal input; folding returns to the working view. Escape cancels an
-active gesture first. These are empty page shells; populated pantry and Peek
-export belong to #58.
+active gesture first. Recipes, finance and quests remain page shells.
+
+## Khata pantry and portion export
+
+The right-hand pantry page contains Tea, Sugar, Milk, Banana and Biscuit in a
+3+2 grid. Peek and Full show the same live quantities from `GameState.inventory`.
+Tea exports one teabag, sugar and milk one spoonful, and snacks one piece.
+Pickup reserves a portion; only a successful permitted drop consumes it. Empty
+stock stays visible and cannot be picked up. Physical-source reservations and
+commits update this same page in the inventory review scene.
+
+Open `scenes/development/InventoryPreview.tscn` with **F6**, then click the
+notebook or press **K**. Drag directly from a pantry cell in either view and
+release over an eligible highlighted target. The notebook temporarily yields
+space for the held portion, then returns to its originating view. Escape,
+right-click and invalid drops return unused stock. Peek leaves uncovered stall
+objects usable between grabs; changing mode cancels its own export and keeps
+Peek open. Closing Peek preserves independently held world objects. Full
+retains its existing modal behavior and closes on a deliberate mode change.
+Heat, steeping, cooling and hanging physics continue throughout.
+
+The review scene explicitly permits the existing provisional targets: a teabag
+into boiling kettle water, sugar/milk into tea in a cup, and a ready piece into
+the sample handoff. Fill the kettle from the water drum and heat it on the
+stove before adding a teabag; pour brewed tea into a cup before adding a spoonful.
+These targets do not finalize #59 ingredient rules or #66 customer service.
+The normal Tong scene binds the live pantry but does not authorize production
+destinations yet; its portions can be carried and returned without consumption.
+
+Run `khata_inventory_test.gd` headless for shared display, reservations,
+exact-once export, interrupted pickup, target invalidation and lifecycle checks.
+Run `khata_inventory_input_test.gd` with a rendered window at 1920x1080,
+1600x900, 1366x768 and 1280x800 for actual cell input, release/cancel, empty
+feedback, origin-view restoration and page-edge/bookmark navigation. An
+optional directory after `--` receives captures; use `--position 60,60` on
+Windows. Run native input suites sequentially so their pointers do not compete.
 
 ## Brewing interaction fixture
 

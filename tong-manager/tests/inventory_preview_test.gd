@@ -39,8 +39,8 @@ func bind_view() -> void:
 		check(source.provider == stock, "%s reads the shared production provider" % source.source_owner.name)
 	check(drum().supply == supply, "Drum retains the authoritative measured water supply")
 	check(preview.stock_label.text.begins_with("Available / remaining"), "The stock panel distinguishes reservations from remaining stock")
-	check(preview.get_node("PreviewUI/Root/Panel/Margin/Rows/FixtureNote").text.contains("Targets remain test fixtures"),
-		"Scene labels its remaining target and pantry integration boundary")
+	check(preview.get_node("PreviewUI/Root/Panel/Margin/Rows/FixtureNote").text.contains("targets remain test fixtures"),
+		"Scene labels its remaining production target integration boundary")
 
 
 func source_named(node_name: String) -> IngredientPortionSource:
@@ -235,6 +235,117 @@ func check_scene_lifecycle() -> void:
 		"Reset returns Neutral without revalidating old payloads")
 
 
+func settle_inventory(modal: Control) -> void:
+	var deadline := Time.get_ticks_msec() + 7000
+	while (modal.book.busy or modal.is_traveling()) and Time.get_ticks_msec() < deadline:
+		await process_frame
+	check(not modal.book.busy and not modal.is_traveling(), "Pantry view settles before fixture export")
+	await frames()
+
+
+func take_from_pantry(modal: Control, item_id: StringName) -> HeldItemPayload:
+	var before := stock.remaining(item_id)
+	check(modal.begin_inventory_export(item_id, modal.inventory_item_screen_rect(item_id).get_center()),
+		"Pantry begins %s for the actual review target" % item_id)
+	var payload := controller.current_payload
+	check(payload != null and payload.source == &"khata" and payload.item_id == item_id,
+		"Actual review target receives the shared Khata portion payload")
+	check(stock.remaining(item_id) == before and stock.available(item_id) == before - 1,
+		"Pantry pickup reserves without consuming review-scene stock")
+	return payload
+
+
+func check_pantry_fixture_view(modal: Control, peeking: bool) -> void:
+	check(not modal.exporting and not controller.is_dragging() and not controller.is_modal_export_active(),
+		"Actual review target finishes the owned pantry export")
+	check(modal.is_peeking() == peeking and modal.is_open() != peeking and modal.page_index == 0,
+		"Actual review drop restores its originating pantry view and spread")
+	check(controller.current_mode == InteractionController.MODE_NEUTRAL and controller.is_world_input_blocked() != peeking,
+		"Review target permission preserves Neutral and the correct reading lock")
+
+
+func check_pantry_review_targets() -> void:
+	# These are the review scene's existing provisional #59/#66 adapters. This
+	# integration check does not select final recipe doses or customer rules.
+	var modal := screen.khata_modal as Control
+	modal.book.sound_enabled = false
+	var kettle := preview.kettle as Kettle
+	var cup := screen.get_cups()[0] as Cup
+	var kettle_target := kettle.get_node("IngredientTarget") as DropZone
+	var cup_target := cup.get_node("IngredientTarget") as DropZone
+	var ready_target := preview.ready_item_zone as DropZone
+	for peeking in [true, false]:
+		controller.set_mode(InteractionController.MODE_NEUTRAL)
+		# Only vessel conditions are set up; the real shared provider is retained.
+		kettle.discard_contents()
+		kettle.add_water(300)
+		kettle.temperature = kettle.config.ambient_temperature
+		cup.reset_clean()
+		var quantities := stock.quantities
+		var water_before := supply.remaining_ml
+		check(modal.open_peek() if peeking else modal.open(), "Review scene opens the requested populated pantry")
+		await settle_inventory(modal)
+		modal.select_page(0)
+		await settle_inventory(modal)
+		var before := stock.remaining(&"black_tea")
+		take_from_pantry(modal, &"black_tea")
+		controller.release_drop(point(kettle_target))
+		returned(&"black_tea", before, "Pantry teabag rejected by the actual cold-water fixture")
+		check(not kettle.contains_tea, "Invalid pantry tea has no kettle effect")
+		check_pantry_fixture_view(modal, peeking)
+		var payload := take_from_pantry(modal, &"black_tea")
+		kettle.temperature = kettle.config.boiling_temperature
+		controller.release_drop(point(kettle_target))
+		check(kettle.contains_tea and stock.remaining(&"black_tea") == before - 1,
+			"Actual boiling-kettle adapter accepts one Khata teabag")
+		check(not kettle_target.try_apply_drop(payload) and stock.available(&"black_tea") == before - 1,
+			"Replayed Khata teabag cannot apply or debit twice")
+		check_pantry_fixture_view(modal, peeking)
+		before = stock.remaining(&"sugar")
+		take_from_pantry(modal, &"sugar")
+		controller.release_drop(point(cup_target))
+		returned(&"sugar", before, "Pantry spoon rejected by the actual empty-cup fixture")
+		check(cup.relish_item_ids.is_empty(), "Invalid pantry spoon has no cup effect")
+		check_pantry_fixture_view(modal, peeking)
+		cup.receive_liquid(&"black_tea", 150, 65)
+		for item_id: StringName in [&"sugar", &"condensed_milk"]:
+			before = stock.remaining(item_id)
+			var relishes := cup.relish_item_ids.size()
+			payload = take_from_pantry(modal, item_id)
+			controller.release_drop(point(cup_target))
+			check(cup.relish_item_ids.has(item_id) and cup.relish_item_ids.size() == relishes + 1
+				and stock.remaining(item_id) == before - 1 and stock.available(item_id) == before - 1,
+				"Actual tea-cup adapter accepts one Khata %s spoon" % item_id)
+			check(not cup_target.try_apply_drop(payload) and cup.relish_item_ids.size() == relishes + 1,
+				"Replayed Khata spoon cannot change the target or consume again")
+			check_pantry_fixture_view(modal, peeking)
+		before = stock.remaining(&"banana")
+		var handed_before: int = ready_target.handed_off[&"banana"]
+		take_from_pantry(modal, &"banana")
+		controller.release_drop(point(kettle_target))
+		returned(&"banana", before, "Pantry piece rejected by an incompatible actual vessel target")
+		check(ready_target.handed_off[&"banana"] == handed_before, "Invalid ready-item release records no sample handoff")
+		check_pantry_fixture_view(modal, peeking)
+		for item_id: StringName in [&"banana", &"biscuits"]:
+			before = stock.remaining(item_id)
+			var handed: int = ready_target.handed_off[item_id]
+			payload = take_from_pantry(modal, item_id)
+			controller.release_drop(point(ready_target))
+			check(ready_target.handed_off[item_id] == handed + 1 and stock.remaining(item_id) == before - 1
+				and stock.available(item_id) == before - 1,
+				"Actual labelled handoff adapter accepts one Khata %s piece" % item_id)
+			check(not ready_target.try_apply_drop(payload) and ready_target.handed_off[item_id] == handed + 1,
+				"Replayed Khata ready-item delivery cannot hand off or debit again")
+			check_pantry_fixture_view(modal, peeking)
+		for item_id: StringName in [&"black_tea", &"sugar", &"condensed_milk", &"banana", &"biscuits"]:
+			check(stock.remaining(item_id) == quantities[item_id] - 1
+				and modal.inventory_page.item_display(item_id).remaining == stock.remaining(item_id),
+				"All valid/invalid review gestures debit exactly one %s and refresh its pantry count" % item_id)
+		check(supply.remaining_ml == water_before, "Ingredient and ready-item exports never debit the separate measured-water supply")
+		modal.close()
+		await settle_inventory(modal)
+
+
 func run() -> void:
 	if DisplayServer.get_name() == "headless":
 		root.size = Vector2i(1920, 1080)
@@ -257,6 +368,7 @@ func run() -> void:
 	await check_physical_commands()
 	await check_interruptions()
 	await check_scene_lifecycle()
+	await check_pantry_review_targets()
 	preview.queue_free()
 	await frames(3)
 	check(Input.mouse_mode == Input.MOUSE_MODE_VISIBLE, "Final scene teardown restores the cursor")

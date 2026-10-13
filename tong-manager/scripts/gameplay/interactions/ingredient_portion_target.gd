@@ -30,8 +30,8 @@ func accepts(payload: HeldItemPayload) -> DropValidation:
 		or not target.is_ancestor_of(self)):
 		return DropValidation.invalid("Ingredient target is unavailable")
 	if (not is_instance_valid(controller) or not controller.is_inside_tree() or controller.is_queued_for_deletion()
-		or controller.current_mode != InteractionController.MODE_INTERACT or controller.is_world_input_blocked()
-		or controller.current_payload != payload or controller.current_drag_node != payload.world_node):
+		or not controller.can_address_drop_zone(payload, self)
+		or (not controller.is_modal_export_active() and controller.current_mode != InteractionController.MODE_INTERACT)):
 		return DropValidation.invalid("Use an active ingredient portion")
 	var portion := payload.metadata.get("portion") as IngredientPortion
 	if portion == null or not portion.is_available():

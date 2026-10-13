@@ -60,14 +60,15 @@ func _belongs_to_live_screen(node: Node) -> bool:
 
 func _live_target() -> bool:
 	return (_belongs_to_live_screen(self) and is_instance_valid(controller)
-		and _belongs_to_live_screen(controller) and not controller.is_world_input_blocked()
-		and controller.current_mode == InteractionController.MODE_USE)
+		and _belongs_to_live_screen(controller)
+		and (controller.is_modal_export_active() or (not controller.is_world_input_blocked()
+		and controller.current_mode == InteractionController.MODE_USE)))
 
 
 func accepts(payload: HeldItemPayload) -> DropValidation:
 	if not is_relevant_to(payload) or not _live_target():
 		return DropValidation.invalid("Preview handoff is unavailable")
-	if (controller.current_payload != payload or controller.current_drag_node != payload.world_node
+	if (not controller.can_address_drop_zone(payload, self)
 		or not _belongs_to_live_screen(payload.world_node)):
 		return DropValidation.invalid("Use a held ready item")
 	var portion := payload.metadata.get("portion") as IngredientPortion

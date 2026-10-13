@@ -31,6 +31,9 @@ func _ready() -> void:
 	_configure_portion_target($WorldRoot/ToolLayer/KettleStation)
 	khata_modal = $HUDLayer/RootUI/ModalStack/KhataModal
 	khata_modal.configure(interaction)
+	var game_state := get_node("/root/GameState")
+	if game_state.ensure_inventory(day_config):
+		khata_modal.configure_inventory(game_state.inventory)
 	$WorldRoot/ToolLayer/KhataStation/KhataHotspot.input_event.connect(_on_khata_input)
 	_verify_layout_contract()
 
@@ -44,6 +47,8 @@ func _on_khata_input(_viewport: Node, event: InputEvent, _shape_index: int) -> v
 func set_portion_provider(provider: PortionStockProvider) -> void:
 	# Normal scenes have no portion supply until the shared inventory binds it.
 	_portion_provider = provider
+	if is_instance_valid(khata_modal):
+		khata_modal.configure_inventory(provider)
 	for source in portion_sources:
 		if is_instance_valid(source):
 			source.set_provider(provider)

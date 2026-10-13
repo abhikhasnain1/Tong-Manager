@@ -12,6 +12,12 @@ func _ready() -> void:
 		return
 	portion_stock = game_state.inventory
 	super._ready()
+	# Only this review scene authorizes the existing narrow ingredient/handoff
+	# fixtures. Production eligibility and commands remain separate work.
+	var targets: Array[DropZone] = [kettle.get_node("IngredientTarget") as DropZone, ready_item_zone]
+	for cup in screen.get_cups():
+		targets.append(cup.get_node("IngredientTarget") as DropZone)
+	screen.khata_modal.configure_export_targets(targets)
 
 
 func _start_preview() -> void:
@@ -23,7 +29,7 @@ func _build_controls() -> void:
 	super._build_controls()
 	var rows := get_node("PreviewUI/Root/Panel/Margin/Rows")
 	rows.get_node("Title").text = "SHARED INVENTORY REVIEW"
-	rows.get_node("FixtureNote").text = "Live run stock. Targets remain test fixtures.\nPantry grid/export comes in a later slice."
+	rows.get_node("FixtureNote").text = "Live run stock · Khata pantry/export review.\nVessel and snack targets remain test fixtures."
 	reload_button = _button("ReloadScene", "Reload scene · keep supplies", _reload_scene)
 	rows.add_child(reload_button)
 
