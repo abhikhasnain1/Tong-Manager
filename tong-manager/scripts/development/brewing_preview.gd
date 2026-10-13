@@ -13,7 +13,7 @@ var next_sample_button: Button
 var stock_label: Label
 var service_zone: ServiceZone
 var ready_item_zone: ReadyItemZone
-var portion_stock := DevelopmentStock.new()
+var portion_stock: PortionStockProvider = DevelopmentStock.new()
 
 func _ready() -> void:
 	_build_controls()
@@ -34,6 +34,9 @@ func _ready() -> void:
 	ready_item_zone.position = Vector2(1000, 450)
 	screen.get_node("WorldRoot/DropZoneRoot").add_child(ready_item_zone)
 	controller.register_drop_zone(ready_item_zone)
+	_start_preview()
+
+func _start_preview() -> void:
 	reset_fixture()
 
 func _build_controls() -> void:
@@ -66,6 +69,7 @@ func _build_controls() -> void:
 	rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	margin.add_child(rows)
 	var title := Label.new()
+	title.name = "Title"
 	title.text = "DEVELOPMENT PREVIEW"
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	title.add_theme_font_size_override("font_size", 16)
@@ -91,6 +95,7 @@ func _build_controls() -> void:
 	next_sample_button = _button("NextSample", "Next sample", _next_sample)
 	buttons.add_child(next_sample_button)
 	var fixture_note := Label.new()
+	fixture_note.name = "FixtureNote"
 	fixture_note.add_theme_font_size_override("font_size", 12)
 	fixture_note.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	fixture_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -124,10 +129,7 @@ func reset_fixture() -> void:
 	stove.burners[0].seat(kettle)
 	for cup in screen.get_cups():
 		(cup as Cup).reset_clean()
-	var game_state := get_node("/root/GameState")
-	game_state.ensure_water_day()
-	game_state.start_water_day(game_state.water_supply.day_id + 1)
-	portion_stock.reset_fixture()
+	_reset_supplies()
 	if is_instance_valid(service_zone) and not service_zone.is_queued_for_deletion():
 		service_zone.reset_samples()
 	if is_instance_valid(ready_item_zone) and not ready_item_zone.is_queued_for_deletion():
@@ -135,6 +137,12 @@ func reset_fixture() -> void:
 	for hanging in screen.hanging_sources:
 		if is_instance_valid(hanging) and not hanging.is_queued_for_deletion():
 			hanging.reset_sway()
+
+func _reset_supplies() -> void:
+	var game_state := get_node("/root/GameState")
+	game_state.ensure_water_day()
+	game_state.start_water_day(game_state.water_supply.day_id + 1)
+	(portion_stock as DevelopmentPortionStock).reset_fixture()
 
 func _next_sample() -> void:
 	if _blocked():

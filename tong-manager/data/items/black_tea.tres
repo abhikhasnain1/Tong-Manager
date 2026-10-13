@@ -7,6 +7,6 @@ script = ExtResource("1_item_def")
 id = &"black_tea"
 display_name_key = "item.black_tea.name"
 category = &"kettle_base"
-unit = &"g"
+unit = &"teabag"
 stack_size = 999
 cost = 1
