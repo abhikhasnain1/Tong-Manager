@@ -95,7 +95,7 @@ func set_world_input_blocked(owner_node: Node, blocked: bool) -> void:
 
 
 func begin_modal_export(owner_node: Control, payload: HeldItemPayload, visual: Node2D, point: Vector2,
-		export_layer: Node2D, allowed_targets: Array[DropZone], ignored_ui: Array[Control]) -> bool:
+		export_layer: Node2D, allowed_targets: Array[DropZone], ignored_ui: Array[Control], allow_empty_targets := false) -> bool:
 	# A modal lends one exact portion access to an explicit set of targets. Its
 	# ordinary world-input lock remains held throughout the export.
 	if (_resolving_drag or _starting_modal_export or current_payload != null or has_active_action()
@@ -122,7 +122,7 @@ func begin_modal_export(owner_node: Control, payload: HeldItemPayload, visual: N
 			return false
 		if not targets.has(zone):
 			targets.append(zone)
-	if targets.is_empty():
+	if targets.is_empty() and not allow_empty_targets:
 		return false
 	_starting_modal_export = true
 	_modal_export_owner = owner_node

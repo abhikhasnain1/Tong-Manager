@@ -6,6 +6,8 @@ signal closed
 signal page_selected(index: int)
 
 const ShellPage := preload("res://scripts/ui/khata/khata_shell_page.gd")
+const InventoryPage := preload("res://scripts/ui/khata/khata_inventory_page.gd")
+const PORTION_UNITS := {&"black_tea": &"teabag", &"sugar": &"spoonful", &"condensed_milk": &"spoonful", &"banana": &"piece", &"biscuits": &"piece"}
 const PAGE_NAMES := ["InventoryPage", "RecipesPage", "FinancePage", "QuestsPage"]
 const TAB_NAMES := ["InventoryTab", "RecipesTab", "FinanceTab", "QuestsTab"]
 
@@ -35,6 +37,15 @@ var _travel_book_rect := Rect2()
 var _cover_leased := false
 var _cover_was_visible := true
 var _retiring := false
+var inventory_page: Control
+var inventory: PortionStockProvider
+var _inventory_pages: Array[Control] = []
+var _inventory_revision := 0
+var _reserving_inventory := false
+var _starting_export := false
+var _peek_export_lock := false
+var _export_targets: Array[DropZone] = []
+var _hovered_inventory_item: StringName = &""
 
 
 func _enter_tree() -> void:
@@ -73,6 +84,8 @@ func _ready() -> void:
 func configure(value: InteractionController) -> void:
 	if controller == value:
 		return
+	cancel_export()
+	_inventory_revision += 1
 	_dismiss_peek()
 	_stop_travel()
 	_restore_cover()
@@ -99,6 +112,8 @@ func configure(value: InteractionController) -> void:
 
 
 func open() -> bool:
+	if exporting and not _active:
+		cancel_export()
 	if _active or _closing or not is_inside_tree() or is_queued_for_deletion() or not _host_is_visible() or not _controller_is_live() or controller.is_world_input_blocked():
 		return false
 	if book.busy or is_traveling():
@@ -172,12 +187,15 @@ func open_peek() -> bool:
 
 
 func close_peek() -> void:
+	_inventory_revision += 1
 	_peek_after_close = false
 	if _active:
 		_dismiss_peek()
 		return
 	if _closing:
 		return
+	if exporting:
+		cancel_export()
 	if is_peeking() and is_node_ready():
 		_closing = true
 		book.cancel_turn()
@@ -229,20 +247,125 @@ func select_page(index: int) -> void:
 		book.select_page(index)
 
 
-func begin_export(payload: HeldItemPayload, visual: Node2D, point: Vector2, allowed_targets: Array[DropZone]) -> bool:
-	if not _active or _closing or is_traveling() or exporting or book.busy or not book.opened or not _controller_is_live():
+func configure_inventory(provider: PortionStockProvider) -> void:
+	if inventory == provider:
+		return
+	cancel_export()
+	_inventory_revision += 1
+	inventory = provider
+	for page in _inventory_pages:
+		page.bind_inventory(provider)
+		_refresh_inventory_page(page)
+
+
+func configure_export_targets(targets: Array[DropZone]) -> void:
+	cancel_export()
+	_inventory_revision += 1
+	_export_targets = targets.duplicate()
+
+
+func _can_extract_inventory() -> bool:
+	return (not _reserving_inventory and not _starting_export and is_inside_tree() and not is_queued_for_deletion()
+		and is_visible_in_tree() and (_active or is_peeking()) and not _closing and not exporting
+		and not is_traveling() and book.opened and not book.busy and book.spread == 0
+		and _controller_is_live() and not controller.is_dragging() and not controller.has_active_action()
+		and (_active or not controller.is_world_input_blocked()))
+
+
+func begin_inventory_export(item_id: StringName, point: Vector2) -> bool:
+	if not _can_extract_inventory() or not point.is_finite() or not PORTION_UNITS.has(item_id) or inventory == null:
+		return false
+	var source := get_node_or_null("ExportSource") as Node2D
+	if not is_instance_valid(source) or not source.is_inside_tree() or source.is_queued_for_deletion():
+		return false
+	if inventory.available(item_id) <= 0:
+		controller.report_hint("No portions available")
+		return false
+	var provider := inventory
+	var revision := _inventory_revision
+	var started_in_full := _active
+	var portion := IngredientPortion.new(item_id, PORTION_UNITS[item_id], source, provider)
+	var self_ref: WeakRef = weakref(self)
+	_reserving_inventory = true
+	portion.token = provider.reserve(item_id, portion.unit, 1, portion.source_id)
+	var live := self_ref.get_ref() as KhataModal
+	if live == null:
+		portion.cancel()
+		return false
+	_reserving_inventory = false
+	if (inventory != provider or revision != _inventory_revision or started_in_full != _active
+		or not portion.is_available() or not _can_extract_inventory()):
+		portion.cancel()
+		return false
+	var visual := IngredientPortionVisual.new(item_id, portion.unit)
+	visual.name = "KhataPortion"
+	var payload := portion.create_payload(visual)
+	payload.source = &"khata"
+	var targets: Array[DropZone] = []
+	for target in _export_targets:
+		if is_instance_valid(target) and target.is_inside_tree() and not target.is_queued_for_deletion():
+			targets.append(target)
+	if not begin_export(payload, visual, point, targets, true):
+		portion.cancel()
+		if is_instance_valid(visual) and not visual.is_queued_for_deletion():
+			visual.free()
+		return false
+	controller.report_hint("Release over a valid target · Esc cancels" if not targets.is_empty() else "No item targets available · Esc returns this portion")
+	return true
+
+
+func inventory_item_screen_rect(item_id: StringName) -> Rect2:
+	if not is_instance_valid(inventory_page):
+		return Rect2()
+	var rect: Rect2 = inventory_page.item_rect(item_id)
+	if not rect.has_area():
+		return Rect2()
+	return book.get_global_transform_with_canvas() * Rect2(book._book_origin() + rect.position, rect.size)
+
+
+func begin_export(payload: HeldItemPayload, visual: Node2D, point: Vector2, allowed_targets: Array[DropZone], allow_empty_targets := false) -> bool:
+	if (not (_active or is_peeking()) or _closing or is_traveling() or exporting or _starting_export or book.busy
+		or not book.opened or not _controller_is_live() or controller.is_dragging() or controller.has_active_action()):
+		return false
+	var session_controller := controller
+	var revision := _inventory_revision
+	var started_in_full := _active
+	var self_ref: WeakRef = weakref(self)
+	_starting_export = true
+	if not _active:
+		if controller.is_world_input_blocked():
+			_starting_export = false
+			return false
+		# Peek lends input exclusively to this one payload, only for its lifetime.
+		_peek_export_lock = true
+		controller.set_world_input_blocked(self, true)
+	if self_ref.get_ref() == null:
+		return false
+	# Taking input ownership can invoke observers that close or replace this view.
+	if (controller != session_controller or revision != _inventory_revision or started_in_full != _active
+		or not is_visible_in_tree() or not (_active or is_peeking()) or _closing or is_traveling()
+		or not _controller_is_live() or not book.opened or book.busy):
+		_starting_export = false
+		if _peek_export_lock:
+			_export_finished()
 		return false
 	exporting = true
+	if is_instance_valid(peek):
+		peek.input_suspended = true
 	_reading_visible(false)
 	var ignored_ui: Array[Control] = [dimmer]
-	var accepted := controller.begin_modal_export(self, payload, visual, point, export_layer, allowed_targets, ignored_ui)
-	if not accepted or not controller.is_modal_export_active(self):
+	var accepted := controller.begin_modal_export(self, payload, visual, point, export_layer, allowed_targets, ignored_ui, allow_empty_targets)
+	if self_ref.get_ref() == null:
+		return false
+	_starting_export = false
+	if not accepted or not _controller_is_live() or not controller.is_modal_export_active(self):
 		_export_finished()
 		return false
 	return true
 
 
 func cancel_export() -> void:
+	_inventory_revision += 1
 	if is_instance_valid(controller):
 		controller.end_modal_export(self)
 	_export_finished()
@@ -250,6 +373,12 @@ func cancel_export() -> void:
 
 func _export_finished() -> void:
 	exporting = false
+	if _peek_export_lock:
+		_peek_export_lock = false
+		if is_instance_valid(controller):
+			controller.set_world_input_blocked(self, false)
+	if is_instance_valid(peek) and not is_traveling():
+		peek.input_suspended = false
 	if is_node_ready():
 		_reading_visible(true)
 
@@ -341,9 +470,13 @@ func _release_ownership() -> void:
 			controller.cursor_service.call("_install_custom_cursors")
 			controller.cursor_service.reset()
 	exporting = false
+	_peek_export_lock = false
 
 
 func _on_mode_changed(_mode: StringName) -> void:
+	_inventory_revision += 1
+	if exporting:
+		cancel_export()
 	if _active:
 		# Keep the deliberate new selection while releasing notebook ownership.
 		close()
@@ -352,9 +485,10 @@ func _on_mode_changed(_mode: StringName) -> void:
 
 
 func _on_visibility_changed() -> void:
-	if not is_visible_in_tree() and not _retiring and (_active or is_peeking() or is_traveling() or (is_instance_valid(book) and book.opened)):
+	if not is_visible_in_tree() and not _retiring and (_active or is_peeking() or exporting or _peek_export_lock or is_traveling() or (is_instance_valid(book) and book.opened)):
+		_inventory_revision += 1
 		_retiring = true
-		var owned_input := _active
+		var owned_input := _active or _peek_export_lock or exporting
 		_active = false
 		_peek_after_close = false
 		_closing = true
@@ -371,6 +505,7 @@ func _on_visibility_changed() -> void:
 
 
 func _exit_tree() -> void:
+	_inventory_revision += 1
 	_retiring = true
 	_dismiss_peek()
 	_active = false
@@ -386,7 +521,8 @@ func _exit_tree() -> void:
 
 
 func _on_resize() -> void:
-	if _active:
+	_inventory_revision += 1
+	if _active or exporting:
 		cancel_export()
 	if is_instance_valid(book):
 		book.cancel_turn()
@@ -395,7 +531,8 @@ func _on_resize() -> void:
 
 func _notification(what: int) -> void:
 	if what in [NOTIFICATION_WM_WINDOW_FOCUS_OUT, NOTIFICATION_APPLICATION_FOCUS_OUT]:
-		if _active:
+		_inventory_revision += 1
+		if _active or exporting:
 			cancel_export()
 		if is_instance_valid(book):
 			book.cancel_turn()
@@ -419,6 +556,11 @@ func _input(event: InputEvent) -> void:
 			close()
 		get_viewport().set_input_as_handled()
 		return
+	if exporting and not _active and (event.is_action_pressed(InteractionController.INPUT_ORGANIZE_TOGGLE) or event.is_action_pressed(InteractionController.INPUT_USE_TOGGLE)):
+		var mode := InteractionController.MODE_ORGANIZE if event.is_action_pressed(InteractionController.INPUT_ORGANIZE_TOGGLE) else InteractionController.MODE_USE
+		controller.set_mode(InteractionController.MODE_NEUTRAL if controller.current_mode == mode else mode)
+		get_viewport().set_input_as_handled()
+		return
 	if is_peeking() and event.is_action_pressed(InteractionController.INPUT_CANCEL):
 		# A held world gesture gets first cancellation; otherwise put the page away.
 		if book.dragging:
@@ -430,6 +572,10 @@ func _input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if is_peeking():
+		if exporting and event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			cancel_export()
+			get_viewport().set_input_as_handled()
+			return
 		# Capture an owned page drag even outside the paper; ordinary world
 		# events elsewhere continue through the normal interaction controller.
 		if book.dragging and event is InputEventMouse:
@@ -472,17 +618,57 @@ func _on_book_input(event: InputEvent) -> void:
 	var forwarded := event.duplicate() as InputEvent
 	if forwarded is InputEventMouse:
 		forwarded.position = book_input.get_global_transform_with_canvas() * event.position
-	book.handle_book_input(forwarded)
+	if not _handle_inventory_input(forwarded):
+		book.handle_book_input(forwarded)
 	book_input.accept_event()
 
 
 func _on_peek_input(event: InputEvent) -> void:
 	if is_peeking() and not is_traveling() and _controller_is_live() and not controller.is_dragging() and not controller.has_active_action():
-		book.handle_book_input(event)
+		if not _handle_inventory_input(event):
+			book.handle_book_input(event)
+
+
+func _inventory_item_at(point: Vector2) -> StringName:
+	if not _can_extract_inventory() or not is_instance_valid(inventory_page):
+		return &""
+	var local_point := book.get_global_transform_with_canvas().affine_inverse() * point - book._book_origin()
+	return inventory_page.item_at(local_point)
+
+
+func _handle_inventory_input(event: InputEvent) -> bool:
+	if not event is InputEventMouse:
+		return false
+	var item := _inventory_item_at(event.position)
+	if item.is_empty():
+		return false
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		begin_inventory_export(item, event.position)
+	return true
+
+
+func _update_inventory_hover() -> void:
+	if not is_instance_valid(inventory_page):
+		return
+	var item := _inventory_item_at(get_viewport().get_mouse_position())
+	inventory_page.set_interaction_enabled(_can_extract_inventory())
+	inventory_page.set_hovered_item(item)
+	if _controller_is_live() and not controller.is_dragging() and not controller.has_active_action():
+		if not item.is_empty():
+			var available := inventory != null and inventory.available(item) > 0
+			var unit: StringName = PORTION_UNITS[item]
+			controller.cursor_service.set_state((&"teabag" if unit == &"teabag" else &"spoon") if available and unit != &"piece" else (&"hover_actionable" if available else &"default"))
+			book_input.mouse_default_cursor_shape = Control.CURSOR_ARROW
+			if is_peeking():
+				peek.mouse_default_cursor_shape = Control.CURSOR_ARROW
+		elif not _hovered_inventory_item.is_empty():
+			controller.cursor_service.reset()
+	_hovered_inventory_item = item
 
 
 func _on_peek_visibility_changed() -> void:
 	if not _active and not _closing and not is_peeking() and is_node_ready():
+		cancel_export()
 		_stop_travel()
 		_restore_cover()
 		book.reset_closed()
@@ -503,10 +689,21 @@ func _on_page_changed(index: int) -> void:
 
 
 func _make_page(index: int, paper: Texture2D) -> Node:
-	var page := ShellPage.new()
+	var page: Control = InventoryPage.new() if index < 2 else ShellPage.new()
 	page.name = PAGE_NAMES[index / 2] + ("Right" if index % 2 else "Left")
 	page.configure(index, paper)
+	if index < 2:
+		_inventory_pages.append(page)
+		page.bind_inventory(inventory)
+		page.content_changed.connect(_refresh_inventory_page.bind(page))
+		if index == 1:
+			inventory_page = page
 	return page
+
+
+func _refresh_inventory_page(page: Control) -> void:
+	if is_instance_valid(page) and page.is_inside_tree():
+		(page.get_viewport() as SubViewport).render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
 func _process(_delta: float) -> void:
@@ -521,7 +718,7 @@ func _process(_delta: float) -> void:
 		return
 	if _peek_after_close and book.folding and not _peek_is_available():
 		close()
-	if is_peeking() and (not _controller_is_live() or controller.is_world_input_blocked()):
+	if is_peeking() and (not _controller_is_live() or (controller.is_world_input_blocked() and not _peek_export_lock)):
 		close_peek()
 	if not _active and not is_peeking() and not is_traveling():
 		return
@@ -533,6 +730,7 @@ func _process(_delta: float) -> void:
 	if exporting and not controller.is_modal_export_active(self):
 		_export_finished()
 	_layout()
+	_update_inventory_hover()
 
 
 func _cover_is_live() -> bool:

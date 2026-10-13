@@ -1,0 +1,12 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/khata/khata_item_slot.gd" id="1_slot"]
+
+[node name="KhataItemSlot" type="Control"]
+custom_minimum_size = Vector2(100, 154)
+layout_mode = 0
+offset_right = 116.0
+offset_bottom = 154.0
+mouse_filter = 2
+size_flags_horizontal = 3
+script = ExtResource("1_slot")
