@@ -7,6 +7,7 @@ const COVER_SOURCE: Texture2D = preload("res://assets/art/toolkit/khata_closed.p
 const TURN_SOUND: AudioStream = preload("res://assets/audio/page_turn.mp3")
 const DESIGN := Vector2(1600, 1000)
 const PAGE_SIZE := Vector2(480, 660)
+const PAGE_EDGE_WIDTH := 85.0
 const SECTIONS := ["Stock", "Notes", "Ledger"]
 const TAB_COLORS := [Color("91a878"), Color("bd916b"), Color("7994a1")]
 const CLOSE_RECT := Rect2(1260, 116, 138, 44)
@@ -26,7 +27,7 @@ var sound_enabled := true
 var _drag_start := Vector2.ZERO
 var _drag_distance := 0.0
 var _pointer := Vector2(-1000, -1000)
-var _hover_corner := 0.0
+var _hover_edge := 0.0
 var _target_spread := -1
 var _close_pending := false
 var _motion: Tween
@@ -116,8 +117,8 @@ func _fit() -> void:
 
 
 func _process(delta: float) -> void:
-	var wants_corner := opened and not busy and _corner_at(_pointer) != 0
-	_hover_corner = move_toward(_hover_corner, 1.0 if wants_corner else 0.0, delta * 7.0)
+	var wants_edge := opened and not busy and _edge_at(_pointer) != 0
+	_hover_edge = move_toward(_hover_edge, 1.0 if wants_edge else 0.0, delta * 7.0)
 	queue_redraw()
 
 
@@ -125,11 +126,11 @@ func _book_origin() -> Vector2:
 	return Vector2(560 + 240 * opening_amount, 209)
 
 
-func _corner_at(point: Vector2) -> int:
+func _edge_at(point: Vector2) -> int:
 	var local := point - _book_origin()
-	if Rect2(395, 570, 85, 90).has_point(local) and spread < 2:
+	if Rect2(PAGE_SIZE.x - PAGE_EDGE_WIDTH, 0, PAGE_EDGE_WIDTH, PAGE_SIZE.y).has_point(local) and spread < 2:
 		return 1
-	if Rect2(-480, 570, 85, 90).has_point(local) and spread > 0:
+	if Rect2(-PAGE_SIZE.x, 0, PAGE_EDGE_WIDTH, PAGE_SIZE.y).has_point(local) and spread > 0:
 		return -1
 	return 0
 
@@ -141,7 +142,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if dragging:
 			_drag_distance = maxf(_drag_distance, _pointer.distance_to(_drag_start))
 			turn_progress = clampf((_drag_start.x - _pointer.x) * turn_direction / 750.0, 0.0, 1.0)
-		var actionable := _corner_at(_pointer) != 0 or CLOSE_RECT.has_point(_pointer)
+		var actionable := _edge_at(_pointer) != 0 or CLOSE_RECT.has_point(_pointer)
 		if not opened:
 			actionable = Rect2(_book_origin(), PAGE_SIZE).has_point(_pointer)
 		Input.set_default_cursor_shape(Input.CURSOR_POINTING_HAND if actionable and not busy else Input.CURSOR_ARROW)
@@ -207,9 +208,9 @@ func _handle_click(point: Vector2) -> void:
 			_target_spread = index
 			_continue_navigation()
 			return
-	var corner := _corner_at(point)
-	if corner != 0:
-		_begin_turn(corner)
+	var edge := _edge_at(point)
+	if edge != 0:
+		_begin_turn(edge)
 		dragging = true
 		_drag_start = point
 		_drag_distance = 0.0
@@ -350,8 +351,8 @@ func _draw() -> void:
 			var back_index := front_index + turn_direction
 			var angle := turn_progress * PI if turn_direction > 0 else (1.0 - turn_progress) * PI
 			_draw_sheet(angle, _pages[front_index].get_texture(), _pages[back_index].get_texture(), turn_direction < 0, true)
-		elif _hover_corner > 0.0:
-			_draw_corner(_corner_at(_pointer))
+		elif _hover_edge > 0.0:
+			_draw_edge_hint(_edge_at(_pointer))
 	else:
 		# Right-hand page is revealed as the real cover rotates around the binding.
 		draw_texture_rect(_pages[spread * 2 + 1].get_texture(), Rect2(Vector2.ZERO, PAGE_SIZE), false)
@@ -364,7 +365,7 @@ func _draw() -> void:
 			draw_string(_font, tab.position + Vector2(9, 39), SECTIONS[index], HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color("243129"))
 		_draw_arrow(Vector2(250, 528), -1, spread > 0)
 		_draw_arrow(Vector2(1348, 528), 1, spread < 2)
-		draw_string(_font, Vector2(500, 934), "Click or drag a lower corner  ·  ← / → turn  ·  Esc closes", HORIZONTAL_ALIGNMENT_CENTER, 600, 18, Color("d1d6c7"))
+		draw_string(_font, Vector2(500, 934), "Click or drag either outer edge  ·  ← / → turn  ·  Esc closes", HORIZONTAL_ALIGNMENT_CENTER, 600, 18, Color("d1d6c7"))
 		draw_string(_font, Vector2(500, 968), "%s  ·  %d / 3" % [SECTIONS[spread], spread + 1], HORIZONTAL_ALIGNMENT_CENTER, 600, 16, Color("94a38f"))
 	else:
 		draw_string(_font, Vector2(500, 934), "Click the cover to open  ·  Space / Enter", HORIZONTAL_ALIGNMENT_CENTER, 600, 20, Color("d1d6c7"))
@@ -416,14 +417,15 @@ func _draw_spine() -> void:
 		draw_line(Vector2(-index, 0), Vector2(-index, 660), Color(0.20, 0.17, 0.09, alpha), 1)
 
 
-func _draw_corner(direction: int) -> void:
+func _draw_edge_hint(direction: int) -> void:
 	if direction == 0:
 		return
-	var width := 31.0 * _hover_corner
-	var corner := Vector2(480 * direction, 660)
-	var fold := PackedVector2Array([corner + Vector2(-direction * width, 0), corner + Vector2(0, -width), corner + Vector2(-direction * width, -width)])
-	draw_colored_polygon(fold, Color("ded8b1"))
-	draw_line(fold[0], fold[1], Color("a49e7e"), 1.3, true)
+	var edge_x := PAGE_SIZE.x * direction
+	# The hint follows the full usable side, matching the click/drag region.
+	for offset in range(12):
+		var alpha := (1.0 - float(offset) / 12.0) * 0.45 * _hover_edge
+		var x := edge_x - direction * (offset + 1)
+		draw_line(Vector2(x, 0), Vector2(x, PAGE_SIZE.y), Color(1.0, 0.98, 0.85, alpha), 1.0)
 
 
 func _draw_arrow(center: Vector2, direction: int, enabled: bool) -> void:

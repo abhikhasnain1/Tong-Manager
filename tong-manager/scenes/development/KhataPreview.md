@@ -3,10 +3,12 @@
 Open `KhataPreview.tscn` in Godot 4.7 and press **F6** (Run Current Scene).
 
 - Click the cover, or press Enter/Space, to open.
-- Click or drag a lower page corner. Release a short drag to let the sheet return;
+- Click or drag anywhere along either outer page edge, from top to bottom.
+  Release a short drag to let the sheet return;
   drag farther across the spine to complete the turn.
 - Use the left/right arrows or Stock/Notes/Ledger tabs to browse six sample pages.
-- Escape/right-click cancels a held turn. Escape, Space or Close khata closes the book.
+- Hover highlights the whole usable edge. Escape/right-click cancels a held turn.
+  Escape, Space or Close khata closes the book.
 - Use Slow motion (S) to inspect the bend and reverse face. Sound (M) toggles the rustle.
 
 This is a standalone visual study for review before the production Khata shell.
