@@ -1,6 +1,38 @@
 # Hanging sources, portions, placement and brewing verification
 
-The current interaction review is in `scenes/development/BrewingPreview.tscn`.
+## Production inventory contract
+
+Run `godot --headless --path . --script res://tests/inventory_state_test.gd` from
+the project directory after the editor import. The suite checks resource-driven
+integer stock, defensive snapshots, unit validation, reservation availability,
+safe mutations, overflow, exact-once commit, rollback and synchronous callbacks.
+Physical and future Khata contract adapters use the same authority; the test
+also injects it into existing physical sources to verify cancellation, removal,
+scene recreation and no refund on disposal. Explicit demo reset is tested with
+the separate measured-water authority, including invalid and reentrant resets.
+
+These are stock and adapter checks. They do not complete the Khata shell/export,
+final recipe destinations or doses, customer handoff, payments or persistence.
+The existing ingredient targets remain provisional review behavior, and
+`BrewingPreview.tscn` keeps its separate finite development stock fixture.
+
+For the visible inventory review, open
+`scenes/development/InventoryPreview.tscn` and press **F6**. This scene injects
+the real `GameState.inventory` into the accepted physical portions and displays
+shared on-hand/available counts. Its kettle/cup destinations and sample handoffs
+still use provisional review targets; they are not the completed #59/#66 commands.
+**Reload** recreates the scene and vessels while preserving current stock and
+water. **Reset · new day** deliberately replenishes both from `DayConfig` and
+invalidates old portions. Neither operation implements persistence or day scheduling.
+
+Run `godot --headless --path . --script res://tests/inventory_preview_test.gd`
+for the real review scene's stock, cancellation, modal, removal and reload checks.
+Run the same script without `--headless` at the four review sizes below; an
+optional PNG path after `--` captures the initial stock panel and scene.
+
+## Brewing interaction fixture
+
+The isolated interaction fixture is in `scenes/development/BrewingPreview.tscn`.
 Open it and press F6. The scene starts in **Neutral**, with passive hover but no
 extraction, rearrangement or tool actions. Select the top **Organize** button (or
 press **G**), then drag the tray, a cup or a tea,
@@ -45,7 +77,7 @@ a teabag in a kettle of boiling water without existing tea, and sugar/milk in a 
 containing black tea. An invalid or cancelled attempt consumes nothing. The nearest
 invalid vessel is shown as invalid instead of redirecting to a valid neighbour.
 
-The preview alone injects finite test stock: 6 teabags, 12 sugar spoonfuls and 12
+`BrewingPreview` injects its own finite test stock: 6 teabags, 12 sugar spoonfuls and 12
 milk spoonfuls, 6 bananas and 8 biscuits. Reservations temporarily reduce the available count; cancellation
 returns them and successful application consumes once. The normal scene has the
 same source/target interfaces but no portion provider yet. This does not complete
@@ -170,4 +202,5 @@ not implement production ingredient inventory, customer orders, payments, a day
 ledger or a reputation economy. Preview controls are disabled during any drag or
 active action, and never take keyboard focus from Space-to-pour. Bucket work stays
 separate. Brewing mechanics were accepted in PR #106; artwork and presentation
-remain provisional. The hanging-source slice needs scene review before merge.
+remain provisional. Ingredient and hanging interactions were accepted in PRs #110
+and #111; shared-inventory review uses the separate scene described above.

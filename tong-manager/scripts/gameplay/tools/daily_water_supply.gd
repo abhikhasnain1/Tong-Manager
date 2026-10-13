@@ -10,15 +10,20 @@ var _pending: Dictionary = {}
 var _transferring := false
 
 
-func begin_day(next_day_id: int, allocation_ml: float) -> bool:
+func can_begin_day(next_day_id: int, allocation_ml: float) -> bool:
 	if _transferring or next_day_id < 0 or next_day_id <= day_id:
 		return false
-	if not is_finite(allocation_ml) or allocation_ml < 0.0:
+	return is_finite(allocation_ml) and allocation_ml >= 0.0
+
+
+func begin_day(next_day_id: int, allocation_ml: float, notify := true) -> bool:
+	if not can_begin_day(next_day_id, allocation_ml):
 		return false
 	day_id = next_day_id
 	remaining_ml = allocation_ml
 	_pending.clear()
-	remaining_changed.emit(remaining_ml)
+	if notify:
+		remaining_changed.emit(remaining_ml)
 	return true
 
 
