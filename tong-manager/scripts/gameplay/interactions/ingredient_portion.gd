@@ -30,9 +30,9 @@ func is_available() -> bool:
 
 func create_payload(visual: Node2D) -> HeldItemPayload:
 	return HeldItemPayload.new(&"physical_source",item_id,quantity,visual,{
-		"category":&"ingredient_portion", "item_id":item_id, "quantity":quantity,
+		"category":&"ready_item" if unit == &"piece" else &"ingredient_portion", "item_id":item_id, "quantity":quantity,
 		"unit":unit, "source_id":source_id, "portion":self, "transient":true,
-		"cursor_state":&"teabag" if unit == &"teabag" else &"spoon",
+		"cursor_state":&"dragging" if unit == &"piece" else (&"teabag" if unit == &"teabag" else &"spoon"),
 		"cleanup_callback":Callable(self,"cancel"),
 	})
 

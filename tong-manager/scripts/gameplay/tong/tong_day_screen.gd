@@ -11,6 +11,7 @@ const CROP_SAFE_RECT := Rect2(96.0, 0.0, 1728.0, 1080.0)
 @onready var cursor_service: Node = get_node("/root/CursorService")
 @onready var table_surface: PlacementSurface = $WorldRoot/DropZoneRoot/TablePlacementSurface
 var portion_sources: Array[IngredientPortionSource] = []
+var hanging_sources: Array[HangingSourceBody] = []
 var _portion_provider: PortionStockProvider
 
 
@@ -25,12 +26,13 @@ func _ready() -> void:
 	_fit_authored_world()
 	_configure_table_placement()
 	_configure_portion_sources()
+	_configure_hanging_sources()
 	_configure_portion_target($WorldRoot/ToolLayer/KettleStation)
 	_verify_layout_contract()
 
 
 func set_portion_provider(provider: PortionStockProvider) -> void:
-	# Normal scenes have no ingredient supply until the shared inventory binds it.
+	# Normal scenes have no portion supply until the shared inventory binds it.
 	_portion_provider = provider
 	for source in portion_sources:
 		if is_instance_valid(source):
@@ -56,6 +58,35 @@ func _configure_portion_sources() -> void:
 		portion_sources.append(source)
 
 
+func _configure_hanging_sources() -> void:
+	var rail := $WorldRoot/ToolLayer/ReadyItemRail
+	var banana := rail.get_node("Banana") as Sprite2D
+	var biscuits := rail.get_node("Biscuits") as Sprite2D
+	# Preserve the authored pictures and composition. The banana picture contains
+	# two bunches separated by transparent pixels, each with its own fixed joint.
+	_add_hanging_source(banana, "BananaLeft", &"banana", Rect2(0, 0, 192, 367), Vector2(76, 0))
+	_add_hanging_source(banana, "BananaRight", &"banana", Rect2(192, 0, 120, 367), Vector2(249, 51))
+	_add_hanging_source(biscuits, "BiscuitBag", &"biscuits", Rect2(0, 0, 398, 686), Vector2(245, 12))
+	banana.hide()
+	biscuits.hide()
+
+
+func _add_hanging_source(authored: Sprite2D, node_name: String, item_id: StringName, region: Rect2, pivot: Vector2) -> void:
+	var hanging := HangingSourceBody.new()
+	hanging.name = node_name
+	hanging.position = authored.position
+	authored.get_parent().add_child(hanging)
+	hanging.configure($InteractionController, authored.texture, region, authored.scale.x, pivot)
+	hanging_sources.append(hanging)
+	var source := IngredientPortionSource.new()
+	source.name = "ReadyItemSource"
+	hanging.add_child(source)
+	source.configure_fixed($InteractionController, item_id, &"piece", hanging,
+		hanging.input_area, hanging.contains_pointer, hanging.is_frontmost_at)
+	source.set_provider(_portion_provider)
+	portion_sources.append(source)
+
+
 func _configure_portion_target(target: Node2D) -> void:
 	var zone := target.get_node_or_null("IngredientTarget") as IngredientPortionTarget
 	if zone == null:
@@ -78,6 +109,9 @@ func _fit_authored_world() -> void:
 	var cover_scale := maxf(viewport_size.x / AUTHORED_SIZE.x, viewport_size.y / AUTHORED_SIZE.y)
 	world_root.scale = Vector2.ONE * cover_scale
 	world_root.position = (viewport_size - AUTHORED_SIZE * cover_scale) * 0.5
+	for hanging in hanging_sources:
+		if is_instance_valid(hanging):
+			hanging.sync_layout()
 
 
 func _configure_table_placement() -> void:

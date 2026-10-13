@@ -84,6 +84,50 @@ func is_pointer_over_ui() -> bool:
 	return false
 
 
+func is_pointer_over_ui_at(viewport_position: Vector2) -> bool:
+	# GUI hover describes only the latest endpoint. A swept world interaction
+	# must also reject earlier points that are covered by HUD/preview controls.
+	if not is_inside_tree() or not viewport_position.is_finite():
+		return false
+	return _ui_branch_covers_point(get_viewport(), viewport_position)
+
+
+func _ui_branch_covers_point(node: Node, viewport_position: Vector2) -> bool:
+	if node.is_queued_for_deletion() or (node is Viewport and node != get_viewport()):
+		return false
+	if node is Control and _control_covers_point(node as Control, viewport_position):
+		return true
+	for child in node.get_children():
+		if _ui_branch_covers_point(child, viewport_position):
+			return true
+	return false
+
+
+func _control_covers_point(control: Control, viewport_position: Vector2) -> bool:
+	if not control.is_visible_in_tree() or control.get_mouse_filter_with_override() == Control.MOUSE_FILTER_IGNORE:
+		return false
+	var transform := control.get_global_transform_with_canvas()
+	if is_zero_approx(transform.determinant()):
+		return false
+	var local_point := transform.affine_inverse() * viewport_position
+	var hit := bool(control.call("_has_point", local_point)) if control.has_method("_has_point") else Rect2(Vector2.ZERO, control.size).has_point(local_point)
+	if not hit:
+		return false
+	# Clip rectangles are tested in each ancestor's own coordinate system.
+	# Top-level items and CanvasLayers break this CanvasItem ancestry just as
+	# they do for GUI rendering and input.
+	var ancestor: CanvasItem = control.get_parent() as CanvasItem if not control.is_set_as_top_level() else null
+	while ancestor != null:
+		if ancestor is Control and ancestor.clip_contents:
+			var clip_transform: Transform2D = ancestor.get_global_transform_with_canvas()
+			if is_zero_approx(clip_transform.determinant()) or not Rect2(Vector2.ZERO, ancestor.size).has_point(clip_transform.affine_inverse() * viewport_position):
+				return false
+		if ancestor.is_set_as_top_level():
+			break
+		ancestor = ancestor.get_parent() as CanvasItem
+	return true
+
+
 func can_start_world_action() -> bool:
 	return (current_mode != MODE_NEUTRAL and not is_world_input_blocked()
 		and not _resolving_drag and not is_pointer_over_ui() and not is_dragging() and not has_active_action())
@@ -119,6 +163,13 @@ var _drag_origin_transform := Transform2D.IDENTITY
 var _drag_start_pointer := Vector2.ZERO
 var _drag_start_position := Vector2.ZERO
 var _registered_drop_zones: Array[DropZone] = []
+
+
+func _enter_tree() -> void:
+	# A retained screen can leave the tree and return without _ready running again.
+	_resolving_drag = false
+	_queued_mode = &""
+	_was_world_blocked = false
 
 
 func _ready() -> void:
@@ -248,7 +299,7 @@ func start_drag(payload: HeldItemPayload, drag_node: Node2D, viewport_position: 
 
 	current_payload = payload
 	current_drag_node = drag_node
-	if payload.metadata.get("category") == &"ingredient_portion":
+	if is_portion_drag():
 		_portion_mouse_mode = Input.mouse_mode
 	_drag_origin_parent = drag_node.get_parent()
 	_drag_had_origin_parent = _drag_origin_parent != null
@@ -415,11 +466,19 @@ func _drag_cursor() -> StringName:
 	return StringName(current_payload.metadata.get("cursor_state", CURSOR_STATE_DRAGGING)) if current_payload != null else CURSOR_STATE_DRAGGING
 
 
+func is_portion_drag() -> bool:
+	return current_payload != null and current_payload.metadata.get("portion") is IngredientPortion
+
+
+func _portion_target_name() -> String:
+	return "target" if current_payload.metadata.get("category") == &"ready_item" else "vessel"
+
+
 func _apply_drag_cursor(state: StringName) -> void:
 	cursor_service.set_state(state)
 	if _portion_mouse_mode >= 0:
 		# The held portion itself is the cursor. Keep the invalid system cue over
-		# blocked targets/UI, but do not draw two teabags or spoons on valid space.
+		# blocked targets/UI, but do not draw a second cursor over the held piece.
 		Input.mouse_mode = _portion_mouse_mode if state == CURSOR_STATE_INVALID else Input.MOUSE_MODE_HIDDEN
 
 
@@ -429,8 +488,8 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 			hovered_drop_zone.clear_highlight()
 		hovered_drop_zone = null
 		_apply_drag_cursor(CURSOR_STATE_INVALID)
-		if current_payload.metadata.get("category") == &"ingredient_portion":
-			report_hint("Move off the panel to a valid vessel · Esc cancels")
+		if is_portion_drag():
+			report_hint("Move off the panel to a valid %s · Esc cancels" % _portion_target_name())
 		return
 	var best_valid: DropZone
 	var best_valid_distance := INF
@@ -462,8 +521,8 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 			best_invalid_distance = distance
 
 	var next_zone := best_valid if best_valid != null else best_invalid
-	# A portion aimed at an unavailable vessel must not jump to a valid neighbour.
-	if (current_payload.metadata.get("category") == &"ingredient_portion"
+	# A portion aimed at an unavailable target must not jump to a valid neighbour.
+	if (is_portion_drag()
 		and best_invalid != null and best_invalid_distance <= best_valid_distance):
 		next_zone = best_invalid
 	if is_instance_valid(hovered_drop_zone) and hovered_drop_zone != next_zone:
@@ -474,12 +533,13 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 		var is_valid := validation.is_valid
 		hovered_drop_zone.set_highlight(is_valid)
 		_apply_drag_cursor(_drag_cursor() if is_valid else CURSOR_STATE_INVALID)
-		if current_payload.metadata.get("category") == &"ingredient_portion":
-			report_hint("Release to add this portion · Esc cancels" if is_valid else validation.reason_key)
+		if is_portion_drag():
+			var accepted_hint := "Release to hand over this item · Esc cancels" if current_payload.metadata.get("category") == &"ready_item" else "Release to add this portion · Esc cancels"
+			report_hint(accepted_hint if is_valid else validation.reason_key)
 	else:
 		_apply_drag_cursor(_drag_cursor())
-		if current_payload.metadata.get("category") == &"ingredient_portion":
-			report_hint("Move this portion over a valid vessel · Esc cancels")
+		if is_portion_drag():
+			report_hint("Move this portion over a valid %s · Esc cancels" % _portion_target_name())
 
 
 func _collect_drop_zones(parent: Node) -> Array[DropZone]:

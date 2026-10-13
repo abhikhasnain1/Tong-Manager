@@ -2,6 +2,7 @@ extends Node
 
 const ServiceZone := preload("res://scripts/development/brewing_preview_service_zone.gd")
 const DevelopmentStock := preload("res://scripts/development/development_portion_stock.gd")
+const ReadyItemZone := preload("res://scripts/development/ready_item_preview_zone.gd")
 
 @onready var screen: Node2D = $TongDayScreen
 @onready var kettle: Kettle = $TongDayScreen/WorldRoot/ToolLayer/KettleStation
@@ -11,6 +12,7 @@ var reset_button: Button
 var next_sample_button: Button
 var stock_label: Label
 var service_zone: ServiceZone
+var ready_item_zone: ReadyItemZone
 var portion_stock := DevelopmentStock.new()
 
 func _ready() -> void:
@@ -21,9 +23,17 @@ func _ready() -> void:
 	service_zone.name = "PreviewServiceTarget"
 	service_zone.controller = controller
 	service_zone.screen_root = screen
-	service_zone.position = Vector2(1640, 400)
+	# Keep the whole swinging bag clear of this temporary order card.
+	service_zone.position = Vector2(1640, 470)
 	screen.get_node("WorldRoot/DropZoneRoot").add_child(service_zone)
 	controller.register_drop_zone(service_zone)
+	ready_item_zone = ReadyItemZone.new()
+	ready_item_zone.name = "PreviewReadyItemTarget"
+	ready_item_zone.controller = controller
+	ready_item_zone.screen_root = screen
+	ready_item_zone.position = Vector2(1000, 450)
+	screen.get_node("WorldRoot/DropZoneRoot").add_child(ready_item_zone)
+	controller.register_drop_zone(ready_item_zone)
 	reset_fixture()
 
 func _build_controls() -> void:
@@ -64,7 +74,7 @@ func _build_controls() -> void:
 	hint.add_theme_font_size_override("font_size", 14)
 	hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.text = "Use: drag portions from the tea box or cans. Hold Space to pour the kettle."
+	hint.text = "Brush to sway. Use to take one item."
 	rows.add_child(hint)
 	stock_label = Label.new()
 	stock_label.name = "FixtureStock"
@@ -84,7 +94,7 @@ func _build_controls() -> void:
 	fixture_note.add_theme_font_size_override("font_size", 12)
 	fixture_note.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	fixture_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	fixture_note.text = "Test stock and sample service only.\nNo payments or reputation economy."
+	fixture_note.text = "Temporary stock and handoff fixtures."
 	rows.add_child(fixture_note)
 
 func _button(node_name: String, caption: String, action: Callable) -> Button:
@@ -118,18 +128,26 @@ func reset_fixture() -> void:
 	game_state.ensure_water_day()
 	game_state.start_water_day(game_state.water_supply.day_id + 1)
 	portion_stock.reset_fixture()
-	service_zone.reset_samples()
+	if is_instance_valid(service_zone) and not service_zone.is_queued_for_deletion():
+		service_zone.reset_samples()
+	if is_instance_valid(ready_item_zone) and not ready_item_zone.is_queued_for_deletion():
+		ready_item_zone.reset_fixture()
+	for hanging in screen.hanging_sources:
+		if is_instance_valid(hanging) and not hanging.is_queued_for_deletion():
+			hanging.reset_sway()
 
 func _next_sample() -> void:
 	if _blocked():
 		return
-	service_zone.next_sample()
+	if is_instance_valid(service_zone) and not service_zone.is_queued_for_deletion():
+		service_zone.next_sample()
 
 func _update_stock_label() -> void:
 	if is_instance_valid(stock_label):
-		stock_label.text = "Test stock · teabags %d\nSugar spoons %d · Milk spoons %d" % [
+		stock_label.text = "Test stock · teabags %d\nSugar spoons %d · Milk spoons %d\nBananas %d · Biscuits %d" % [
 			portion_stock.available(&"black_tea"), portion_stock.available(&"sugar"),
 			portion_stock.available(&"condensed_milk"),
+			portion_stock.available(&"banana"), portion_stock.available(&"biscuits"),
 		]
 
 func _process(_delta: float) -> void:
