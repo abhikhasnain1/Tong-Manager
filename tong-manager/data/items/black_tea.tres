@@ -2,9 +2,17 @@
 
 [ext_resource type="Script" uid="uid://davlrsy31k3cs" path="res://scripts/data/item_def.gd" id="1_item_def"]
 
+[ext_resource type="Texture2D" path="res://assets/art/icons/tea_box_ready_provisional.png" id="2_icon"]
+
 [resource]
+
 script = ExtResource("1_item_def")
 id = &"black_tea"
+pantry_enabled = true
+pantry_order = 0
+portion_label = "Tea"
+portion_visual = "auto"
+icon = ExtResource("2_icon")
 display_name_key = "item.black_tea.name"
 category = &"kettle_base"
 unit = &"teabag"

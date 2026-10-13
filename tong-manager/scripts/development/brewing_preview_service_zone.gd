@@ -106,7 +106,7 @@ func _snapshot(cup: Cup) -> Dictionary:
 		"available": cup.state == Cup.CupState.FILLED,
 		"clean": cup.state != Cup.CupState.DIRTY,
 		"recipe_id": cup.contents_base_id,
-		"garnish_count": cup.relish_item_ids.size(),
+		"garnish_count": cup.get_ingredient_amounts().size(),
 		"volume_ml": cup.volume_ml,
 		"temperature": cup.temperature,
 		"cold_threshold": cup.config.cold_temperature,

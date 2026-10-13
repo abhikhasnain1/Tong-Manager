@@ -74,7 +74,4 @@ func _apply() -> bool:
 	# world here, without trying to claim or validate that reservation again.
 	if not _validate_current_state().is_valid:
 		return false
-	var target := _target()
-	if target is Kettle:
-		return (target as Kettle).add_tea_leaves()
-	return (target as Cup).add_relish(_item_id)
+	return _policy.apply(_item_id, _unit, _quantity, _target())

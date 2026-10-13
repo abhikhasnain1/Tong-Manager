@@ -27,7 +27,9 @@ func configure(interaction: InteractionController, owner_node: Node2D) -> void:
 		controller.register_drop_zone(self)
 
 func is_relevant_to(payload: HeldItemPayload) -> bool:
-	return payload != null and payload.metadata.get("category") == &"ingredient_portion"
+	# Pieces can be recipe ingredients too; the selected policy decides which.
+	return (payload != null and payload.metadata.get("category") in [&"ingredient_portion", &"ready_item"]
+		and payload.metadata.get("portion") is IngredientPortion)
 
 func accepts(payload: HeldItemPayload) -> DropValidation:
 	if (not is_relevant_to(payload) or not is_inside_tree() or is_queued_for_deletion()
@@ -60,7 +62,9 @@ func try_apply_drop(payload: HeldItemPayload) -> bool:
 			controller.report_hint(validation.reason_key)
 		return false
 	var portion := payload.metadata.get("portion") as IngredientPortion
-	var hint := "Added one teabag" if portion.unit == &"teabag" else "Added one spoonful of %s" % ("milk" if portion.item_id == &"condensed_milk" else "sugar")
+	var item: Resource = get_node("/root/Catalog").get_portion_item(portion.item_id)
+	var label := String(portion.item_id) if item == null else String(item.get_portion_label())
+	var hint := "Added %d %s · %s" % [portion.quantity, portion.unit, label]
 	var self_ref: WeakRef = weakref(self)
 	if not IngredientDropCommand.new(portion, target, policy, _context_ref.get_ref() as Node).execute():
 		return false

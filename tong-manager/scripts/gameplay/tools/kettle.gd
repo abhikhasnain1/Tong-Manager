@@ -15,7 +15,22 @@ const POUR_HEIGHT := 65.0
 var state: BrewState = BrewState.EMPTY
 var volume_ml := 0.0
 var temperature := 20.0
-var contains_tea := false
+var brewed_liquid_id: StringName = &""
+var _infused_counts: Dictionary[StringName, int] = {}
+var _mixed_amounts: Dictionary[StringName, float] = {}
+# Compatibility for earlier fixtures. Live brewing uses counted batch contents.
+var contains_tea: bool:
+	get:
+		return not _infused_counts.is_empty()
+	set(value):
+		if not value:
+			_infused_counts.clear()
+			brewed_liquid_id = &""
+			steep_progress = 0.0
+			ready_heat_seconds = 0.0
+		elif _infused_counts.is_empty():
+			_infused_counts[&"black_tea"] = 1
+			brewed_liquid_id = &"black_tea"
 var steep_progress := 0.0
 # Retained field name; this is elapsed ready time regardless of heat.
 var ready_heat_seconds := 0.0
@@ -68,11 +83,61 @@ func add_water(amount_ml: float) -> float:
 	return accepted
 
 func add_tea_leaves() -> bool:
-	if contains_tea or volume_ml <= 0.0 or temperature < config.boiling_temperature or is_pouring:
+	# Legacy entry point uses the same configured permission and effect path.
+	var policy: Resource = load("res://data/balance/ingredient_policy.tres")
+	return bool(policy.apply(&"black_tea", &"teabag", 1, self))
+
+
+func get_infused_counts() -> Dictionary[StringName, int]:
+	return _infused_counts.duplicate()
+
+
+func get_mixed_amounts() -> Dictionary[StringName, float]:
+	return _mixed_amounts.duplicate()
+
+
+func get_ingredient_amounts() -> Dictionary[StringName, float]:
+	var amounts := _mixed_amounts.duplicate()
+	for item_id in _infused_counts:
+		amounts[item_id] = amounts.get(item_id, 0.0) + float(_infused_counts[item_id])
+	return amounts
+
+
+func get_ingredient_stage() -> StringName:
+	return [&"empty", &"water", &"heating", &"boiling", &"steeping", &"liquor_ready", &"oversteeped"][state] if state >= 0 and state <= BrewState.OVERSTEEPED else &"invalid"
+
+
+func has_contents() -> bool:
+	return volume_ml > 0.0 or not _infused_counts.is_empty() or not _mixed_amounts.is_empty()
+
+
+func can_apply_ingredient(item_id: StringName, quantity: int, effect: StringName, output_liquid_id: StringName = &"") -> bool:
+	if (not is_inside_tree() or is_queued_for_deletion() or item_id.is_empty() or quantity <= 0
+		or get_ingredient_stage() == &"invalid" or tool_def == null or config == null
+		or not is_finite(volume_ml) or not is_finite(temperature) or volume_ml < 0.0
+		or tool_def.kettle_capacity_ml <= 0 or volume_ml > float(tool_def.kettle_capacity_ml)):
 		return false
-	contains_tea = true
-	steep_progress = 0.0
-	state = BrewState.STEEPING
+	if effect == &"mix":
+		return output_liquid_id.is_empty() and is_finite(_mixed_amounts.get(item_id, 0.0) + float(quantity))
+	if effect != &"infuse" or output_liquid_id.is_empty() or volume_ml <= 0.0:
+		return false
+	return ((_infused_counts.is_empty() or brewed_liquid_id == output_liquid_id)
+		and _infused_counts.get(item_id, 0) <= 9223372036854775807 - quantity)
+
+
+func apply_ingredient(item_id: StringName, quantity: int, effect: StringName, output_liquid_id: StringName = &"", restart_steeping := false) -> bool:
+	if not can_apply_ingredient(item_id, quantity, effect, output_liquid_id):
+		return false
+	if effect == &"mix":
+		_mixed_amounts[item_id] = _mixed_amounts.get(item_id, 0.0) + float(quantity)
+	else:
+		var first_infusion := _infused_counts.is_empty()
+		_infused_counts[item_id] = _infused_counts.get(item_id, 0) + quantity
+		brewed_liquid_id = output_liquid_id
+		if first_infusion or restart_steeping:
+			steep_progress = 0.0
+			ready_heat_seconds = 0.0
+			state = BrewState.STEEPING
 	_changed()
 	return true
 
@@ -109,7 +174,7 @@ func advance_brewing(delta: float) -> void:
 	_changed()
 
 func can_pour_into(cup: Cup) -> bool:
-	return is_instance_valid(cup) and cup.is_inside_tree() and not cup.is_queued_for_deletion() and state == BrewState.LIQUOR_READY and volume_ml > 0.0 and cup.can_receive_liquid(&"black_tea")
+	return is_instance_valid(cup) and cup.is_inside_tree() and not cup.is_queued_for_deletion() and state == BrewState.LIQUOR_READY and volume_ml > 0.0 and not brewed_liquid_id.is_empty() and cup.can_receive_liquid(brewed_liquid_id)
 
 func start_pour(cup: Cup) -> bool:
 	if is_pouring or not can_pour_into(cup):
@@ -136,16 +201,30 @@ func update_pour(delta: float) -> void:
 		return
 	if not is_finite(delta) or delta <= 0.0:
 		return
-	var transferred := pour_target.receive_liquid(&"black_tea", minf(volume_ml, config.pour_rate_ml * delta), temperature)
+	var requested := minf(volume_ml, config.pour_rate_ml * delta)
+	var previous_volume := volume_ml
+	var carried: Dictionary[StringName, float] = {}
+	for item_id in _mixed_amounts:
+		carried[item_id] = _mixed_amounts[item_id] * requested / previous_volume
+	var receiver := pour_target
+	var self_ref: WeakRef = weakref(self)
+	# Suppress cup notifications until both vessels contain the completed transfer.
+	var transferred := receiver.receive_liquid(brewed_liquid_id, requested, temperature, carried, false)
+	for item_id in _mixed_amounts:
+		_mixed_amounts[item_id] = maxf(0.0, _mixed_amounts[item_id] - carried[item_id] * transferred / requested) if requested > 0.0 else _mixed_amounts[item_id]
 	volume_ml = maxf(0.0, volume_ml - transferred)
-	if volume_ml <= 0.0001:
+	if volume_ml <= 0.0:
 		volume_ml = 0.0
-		contains_tea = false
-		steep_progress = 0.0
-		ready_heat_seconds = 0.0
+		_clear_ingredients()
 		state = BrewState.EMPTY
+	if transferred > 0.0:
+		receiver.notify_contents_changed()
+	if self_ref.get_ref() == null:
+		return
 	_changed()
-	if transferred <= 0.0 or not is_instance_valid(pour_target) or not can_pour_into(pour_target):
+	if self_ref.get_ref() == null:
+		return
+	if is_pouring and pour_target == receiver and (transferred <= 0.0 or not is_instance_valid(pour_target) or not can_pour_into(pour_target)):
 		stop_pour()
 
 func stop_pour() -> void:
@@ -171,12 +250,18 @@ func discard_contents() -> float:
 	stop_pour()
 	var discarded := volume_ml
 	volume_ml = 0.0
-	contains_tea = false
-	steep_progress = 0.0
-	ready_heat_seconds = 0.0
+	_clear_ingredients()
 	state = BrewState.EMPTY
 	_changed()
 	return discarded
+
+
+func _clear_ingredients() -> void:
+	_infused_counts.clear()
+	_mixed_amounts.clear()
+	brewed_liquid_id = &""
+	steep_progress = 0.0
+	ready_heat_seconds = 0.0
 
 func _on_target_discarded(_discarded_ml: float) -> void:
 	_pour_requires_release = true
@@ -292,7 +377,7 @@ func _draw() -> void:
 func _update_status() -> void:
 	if not is_node_ready():
 		return
-	var state_text: String = ["Empty", "Water", "Heating", "Boiling", "Steeping", "Tea ready", "Oversteeped"][state]
+	var state_text: String = ["Empty", "Water", "Heating", "Boiling", "Steeping", "Ready", "Oversteeped"][state]
 	status.text = tr(state_text) + " · %d ml" % roundi(volume_ml)
 	if volume_ml > 0.0:
 		status.text += " · %d°C" % roundi(temperature)

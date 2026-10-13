@@ -2,9 +2,17 @@
 
 [ext_resource type="Script" uid="uid://davlrsy31k3cs" path="res://scripts/data/item_def.gd" id="1_item_def"]
 
+[ext_resource type="Texture2D" path="res://assets/art/icons/banana_ready_provisional.png" id="2_icon"]
+
 [resource]
+
 script = ExtResource("1_item_def")
 id = &"banana"
+pantry_enabled = true
+pantry_order = 30
+portion_label = "Banana"
+portion_visual = "banana"
+icon = ExtResource("2_icon")
 display_name_key = "item.banana.name"
 category = &"ready_item"
 unit = &"piece"

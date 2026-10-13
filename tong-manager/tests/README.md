@@ -54,7 +54,9 @@ active gesture first. Recipes, finance and quests remain page shells.
 ## Khata pantry and portion export
 
 The right-hand pantry page contains Tea, Sugar, Milk, Banana and Biscuit in a
-3+2 grid. Peek and Full show the same live quantities from `GameState.inventory`.
+3+2 grid by default. Additional configured items appear in groups of five using
+in-page arrows; Peek and Full retain the same selected group. Both views show
+the same live quantities from `GameState.inventory`.
 Tea exports one teabag, sugar and milk one spoonful, and snacks one piece.
 Pickup reserves a portion; only a successful permitted drop consumes it. Empty
 stock stays visible and cannot be picked up. Physical-source reservations and
@@ -121,6 +123,36 @@ destination rules, transaction rollback/reentry, moving/removing vessels, recipe
 metadata and per-cup counts. Run `ingredient_commands_input_test.gd` rendered at
 all four review sizes for real physical and pantry pointer input through this
 command path; pass a capture directory after `--` and use `--position 60,60`.
+
+## Designer-configurable ingredient rules
+
+Open `scenes/development/IngredientRulesPreview.tscn` and press **F6** to compare
+the unchanged defaults with three example policies: up to five teabags, no
+teabags, and temperature/stage-specific kettle mixing. Changing the selection
+empties the vessels and resets supplies. Select **Use** to extract physical
+portions, or open the pantry. The normal scene keeps the default policy.
+
+With five bags selected, fill and boil the kettle, add five separate bags and
+check that the sixth is rejected. With zero selected, a bag must be returned
+without consuming stock. In the mixing example, a bag can start brewing at
+20°C, sugar is allowed while steeping or ready, and milk only while ready.
+Pouring mixed tea carries proportional ingredient units into the cup; the
+sandbox readout shows them. Emptying either vessel clears its contents without
+refunding ingredients. These controls and readouts remain review fixtures.
+
+The [ingredient authoring guide](../docs/ingredient-rules.md) explains count,
+destination, stage, temperature, base-liquid and effect settings, how those
+permissions differ from recipe doses, and the supported-effects boundary.
+The [item/source guide](../docs/portion-items.md) explains new catalog items,
+stock, presentation, physical bindings and extra pantry groups.
+
+Run `designer_ingredient_rules_test.gd`, `configurable_vessel_test.gd` and
+`portion_catalog_test.gd` headlessly. Run `designer_ingredient_rules_input_test.gd`
+and `portion_catalog_input_test.gd` rendered with native pointer access and
+`--position 60,60`; an optional capture directory follows `--`. These test
+alternate policies, real profile selection, extra-item navigation and drops,
+and stock/contents conservation. Temporary catalog fixtures add no shipped
+items. Existing default command/input suites remain the default regression.
 
 ## Brewing interaction fixture
 

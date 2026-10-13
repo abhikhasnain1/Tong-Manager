@@ -40,9 +40,8 @@ func _update_stock_label() -> void:
 	if not is_instance_valid(stock_label):
 		return
 	var lines := PackedStringArray(["Available / remaining"])
-	for pair in [[&"black_tea", "Teabags"], [&"sugar", "Sugar spoons"],
-		[&"condensed_milk", "Milk spoons"], [&"banana", "Bananas"], [&"biscuits", "Biscuits"]]:
-		lines.append("%s  %d / %d" % [pair[1], portion_stock.available(pair[0]), portion_stock.remaining(pair[0])])
+	for item: ItemDef in get_node("/root/Catalog").get_pantry_items():
+		lines.append("%s  %d / %d" % [item.get_portion_label(), portion_stock.available(item.id), portion_stock.remaining(item.id)])
 	stock_label.text = "\n".join(lines)
 
 

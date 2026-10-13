@@ -5,6 +5,8 @@ const CROP_SAFE_RECT := Rect2(96.0, 0.0, 1728.0, 1080.0)
 
 @export var tool_def: Resource
 @export var day_config: Resource
+@export var ingredient_policy: IngredientPolicy = preload("res://data/balance/ingredient_policy.tres")
+@export var source_layout: PortionSourceLayout = preload("res://data/balance/portion_sources_level_1.tres")
 
 @onready var world_root: Node2D = %WorldRoot
 @onready var composition_guides: Node2D = %CompositionGuides
@@ -83,38 +85,43 @@ func _sync_inventory_targets() -> void:
 
 
 func _configure_portion_sources() -> void:
-	var rail := $WorldRoot/ToolLayer/ReadyItemRail
-	var definitions := [
-		["TeaBox", &"black_tea", &"teabag"],
-		["SugarCan", &"sugar", &"spoonful"],
-		["SugarCanEnglish", &"sugar", &"spoonful"],
-		["CondensedMilkCan", &"condensed_milk", &"spoonful"],
-	]
-	for definition in definitions:
-		var item := rail.get_node(NodePath(definition[0])) as Node2D
+	if source_layout == null:
+		return
+	for binding in source_layout.physical_sources:
+		if binding == null: continue
+		var item := get_node_or_null(binding.node_path) as Node2D
+		var definition: ItemDef = get_node("/root/Catalog").get_portion_item(binding.item_id)
+		if item == null or definition == null:
+			push_warning("Invalid physical portion source: %s" % binding.item_id)
+			continue
+		var input := item.get_node_or_null(binding.input_area_path) as Area2D
+		var handle := item.get_node_or_null(binding.placement_handle_path) as TablePlaceable
+		if input == null or handle == null:
+			push_warning("Portion source requires its input area and placement handle")
+			continue
 		var source := IngredientPortionSource.new()
 		source.name = "IngredientSource"
 		item.add_child(source)
-		source.configure($InteractionController, definition[1], definition[2],
-			item.get_node("PlacementBody"), item.get_node("PlacementHandle"))
+		source.configure($InteractionController, definition.id, definition.unit, input, handle)
 		source.set_provider(_portion_provider)
 		portion_sources.append(source)
 
 
 func _configure_hanging_sources() -> void:
-	var rail := $WorldRoot/ToolLayer/ReadyItemRail
-	var banana := rail.get_node("Banana") as Sprite2D
-	var biscuits := rail.get_node("Biscuits") as Sprite2D
-	# Preserve the authored pictures and composition. The banana picture contains
-	# two bunches separated by transparent pixels, each with its own fixed joint.
-	_add_hanging_source(banana, "BananaLeft", &"banana", Rect2(0, 0, 192, 367), Vector2(76, 0))
-	_add_hanging_source(banana, "BananaRight", &"banana", Rect2(192, 0, 120, 367), Vector2(249, 51))
-	_add_hanging_source(biscuits, "BiscuitBag", &"biscuits", Rect2(0, 0, 398, 686), Vector2(245, 12))
-	banana.hide()
-	biscuits.hide()
+	if source_layout == null:
+		return
+	for binding in source_layout.hanging_sources:
+		if binding == null: continue
+		var authored := get_node_or_null(binding.art_path) as Sprite2D
+		var definition: ItemDef = get_node("/root/Catalog").get_portion_item(binding.item_id)
+		if authored == null or definition == null:
+			push_warning("Invalid hanging portion source: %s" % binding.item_id)
+			continue
+		_add_hanging_source(authored, binding.node_name, definition.id, binding.region, binding.pivot, definition.unit)
+		authored.hide()
 
 
-func _add_hanging_source(authored: Sprite2D, node_name: String, item_id: StringName, region: Rect2, pivot: Vector2) -> void:
+func _add_hanging_source(authored: Sprite2D, node_name: String, item_id: StringName, region: Rect2, pivot: Vector2, unit: StringName) -> void:
 	var hanging := HangingSourceBody.new()
 	hanging.name = node_name
 	hanging.position = authored.position
@@ -124,7 +131,7 @@ func _add_hanging_source(authored: Sprite2D, node_name: String, item_id: StringN
 	var source := IngredientPortionSource.new()
 	source.name = "ReadyItemSource"
 	hanging.add_child(source)
-	source.configure_fixed($InteractionController, item_id, &"piece", hanging,
+	source.configure_fixed($InteractionController, item_id, unit, hanging,
 		hanging.input_area, hanging.contains_pointer, hanging.is_frontmost_at)
 	source.set_provider(_portion_provider)
 	portion_sources.append(source)
@@ -137,12 +144,27 @@ func _configure_portion_target(target: Node2D) -> void:
 		zone.name = "IngredientTarget"
 		target.add_child(zone)
 	var anchor := target.get_node_or_null("IngredientAnchor") as Marker2D
+	zone.policy = ingredient_policy
 	zone.position = anchor.position if anchor != null else (Vector2(26, -70) if target is Kettle else Vector2(0, -12))
 	zone.configure($InteractionController, target)
 	if not zone.tree_exited.is_connected(_sync_inventory_targets):
 		zone.tree_exited.connect(_sync_inventory_targets, CONNECT_DEFERRED)
 		zone.tree_entered.connect(_sync_inventory_targets, CONNECT_DEFERRED)
 	_sync_inventory_targets()
+
+
+func set_ingredient_policy(value: IngredientPolicy) -> bool:
+	if value == null or not value.configuration_errors().is_empty():
+		return false
+	var interaction := get_node_or_null("InteractionController") as InteractionController
+	if is_instance_valid(interaction) and interaction.is_dragging():
+		interaction.cancel_drag()
+	ingredient_policy = value
+	# Use ownership rather than fixed scene paths: held/moved vessels still belong here.
+	for node in find_children("IngredientTarget", "", true, false):
+		if node is IngredientPortionTarget:
+			(node as IngredientPortionTarget).policy = value
+	return true
 
 
 func set_composition_guides_visible(is_visible: bool) -> void:

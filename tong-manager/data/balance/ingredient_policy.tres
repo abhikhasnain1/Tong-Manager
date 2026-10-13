@@ -8,6 +8,11 @@ script = ExtResource("2_rule")
 item_id = &"black_tea"
 unit = &"teabag"
 vessel_kind = "kettle"
+effect = "infuse"
+output_liquid_id = &"black_tea"
+allowed_stages = Array[StringName]([&"water", &"heating", &"boiling", &"steeping", &"liquor_ready", &"oversteeped"])
+max_portions = 1
+allowed_liquid_ids = Array[StringName]([&"water", &"black_tea"])
 requires_boiling = true
 max_batch_volume_ml = 1500.0
 
@@ -16,6 +21,8 @@ script = ExtResource("2_rule")
 item_id = &"sugar"
 unit = &"spoonful"
 vessel_kind = "cup"
+allowed_stages = Array[StringName]([&"clean", &"in_use", &"filled"])
+allowed_liquid_ids = Array[StringName]([&"black_tea"])
 allow_empty = true
 allow_repeated = true
 
@@ -24,6 +31,8 @@ script = ExtResource("2_rule")
 item_id = &"condensed_milk"
 unit = &"spoonful"
 vessel_kind = "cup"
+allowed_stages = Array[StringName]([&"clean", &"in_use", &"filled"])
+allowed_liquid_ids = Array[StringName]([&"black_tea"])
 allow_empty = true
 allow_repeated = true
 

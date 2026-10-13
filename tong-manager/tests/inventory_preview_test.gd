@@ -127,7 +127,7 @@ func check_physical_commands() -> void:
 		check(stock.remaining(source.item_id) == before - 1 and preview.ready_item_zone.handed_off[source.item_id] == handed + 1,
 			"Fixed %s source consumes shared inventory through the labelled handoff fixture" % source.source_owner.name)
 		check(not preview.ready_item_zone.try_apply_drop(payload), "Repeated ready-item command cannot consume again")
-	check(preview.stock_label.text.contains("Bananas  %d / %d" % [stock.available(&"banana"), stock.remaining(&"banana")]),
+	check(preview.stock_label.text.contains("%s  %d / %d" % [root.get_node("Catalog").get_portion_item(&"banana").get_portion_label(), stock.available(&"banana"), stock.remaining(&"banana")]),
 		"Visible panel immediately reflects shared banana consumption")
 
 
@@ -230,7 +230,7 @@ func check_scene_lifecycle() -> void:
 		and stock.available(&"condensed_milk") == 3, "Explicit reset uses the active scene's configured starting counts")
 	check(supply.day_id == day + 1 and supply.remaining_ml == 1700.0,
 		"Only explicit new-day reset restores the configured measured water allocation")
-	check(preview.stock_label.text.contains("Bananas  7 / 7") and drum().remaining_label.text.contains("1700"),
+	check(preview.stock_label.text.contains("%s  7 / 7" % root.get_node("Catalog").get_portion_item(&"banana").get_portion_label()) and drum().remaining_label.text.contains("1700"),
 		"Stock and water views immediately reflect the configured reset")
 	check(controller.current_mode == InteractionController.MODE_NEUTRAL and not portion.is_available(),
 		"Reset returns Neutral without revalidating old payloads")

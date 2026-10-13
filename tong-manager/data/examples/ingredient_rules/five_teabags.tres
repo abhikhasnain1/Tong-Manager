@@ -1,0 +1,41 @@
+[gd_resource type="Resource" script_class="IngredientPolicy" load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ingredient_policy.gd" id="1_policy"]
+[ext_resource type="Script" path="res://scripts/data/ingredient_rule.gd" id="2_rule"]
+
+[sub_resource type="Resource" id="Rule_teabag"]
+script = ExtResource("2_rule")
+item_id = &"black_tea"
+unit = &"teabag"
+vessel_kind = "kettle"
+effect = "infuse"
+output_liquid_id = &"black_tea"
+allowed_stages = Array[StringName]([&"water", &"heating", &"boiling", &"steeping", &"liquor_ready", &"oversteeped"])
+max_portions = 5
+allowed_liquid_ids = Array[StringName]([&"water", &"black_tea"])
+requires_boiling = true
+max_batch_volume_ml = 1500.0
+
+[sub_resource type="Resource" id="Rule_sugar"]
+script = ExtResource("2_rule")
+item_id = &"sugar"
+unit = &"spoonful"
+vessel_kind = "cup"
+allowed_stages = Array[StringName]([&"clean", &"in_use", &"filled"])
+allowed_liquid_ids = Array[StringName]([&"black_tea"])
+allow_empty = true
+allow_repeated = true
+
+[sub_resource type="Resource" id="Rule_milk"]
+script = ExtResource("2_rule")
+item_id = &"condensed_milk"
+unit = &"spoonful"
+vessel_kind = "cup"
+allowed_stages = Array[StringName]([&"clean", &"in_use", &"filled"])
+allowed_liquid_ids = Array[StringName]([&"black_tea"])
+allow_empty = true
+allow_repeated = true
+
+[resource]
+script = ExtResource("1_policy")
+rules = Array[ExtResource("2_rule")]([SubResource("Rule_teabag"), SubResource("Rule_sugar"), SubResource("Rule_milk")])
