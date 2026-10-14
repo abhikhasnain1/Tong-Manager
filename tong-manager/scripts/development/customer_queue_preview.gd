@@ -11,6 +11,7 @@ const DAY_LABELS := ["Authored day 1 · quick review", "Authored day 2 · quick 
 
 @export var preview_seed := 64
 @export_range(0, 3) var initial_day := 0
+@export var show_finance_review := false
 
 @onready var screen: Node2D = $TongDayScreen
 @onready var controller: InteractionController = $TongDayScreen/InteractionController
@@ -23,6 +24,7 @@ var motion_toggle: CheckButton
 var status_label: Label
 var event_label: Label
 var selected_day := 0
+var finance_label: Label
 
 
 func _ready() -> void:
@@ -66,7 +68,7 @@ func _build_controls() -> void:
 	var rows := VBoxContainer.new()
 	rows.add_theme_constant_override("separation", 6)
 	panel.add_child(rows)
-	_label(rows, "CUSTOMER QUEUE REVIEW", 14)
+	_label(rows, "PAYMENT REVIEW" if show_finance_review else "CUSTOMER QUEUE REVIEW", 14)
 	_label(rows, "Two places at the counter.\nArrivals wait when both are occupied.", 12)
 	day_picker = OptionButton.new()
 	day_picker.name = "DayPicker"
@@ -90,6 +92,11 @@ func _build_controls() -> void:
 	event_label.custom_minimum_size = Vector2(206, 48)
 	event_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_label(rows, "Use: drop a cup or snack on a customer.\nWrong servings give a bad review.\nEmpty cups return to their place.\nOpen the Khata: time keeps moving.\nRestart preserves supplies and served cups.\nRerun the scene for a fresh cup supply.", 11)
+	if show_finance_review:
+		finance_label = _label(rows, "", 12)
+		finance_label.custom_minimum_size.x = 206
+		finance_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_label(rows, "Payment is automatic, including mistakes.\nCash/history survive same-run reloads.\nFinance page and day-end are later work.", 11)
 
 
 func _on_service_accepted(record: Dictionary) -> void:
@@ -176,6 +183,14 @@ func _actor_in_slot(slot: int) -> Customer:
 
 func _process(_delta: float) -> void:
 	if queue == null or status_label == null: return
+	if finance_label != null:
+		var finance: FinanceState = get_node("/root/GameState").finance
+		var rows := ["Cash ৳ %d · Income ৳ %d" % [finance.cash_on_hand, finance.day_income], "Expenses ৳ %d · Entries %d" % [finance.day_expenses, finance.transaction_log.size()]]
+		var history := finance.transaction_log
+		if not history.is_empty():
+			var latest: Dictionary = history.back()
+			rows.append("Last: %s৳ %d · %s" % ["+" if latest.kind == &"income" else "−", latest.amount, latest.metadata.get("request_id", latest.source_id)])
+		finance_label.text = "\n".join(rows)
 	var blocked := _blocked()
 	day_picker.disabled = blocked
 	restart_button.disabled = blocked

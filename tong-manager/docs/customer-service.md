@@ -31,6 +31,6 @@ Ready servings use `IngredientPortion.commit()`. Cups were paid for in ingredien
 
 A served cup moves into the screen-owned `CustomerService/ServedCups` holder. It retains its object identity, contents and assigned order; its table footprint and interaction targets are released. Customer departure, queue restart and detaching/re-adding the same screen preserve it. Dirty return and washing remain separate work.
 
-`CustomerService.service_accepted(record)` publishes once after successful input cleanup. `get_records()` returns copied records containing handoff/order/customer IDs, the saved request, its quoted price, actual result and retained cup instance ID. This is the integration point for automatic payment in #68; this slice does not change cash or play a payment cue. Payment consumers must deduplicate on the handoff/order identity.
+`CustomerService.service_accepted(record)` publishes once after successful input cleanup. `get_records()` returns copied records containing handoff/order/customer IDs, the saved request, its quoted price, actual result and retained cup instance ID. The run-owned `CustomerPayments` receives an authoritative receipt before presentation callbacks and credits automatic payment once. See [Automatic payment](payments.md) for its ledger, cue, reset boundary and review scene.
 
 The older `CustomerScenePreview` uses labelled synthetic presentation tokens and historical rejection samples. Use `CustomerHandoffPreview` to test the current production serving policy.

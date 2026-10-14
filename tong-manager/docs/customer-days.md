@@ -118,6 +118,8 @@ sets its `OrderAnchor` beside the head. Test both authored days and the notebook
 at the supported viewport sizes after changing placement or sizing.
 
 Real cup/portion handoff is connected; see [Customer serving](customer-service.md).
-Payment and day-end progression remain separate integrations. The earlier
+Accepted service now pays automatically through the shared run ledger; see
+[Automatic payment](payments.md). Restarting this schedule does not reset that
+ledger. Day-end progression remains separate work. The earlier
 `CustomerScenePreview` opts out of the live queue and
 retains its original single-cue sample presentation and motion controls.

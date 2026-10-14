@@ -29,6 +29,7 @@ const INACTIVE_MODE_COLOR := Color(0.83, 0.80, 0.74, 1.0)
 
 var current_mode: StringName = MODE_NEUTRAL
 var _controller: InteractionController
+var _finance: FinanceState
 
 
 func _ready() -> void:
@@ -83,6 +84,32 @@ func set_clock_text(value: String) -> void:
 
 func set_cash(value: int) -> void:
 	cash_label.text = "৳ %d" % value
+
+
+func bind_finance(value: FinanceState) -> void:
+	if _finance != null and _finance.changed.is_connected(_refresh_cash):
+		_finance.changed.disconnect(_refresh_cash)
+	_finance = value
+	_connect_finance()
+
+
+func _connect_finance() -> void:
+	if _finance == null or not is_inside_tree(): return
+	if not _finance.changed.is_connected(_refresh_cash): _finance.changed.connect(_refresh_cash)
+	_refresh_cash()
+
+
+func _refresh_cash() -> void:
+	if _finance != null and is_node_ready() and is_inside_tree(): set_cash(_finance.cash_on_hand)
+
+
+func _enter_tree() -> void:
+	if is_node_ready(): _connect_finance.call_deferred()
+
+
+func _exit_tree() -> void:
+	if _finance != null and _finance.changed.is_connected(_refresh_cash):
+		_finance.changed.disconnect(_refresh_cash)
 
 
 func set_mode(mode: StringName) -> void:

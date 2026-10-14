@@ -118,5 +118,8 @@ ready snack fulfils the order, while mismatch and brew quality become recorded
 review reasons. See [Customer serving](customer-service.md). The accepted/rejected
 constructor above remains available to isolated component fixtures.
 
-Payments (#68), day-end feedback (#73), review aggregation and preference dialogue
-remain separate. Bucket and dirty-cup return remain on hold.
+Automatic payment consumes the committed service receipt through the shared run
+ledger; see [Automatic payment](payments.md). The isolated order-data preview
+still never changes cash. Day-end feedback (#73), the Khata Finance page (#74),
+review aggregation and preference dialogue remain separate. Bucket and dirty-cup
+return remain on hold.

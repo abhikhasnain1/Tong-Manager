@@ -1,5 +1,21 @@
 # Hanging sources, portions, placement and brewing verification
 
+## Automatic payment
+
+Open `scenes/development/PaymentPreview.tscn` and press **F6**. Serve actual cups
+and snacks, including wrong or cold orders, and check the quoted payment, cash HUD,
+small coin cue and chime. Empty/cancelled/timeout attempts pay nothing. The labelled
+review panel reads the same ledger as the HUD; full finance/day-end UI remains later.
+See [Automatic payment](../docs/payments.md) for tuning and reset boundaries.
+
+Run `finance_state_test.gd`, `payment_feedback_test.gd` and
+`customer_payment_test.gd` headlessly. Run `customer_payment_test.gd` natively at
+1920x1080, 1600x900, 1366x768 and 1280x800, with a capture directory after `--`.
+The integration suite reuses the real handoff input helpers and checks correct/bad
+servings, captured quotes, pantry views, rejected/cancelled service, duplicate
+receipts, scene retirement/recreation, explicit reset and ledger replacement.
+Native processes run serially so pointer input remains deterministic.
+
 ## Real customer handoff
 
 Open `scenes/development/CustomerHandoffPreview.tscn` and press **F6**.
@@ -14,8 +30,8 @@ Run `customer_handoff_test.gd` with a rendered window at 1920x1080, 1600x900,
 1366x768 and 1280x800, passing a capture directory after `--`. It uses actual
 mouse pickup/release for cups, hanging snacks and both pantry views, and checks
 conservation, accepted mistakes, retained cups, stale targets and callback races.
-Run rendered processes sequentially. Money and cup return are not implemented
-by this slice.
+Run rendered processes sequentially. Automatic payment has its own checks above;
+cup return remains separate.
 
 ## Customer scene
 
@@ -478,5 +494,5 @@ data-derived presentation and tuning; the integration suite uses live queue
 orders, real mouse/notebook input, replacement/fulfillment/timeout/removal,
 restart/re-entry, viewport transforms and unchanged stock/water/cups/cash.
 Its accepted/rejected results are explicitly supplied fixtures, not tests of the
-production handoff or future payment rules. Actual scene review is still needed
+production handoff or connected payment rules. Actual scene review is still needed
 before merge.

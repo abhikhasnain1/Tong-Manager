@@ -68,4 +68,7 @@ Review these live bindings in `CustomerQueuePreview.tscn`; the isolated
 `CustomerScenePreview` keeps its original sample cue. The bubble's
 `get_accessibility_summary()` exposes a readable description to code and tests;
 this does not add platform screen-reader integration. Real stock/cup handoff and
-matching are reviewed in `CustomerHandoffPreview.tscn`; payment remains separate.
+matching are reviewed in `CustomerHandoffPreview.tscn`. Automatic payment is
+connected to production serving and has its own `PaymentPreview.tscn`; see
+[Automatic payment](payments.md). These isolated presentation tokens still do
+not pay money.

@@ -9,6 +9,7 @@ signal service_accepted(record: Dictionary)
 var screen: Node2D
 var controller: InteractionController
 var queue: CustomerQueueManager
+var payments: CustomerPayments
 var _zones: Dictionary = {}
 var _records: Dictionary = {}
 var _order_handoffs: Dictionary = {}
@@ -178,11 +179,17 @@ func _commit_authority(zone: CustomerServiceZone, payload: HeldItemPayload, hand
 	var record := {"handoff_id": handoff_id, "order_id": order.order_id,
 		"customer_id": order.customer_id, "request": order.get_request(),
 		"price": order.get_request().price, "result": result.get_snapshot(),
+		"payment_generation": payments.finance.generation if is_instance_valid(payments) and payments.finance != null else -1,
 		"served_cup_id": cup.get_instance_id() if cup != null else 0}
 	_records[handoff_id] = {"record": record, "result": result, "customer": weakref(actor), "published": false}
 	_order_handoffs[order.order_id] = handoff_id
 	if cup != null:
 		_served_cups[order.order_id] = cup
+	# Queue the immutable receipt before callbacks can retire this scene. Its
+	# run-owned consumer settles money after the input transaction has finished.
+	if is_instance_valid(payments):
+		payments.enqueue_accepted(self, record, actor.bubble_anchor.get_global_transform_with_canvas().origin)
+	if cup != null:
 		_retain_cup(cup)
 	return true
 
