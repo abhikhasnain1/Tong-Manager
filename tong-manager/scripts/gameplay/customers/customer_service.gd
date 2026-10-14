@@ -1,10 +1,11 @@
 class_name CustomerService
 extends Node
-## Commits one real serving, then publishes its immutable outcome to presentation
-## and the future payment owner. The queue remains the authority for live orders.
+## Records a real serving attempt, then publishes its immutable customer response.
+## Only accepted servings transfer ownership and reach the payment owner.
 
 signal targets_changed
 signal service_accepted(record: Dictionary)
+signal service_resolved(record: Dictionary)
 
 var screen: Node2D
 var controller: InteractionController
@@ -13,6 +14,7 @@ var payments: CustomerPayments
 var _zones: Dictionary = {}
 var _records: Dictionary = {}
 var _order_handoffs: Dictionary = {}
+var _attempted_payloads: Dictionary = {}
 var _served_cups: Dictionary = {}
 var _holding: Node2D
 var _frame: Sprite2D
@@ -111,12 +113,14 @@ func validate(zone: CustomerServiceZone, payload: HeldItemPayload, reservation_c
 		or not _belongs(zone.customer) or not zone.customer.is_ancestor_of(zone) or not zone.customer.is_serve_enabled()):
 		return DropValidation.invalid("This customer is no longer waiting")
 	var order := queue.get_order_for_customer(zone.customer)
-	if order == null or order != zone.customer.order or order.fulfilled or _order_handoffs.has(order.order_id):
+	if order == null or order != zone.customer.order or order.closed or _order_handoffs.has(order.order_id):
 		return DropValidation.invalid("This order is no longer waiting")
 	if (payload == null or not controller.can_address_drop_zone(payload, zone)
 		or (not controller.is_modal_export_active() and controller.current_mode != InteractionController.MODE_INTERACT)
 		or not _belongs(payload.world_node)):
 		return DropValidation.invalid("Use a cup or a ready snack from this stall")
+	if _attempted_payloads.has(payload.get_instance_id()):
+		return DropValidation.invalid("This serving attempt is already recorded")
 	if payload.metadata.get("category") == &"cup":
 		var cup := payload.world_node as Cup
 		if (cup == null or not cup.assigned_order_id.is_empty() or payload.source != &"cup"
@@ -152,14 +156,23 @@ func try_handoff(zone: CustomerServiceZone, payload: HeldItemPayload) -> bool:
 	var handoff_id := StringName("handoff_%s_%s" % [get_instance_id(), _sequence])
 	var self_ref: WeakRef = weakref(self)
 	var portion := payload.metadata.get("portion") as IngredientPortion
-	var accepted := portion.commit(_commit_authority.bind(zone, payload, handoff_id, true)) if portion != null else _commit_authority(zone, payload, handoff_id, false)
-	if self_ref.get_ref() == null: return accepted
+	var order := queue.get_order_for_customer(zone.customer)
+	var response := ServiceResult.create_evaluated(handoff_id, order, ServiceEvaluation.evaluate(order, _offered(payload)))
+	var applied := false
+	if response != null:
+		# A refused piece is still only reserved. Do not enter the consumption
+		# transaction; ordinary gesture cleanup releases the untouched portion.
+		if portion != null and response.get_snapshot().accepted:
+			applied = portion.commit(_commit_authority.bind(zone, payload, handoff_id, true))
+		else:
+			applied = _commit_authority(zone, payload, handoff_id, false)
+	if self_ref.get_ref() == null: return applied
 	_committing = false
-	if accepted:
+	if applied:
 		# Publish after controller cleanup, so observers cannot interrupt the
 		# gesture which has already consumed stock or transferred cup ownership.
 		_publish_committed.call_deferred(handoff_id)
-	return accepted
+	return applied
 
 
 func _commit_authority(zone: CustomerServiceZone, payload: HeldItemPayload, handoff_id: StringName, reservation_claimed: bool) -> bool:
@@ -169,8 +182,11 @@ func _commit_authority(zone: CustomerServiceZone, payload: HeldItemPayload, hand
 	var evaluation := ServiceEvaluation.evaluate(order, _offered(payload))
 	var result := ServiceResult.create_evaluated(handoff_id, order, evaluation)
 	if result == null: return false
+	var response := result.get_snapshot()
+	if payload.metadata.get("portion") != null and bool(response.accepted) != reservation_claimed:
+		return false
 	var cup := payload.world_node as Cup
-	if cup != null and not cup.commit_served(order.order_id): return false
+	if cup != null and response.accepted and not cup.commit_served(order.order_id): return false
 	# These authority writes emit no signals. Re-entry can only see the complete
 	# result once the provider publishes its committed stock change.
 	var recorded := order.record_result(result)
@@ -178,19 +194,22 @@ func _commit_authority(zone: CustomerServiceZone, payload: HeldItemPayload, hand
 	if not recorded: return false
 	var record := {"handoff_id": handoff_id, "order_id": order.order_id,
 		"customer_id": order.customer_id, "request": order.get_request(),
-		"price": order.get_request().price, "result": result.get_snapshot(),
+		"price": order.get_request().price, "result": response,
 		"payment_generation": payments.finance.generation if is_instance_valid(payments) and payments.finance != null else -1,
-		"served_cup_id": cup.get_instance_id() if cup != null else 0}
+		"served_cup_id": cup.get_instance_id() if cup != null and response.accepted else 0,
+		"returned_cup_id": cup.get_instance_id() if cup != null and not response.accepted else 0}
 	_records[handoff_id] = {"record": record, "result": result, "customer": weakref(actor), "published": false}
-	_order_handoffs[order.order_id] = handoff_id
-	if cup != null:
+	_attempted_payloads[payload.get_instance_id()] = handoff_id
+	if order.closed: _order_handoffs[order.order_id] = handoff_id
+	if cup != null and response.accepted:
 		_served_cups[order.order_id] = cup
 	# Queue the immutable receipt before callbacks can retire this scene. Its
 	# run-owned consumer settles money after the input transaction has finished.
-	if is_instance_valid(payments):
+	if response.accepted and is_instance_valid(payments):
 		payments.enqueue_accepted(self, record, actor.bubble_anchor.get_global_transform_with_canvas().origin)
 	if cup != null:
-		_retain_cup(cup)
+		if response.accepted: _retain_cup(cup)
+		else: controller.restore_drag_origin()
 	return true
 
 
@@ -219,7 +238,9 @@ func _publish_committed(handoff_id: StringName) -> void:
 	if self_ref.get_ref() == null: return
 	targets_changed.emit()
 	if self_ref.get_ref() == null: return
-	service_accepted.emit(record.duplicate(true))
+	service_resolved.emit(record.duplicate(true))
+	if self_ref.get_ref() == null: return
+	if record.result.accepted: service_accepted.emit(record.duplicate(true))
 
 
 func get_records() -> Array[Dictionary]:

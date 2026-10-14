@@ -52,6 +52,8 @@ func validate(day: Resource, catalog: Node) -> PackedStringArray:
 			if not _nonnegative(entry.due_seconds) or entry.due_seconds < previous: errors.append("Authored arrival times must be finite, nonnegative and chronological")
 			previous = entry.due_seconds
 			if not _nonnegative(entry.patience_override): errors.append("Patience override must be finite and nonnegative")
+			if entry.unhappy_response_override not in [-1, 0, 1, 2]: errors.append("Unknown authored unhappy-response override")
+			if entry.remake_patience_override not in [-1, 0, 1]: errors.append("Unknown authored remake-patience override")
 			errors.append_array(_profile_errors(entry.customer, catalog))
 			if entry.request != null:
 				if entry.customer == null or entry.customer.get_request(entry.request.id) != entry.request:
@@ -74,14 +76,18 @@ func compile(day: Resource, catalog: Node, seed_value: int, run_id: StringName) 
 		if request == null: request = profile.order_requests[random.randi_range(0, profile.order_requests.size() - 1)]
 		var entry_id := authored.id if authored != null else StringName("generated_%03d" % (index + 1))
 		var visit_id := StringName("%s/%s" % [run_id, entry_id])
+		var response: int = authored.unhappy_response_override if authored != null and authored.unhappy_response_override >= 0 else profile.unhappy_response
+		var patience: int = authored.remake_patience_override if authored != null and authored.remake_patience_override >= 0 else profile.remake_patience
 		entries.append({
 			"entry_id": entry_id, "visit_id": visit_id, "order_id": StringName(String(visit_id) + "/order"),
 			"customer_id": profile.id, "request_id": request.id,
 			"due_seconds": authored.due_seconds if authored != null else first_delay_seconds + float(index) * gap_seconds,
 			"patience_seconds": authored.patience_override if authored != null and authored.patience_override > 0.0 else profile.patience_seconds,
+			"service_policy": CustomerDef.service_policy(response, patience),
 			"profile": {"id": profile.id, "display_name_key": profile.display_name_key,
 				"sprite_texture": profile.sprite_texture, "patience_seconds": profile.patience_seconds,
-				"dialogue_profile": profile.dialogue_profile},
+				"dialogue_profile": profile.dialogue_profile, "unhappy_response": profile.unhappy_response,
+				"remake_patience": profile.remake_patience},
 			"request": request.snapshot(catalog).duplicate(true),
 		})
 	return {"ok": true, "errors": errors, "entries": entries, "max_active": max_active,

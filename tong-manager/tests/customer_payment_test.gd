@@ -27,13 +27,16 @@ func assert_payment(order: OrderState, before: int, expected_bad: bool) -> Dicti
 	var record := finance.get_transaction(StringName("order:" + String(order.order_id)))
 	check(not record.is_empty(), "Accepted order has one ledger transaction")
 	if record.is_empty(): return {}
+	var sound_deadline := Time.get_ticks_msec() + 1500
+	while sounds.count(record.source_id) < 2 and Time.get_ticks_msec() < sound_deadline:
+		await process_frame
 	check(record.amount == order.get_request().price, "Payment uses the saved normal quote")
 	check(finance.cash_on_hand == before + record.amount, "Payment increases shared cash once")
 	check(record.metadata.order_id == order.order_id and record.metadata.request_id == order.request_id, "Receipt retains order and request identity")
 	check(record.metadata.bad_review == expected_bad, "Financial history retains the accepted review outcome without a penalty")
 	check(finance.get_transaction(StringName("handoff:" + String(record.metadata.handoff_id))) == record, "Handoff and order resolve to the same transaction")
 	check(screen.get_node("HUDLayer/RootUI").cash_label.text == "৳ %d" % finance.cash_on_hand, "Live HUD and ledger agree")
-	check(cues.count(record.source_id) == 1 and sounds.count(record.source_id) == 1, "A new payment produces one coin cue and chime")
+	check(cues.count(record.source_id) == 1 and sounds.count(record.source_id) == 2, "A new payment produces one coin cue and one sound per coin")
 	return record
 
 
@@ -45,7 +48,7 @@ func correct_and_replays() -> void:
 	fill(cup)
 	await take_cup(cup)
 	await release_at(actor)
-	var transaction := assert_payment(order, 100, false)
+	var transaction := await assert_payment(order, 100, false)
 	var receipt := service.get_records()[0]
 	var original := finance.get_snapshot()
 	check(not payments.enqueue_accepted(service, receipt, Vector2.ZERO), "Direct receipt replay cannot pay twice")
@@ -59,7 +62,7 @@ func correct_and_replays() -> void:
 	edited.handoff_id = &"forged_handoff"
 	check(not payments.enqueue_accepted(service, edited, Vector2.ZERO), "Rewritten handoff identity is not accepted")
 	await frames()
-	check(finance.get_snapshot() == original and cues.size() == 1 and sounds.size() == 1, "Signal replay and conflicting receipts change neither money nor cues")
+	check(finance.get_snapshot() == original and cues.size() == 1 and sounds.size() == 2, "Signal replay and conflicting receipts change neither money nor cues")
 	check(not screen.get_cups().has(cup) and service.get_served_cup(order.order_id) == cup, "Payment preserves the accepted cup custody")
 	await capture("01-paid-tea")
 
@@ -75,7 +78,7 @@ func accepted_mistakes() -> void:
 		fill(cup, sample[0], sample[1], sample[2], sample[3])
 		await take_cup(cup)
 		await release_at(actor)
-		assert_payment(order, 100, true)
+		await assert_payment(order, 100, true)
 		check(finance.day_expenses == 0 and finance.transaction_log.size() == 1, "Poor quality has no invented fine or refund")
 	await capture("02-cold-paid")
 	await setup()
@@ -84,7 +87,7 @@ func accepted_mistakes() -> void:
 	var stock_before := stock.remaining(&"biscuits")
 	check(await take_snack(&"biscuits"), "Take a real wrong snack")
 	await release_at(actor)
-	assert_payment(order, 100, true)
+	await assert_payment(order, 100, true)
 	check(stock.remaining(&"biscuits") == stock_before - 1, "Wrong snack still consumes exactly one real piece")
 
 
@@ -101,11 +104,11 @@ func saved_quote_and_concurrent() -> void:
 	check(await take_snack(&"banana"), "Take real banana after catalog price edit")
 	await release_at(first)
 	banana.sell_price = saved_price
-	assert_payment(first_order, 100, false)
+	await assert_payment(first_order, 100, false)
 	var before := finance.cash_on_hand
 	check(await take_snack(&"biscuits"), "Take second customer's actual snack")
 	await release_at(second)
-	assert_payment(second_order, before, false)
+	await assert_payment(second_order, before, false)
 	check(finance.transaction_log.size() == 2 and cues.size() == 2, "Two customers generate distinct once-only payments")
 	check(finance.day_income == first_order.get_request().price + second_order.get_request().price, "Totals use captured quotes for both customers")
 	await capture("03-two-payments")
@@ -144,7 +147,7 @@ func pantry_and_preservation() -> void:
 			await mouse(cell, true)
 			check(controller.is_modal_export_active(), "Actual pantry cell begins a serving export")
 		await release_at(actor)
-		assert_payment(order, before, false)
+		await assert_payment(order, before, false)
 		screen.khata_modal.close()
 		await settle_book(screen.khata_modal)
 		controller.set_mode(InteractionController.MODE_INTERACT)
@@ -197,7 +200,7 @@ func retirement_and_reset() -> void:
 	var order := actor.order
 	check(await take_snack(&"banana"), "Same scene can serve a new-run order")
 	await release_at(actor)
-	assert_payment(order, 100, false)
+	await assert_payment(order, 100, false)
 
 
 func run() -> void:

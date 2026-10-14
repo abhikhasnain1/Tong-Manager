@@ -1,0 +1,83 @@
+[gd_resource type="Resource" script_class="DayConfig" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/day_config.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/data/customer_schedule.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/data/customer_arrival_def.gd" id="3"]
+[ext_resource type="Resource" path="res://data/customers/customer_a.tres" id="4"]
+[ext_resource type="Resource" path="res://data/customers/customer_b.tres" id="5"]
+[ext_resource type="Resource" path="res://data/orders/tea_cha_no_sugar.tres" id="6"]
+[ext_resource type="Resource" path="res://data/orders/ready_banana.tres" id="7"]
+[ext_resource type="Resource" path="res://data/orders/tea_cha.tres" id="8"]
+[ext_resource type="Resource" path="res://data/orders/ready_biscuits.tres" id="9"]
+[ext_resource type="Resource" path="res://data/orders/tea_dudh_cha.tres" id="10"]
+[ext_resource type="Resource" path="res://data/orders/tea_dudh_cha_no_sugar.tres" id="11"]
+
+[sub_resource type="Resource" id="Arrival_0"]
+script = ExtResource("3")
+id = &"response_0"
+unhappy_response_override = 2
+due_seconds = 1.0
+customer = ExtResource("4")
+request = ExtResource("6")
+patience_override = 180.0
+
+[sub_resource type="Resource" id="Arrival_1"]
+script = ExtResource("3")
+id = &"response_1"
+unhappy_response_override = 1
+due_seconds = 7.0
+customer = ExtResource("5")
+request = ExtResource("7")
+patience_override = 180.0
+
+[sub_resource type="Resource" id="Arrival_2"]
+script = ExtResource("3")
+id = &"response_2"
+unhappy_response_override = 0
+due_seconds = 13.0
+customer = ExtResource("4")
+request = ExtResource("8")
+patience_override = 180.0
+
+[sub_resource type="Resource" id="Arrival_3"]
+script = ExtResource("3")
+id = &"response_3"
+unhappy_response_override = 2
+remake_patience_override = 1
+due_seconds = 19.0
+customer = ExtResource("5")
+request = ExtResource("9")
+patience_override = 180.0
+
+[sub_resource type="Resource" id="Arrival_4"]
+script = ExtResource("3")
+id = &"response_4"
+unhappy_response_override = 1
+due_seconds = 25.0
+customer = ExtResource("4")
+request = ExtResource("10")
+patience_override = 180.0
+
+[sub_resource type="Resource" id="Arrival_5"]
+script = ExtResource("3")
+id = &"response_5"
+unhappy_response_override = 0
+due_seconds = 31.0
+customer = ExtResource("5")
+request = ExtResource("11")
+patience_override = 180.0
+
+[sub_resource type="Resource" id="Schedule"]
+script = ExtResource("2")
+id = &"payment_response_review"
+mode = 1
+max_active = 2
+timeout_reaction_seconds = 0.8
+arrivals = Array[ExtResource("3")]([SubResource("Arrival_0"), SubResource("Arrival_1"), SubResource("Arrival_2"), SubResource("Arrival_3"), SubResource("Arrival_4"), SubResource("Arrival_5")])
+
+[resource]
+script = ExtResource("1")
+customer_schedule = SubResource("Schedule")
+starting_cash = 100
+daily_water_ml = 3000.0
+starting_inventory = {&"banana": 4, &"biscuits": 6, &"black_tea": 12, &"condensed_milk": 8, &"sugar": 12}

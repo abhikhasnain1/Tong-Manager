@@ -6,11 +6,12 @@ const DAY_PATHS := [
 	"res://data/examples/customer_days/authored_day_2.tres",
 	"res://data/balance/demo_day_1.tres",
 	"res://data/examples/customer_days/service_review.tres",
+	"res://data/examples/customer_days/payment_response_review.tres",
 ]
-const DAY_LABELS := ["Authored day 1 · quick review", "Authored day 2 · quick review", "Generated demo · normal timing", "Serving review · longer patience"]
+const DAY_LABELS := ["Authored day 1 · quick review", "Authored day 2 · quick review", "Generated demo · normal timing", "Serving review · longer patience", "Payment · unhappy responses"]
 
 @export var preview_seed := 64
-@export_range(0, 3) var initial_day := 0
+@export_range(0, 4) var initial_day := 0
 @export var show_finance_review := false
 
 @onready var screen: Node2D = $TongDayScreen
@@ -35,7 +36,7 @@ func _ready() -> void:
 	queue.customer_timed_out.connect(_on_timed_out)
 	queue.customer_removed.connect(_on_removed)
 	queue.queue_completed.connect(_on_completed)
-	screen.customer_service.service_accepted.connect(_on_service_accepted)
+	screen.customer_service.service_resolved.connect(_on_service_resolved)
 	restart_schedule()
 
 
@@ -96,12 +97,15 @@ func _build_controls() -> void:
 		finance_label = _label(rows, "", 12)
 		finance_label.custom_minimum_size.x = 206
 		finance_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		_label(rows, "Payment is automatic, including mistakes.\nCash/history survive same-run reloads.\nFinance page and day-end are later work.", 11)
+		_label(rows, "Accepted orders pay automatically.\nRefused cups return filled; no payment.\nCash/history survive same-run reloads.\nFinance page and day-end are later work.", 11)
 
 
-func _on_service_accepted(record: Dictionary) -> void:
+func _on_service_resolved(record: Dictionary) -> void:
 	var reasons: Array = record.result.get("reasons", [])
-	event_label.text = "Served · happy customer" if not record.result.bad_review else "Served · bad review: " + ", ".join(reasons)
+	match record.result.get("response", &"accept"):
+		&"refuse_leave": event_label.text = "Refused · leaving unpaid. Offer returned."
+		&"refuse_retry": event_label.text = "Refused · waiting for a remake. Offer returned."
+		_: event_label.text = "Served · happy customer" if not record.result.bad_review else "Served · bad review: " + ", ".join(reasons)
 
 
 func _label(parent: Node, text: String, size: int) -> Label:
@@ -208,6 +212,12 @@ func _process(_delta: float) -> void:
 		if actor != null:
 			var order := queue.get_order_for_customer(actor)
 			text = String(order.request_id) if order != null else "arriving"
+			if show_finance_review and order != null:
+				var policy := order.get_service_policy()
+				var response: String = {&"accept": "accept/pay", &"refuse_leave": "leave unpaid", &"refuse_retry": "remake"}.get(policy.unhappy_response, "")
+				if policy.unhappy_response == &"refuse_retry":
+					response += " · " + ("reset clock" if policy.remake_patience == &"reset" else "keep clock")
+				text += "\nIf unhappy: " + response
 		lines.append("%s: %s" % ["Left" if slot == 0 else "Right", text])
 	status_label.text = "\n".join(lines)
 

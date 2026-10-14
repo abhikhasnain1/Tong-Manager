@@ -120,9 +120,12 @@ func check_geometry_and_motion() -> void:
 	feedback.configure(reduced)
 	check(show(receipt()), "Reduced-motion setting still acknowledges a new payment")
 	feedback.set_process(false)
-	var initial: Array = feedback.get_active_snapshots()[0].positions
+	var initial: Vector2 = feedback.get_active_snapshots()[0].positions[0]
 	feedback._process(reduced.duration * .4)
-	check(feedback.get_active_snapshots()[0].positions == initial, "Reduced motion uses a stationary HUD cue without travel or bob")
+	var stationary: Array = feedback.get_active_snapshots()[0].positions
+	check(stationary.size() == 2 and stationary[0] == initial, "Reduced motion staggers coin appearance while existing HUD coins stay stationary")
+	feedback._process(reduced.duration * .1)
+	check(feedback.get_active_snapshots()[0].positions == stationary, "Both reduced-motion coins remain stationary without travel or bob")
 	feedback._process(reduced.duration)
 	check(feedback.get_active_count() == 0, "Reduced-motion cue still expires promptly")
 	feedback.configure(PaymentFeedbackConfig.new())
@@ -131,7 +134,7 @@ func check_geometry_and_motion() -> void:
 func check_sound() -> void:
 	var wav := feedback.get_chime_stream()
 	check(wav != null and wav.format == AudioStreamWAV.FORMAT_16_BITS and not wav.stereo and wav.mix_rate == 22050, "Chime is signed16-bit mono PCM at declared sample rate")
-	check(wav.loop_mode == AudioStreamWAV.LOOP_DISABLED and is_equal_approx(wav.get_length(), .26), "Procedural coin chime is brief and never loops")
+	check(wav.loop_mode == AudioStreamWAV.LOOP_DISABLED and is_equal_approx(wav.get_length(), .12), "Original electronic coin pip is brief and never loops")
 	var samples := wav.data
 	var peak := 0
 	var total := 0.0
@@ -164,6 +167,125 @@ func check_sound() -> void:
 	feedback.clear_feedback()
 	feedback.configure(PaymentFeedbackConfig.new())
 	AudioServer.set_bus_mute(0, old_mute)
+
+
+func check_per_coin_audio() -> void:
+	var cue := PaymentFeedback.new()
+	host.add_child(cue)
+	var settings := PaymentFeedbackConfig.new()
+	settings.sound_base_pitch = 1.1
+	settings.sound_pitch_step_semitones = 3.0
+	settings.sound_pitch_cycle = 3
+	cue.configure(settings)
+	var launches: Array[Dictionary] = []
+	var audible: Array[StringName] = []
+	cue.coin_launched.connect(func(id: StringName, index: int, pitch: float) -> void:
+		launches.append({"source_id": id, "coin_index": index, "pitch": pitch}))
+	cue.sound_requested.connect(func(id: StringName) -> void: audible.append(id))
+	var first := receipt(&"two_coin_test")
+	check(cue.show_payment(first, Vector2(600, 450), Vector2(150, 40)), "Per-coin receipt starts normally")
+	cue.set_process(false)
+	check(launches.size() == 1 and audible == [&"two_coin_test"] and launches[0].coin_index == 0, "Only the first coin launches and sounds at receipt start")
+	check(cue.get_active_snapshots()[0].positions.size() == 1, "Second coin is absent before its actual launch")
+	check(is_equal_approx(launches[0].pitch, 1.1), "New component starts at configured base pitch")
+	var first_voice := cue.get_voice_snapshots()[0]
+	cue._process(settings.coin_launch_stagger_seconds * .5)
+	check(launches.size() == 1 and audible.size() == 1, "No early sound or visible coin before stagger deadline")
+	cue._process(settings.coin_launch_stagger_seconds * .5)
+	check(launches.size() == 2 and audible.size() == 2 and launches[1].coin_index == 1, "Second visible coin gets its own sound at the stagger deadline")
+	check(cue.get_active_snapshots()[0].positions.size() == 2, "Two launches produce exactly two drawn coins")
+	check(is_equal_approx(launches[1].pitch, 1.1 * pow(2.0, 3.0 / 12.0)), "Second voice uses configured semitone step")
+	var voices := cue.get_voice_snapshots()
+	check(voices.size() == 2 and voices[0].voice_id != voices[1].voice_id, "Overlapping coin sounds own separate playback voices")
+	check(voices[0].voice_id == first_voice.voice_id and voices[0].pitch == first_voice.pitch, "Launching another coin never retunes the already playing voice")
+	check(not cue.show_payment(first, Vector2.ZERO, Vector2.ONE) and audible.size() == 2, "Duplicate receipt cannot add any coin sounds")
+	check(cue.show_payment(receipt(&"overlapping_coins"), Vector2(800, 450), Vector2(150, 40)), "Concurrent receipt launches independently")
+	cue.set_process(false)
+	check(launches.size() == 3 and is_equal_approx(launches[2].pitch, 1.1 * pow(2.0, 6.0 / 12.0)), "Pitch sequence also varies across concurrent receipts")
+	cue._process(settings.coin_launch_stagger_seconds)
+	check(launches.size() == 4 and is_equal_approx(launches[3].pitch, 1.1), "Configured pitch cycle wraps predictably")
+	check(cue.get_voice_snapshots()[0].pitch == first_voice.pitch, "Later receipt voices still leave old voice pitch unchanged")
+	cue.clear_feedback()
+	cue._process(10.0)
+	check(launches.size() == 4 and audible.size() == 4 and not cue.is_sound_playing(), "Clearing stops all voices and cannot emit late scheduled sounds")
+	for interruption in [&"clear", &"focus", &"resize", &"config", &"detach"]:
+		cue.show_payment(receipt(), Vector2.ZERO, Vector2.ONE)
+		cue.set_process(false)
+		var before := audible.size()
+		if interruption == &"clear": cue.clear_feedback()
+		elif interruption == &"focus": cue.notification(MainLoop.NOTIFICATION_APPLICATION_FOCUS_OUT)
+		elif interruption == &"resize": root.size_changed.emit()
+		elif interruption == &"config": settings.emit_changed()
+		else: host.remove_child(cue)
+		cue._process(1.0)
+		check(audible.size() == before and cue.get_active_count() == 0 and not cue.is_sound_playing(), "Lifecycle interruption cancels delayed coin launch: " + String(interruption))
+		if interruption == &"focus": cue.notification(MainLoop.NOTIFICATION_APPLICATION_FOCUS_IN)
+		elif interruption == &"detach": host.add_child(cue)
+	var old_mute := AudioServer.is_bus_mute(0)
+	AudioServer.set_bus_mute(0, true)
+	var muted_start := audible.size()
+	var visible_start := launches.size()
+	cue.show_payment(receipt(), Vector2.ZERO, Vector2.ONE)
+	cue.set_process(false)
+	cue._process(settings.coin_launch_stagger_seconds)
+	check(launches.size() == visible_start + 2 and audible.size() == muted_start, "Muted payment still launches two visible coins without either sound")
+	AudioServer.set_bus_mute(0, false)
+	cue._process(.1)
+	check(audible.size() == muted_start, "Unmuting does not replay already launched muted coins")
+	cue.clear_feedback()
+	var reentrant := receipt(&"cancel_launch")
+	var observer := func(_id: StringName, _index: int, _pitch: float) -> void:
+		cue.clear_feedback()
+		check(not cue.show_payment(reentrant, Vector2.ZERO, Vector2.ONE), "Launch observer cannot reenter a duplicate receipt")
+	cue.coin_launched.connect(observer, CONNECT_ONE_SHOT)
+	var before_cancel := audible.size()
+	cue.show_payment(reentrant, Vector2.ZERO, Vector2.ONE)
+	cue._process(1.0)
+	check(audible.size() == before_cancel and cue.get_active_count() == 0, "Synchronous launch cancellation prevents both immediate and delayed audio")
+	var stop_on_sound := func(_id: StringName) -> void: cue.clear_feedback()
+	cue.sound_requested.connect(stop_on_sound, CONNECT_ONE_SHOT)
+	cue.show_payment(receipt(), Vector2.ZERO, Vector2.ONE)
+	var after_first_sound := audible.size()
+	cue._process(1.0)
+	check(audible.size() == after_first_sound and not cue.is_sound_playing(), "Sound observer cleanup cannot leave a second delayed sound")
+	var replacement := receipt(&"replacement_after_second_launch")
+	var second_observer := func(_id: StringName, index: int, _pitch: float) -> void:
+		if index == 1:
+			cue.clear_feedback()
+			cue.show_payment(replacement, Vector2.ZERO, Vector2.ONE)
+			cue.set_process(false)
+	cue.coin_launched.connect(second_observer)
+	cue.show_payment(receipt(), Vector2.ZERO, Vector2.ONE)
+	cue.set_process(false)
+	var before_second_cancel := audible.size()
+	cue._process(.11)
+	check(cue.get_active_count() == 1 and cue.get_active_snapshots()[0].source_id == replacement.source_id,
+		"Second-coin observer may clear and replace a receipt without corrupting active iteration")
+	check(audible.size() == before_second_cancel + 1 and audible.back() == replacement.source_id,
+		"Replacement sounds its first coin without an old second-coin sound leaking after cleanup")
+	cue.coin_launched.disconnect(second_observer)
+	cue.clear_feedback()
+	cue.show_payment(receipt(), Vector2.ZERO, Vector2.ONE)
+	cue.set_process(false)
+	var before_mid_mute := audible.size()
+	AudioServer.set_bus_mute(0, true)
+	cue._process(.11)
+	check(audible.size() == before_mid_mute and cue.get_active_snapshots()[0].positions.size() == 2,
+		"Muting between launches suppresses only the next sound while its coin still appears")
+	AudioServer.set_bus_mute(0, false)
+	cue.clear_feedback()
+	settings.sound_base_pitch = NAN
+	settings.sound_pitch_step_semitones = INF
+	settings.sound_pitch_cycle = 0
+	settings.coin_launch_stagger_seconds = NAN
+	cue.show_payment(receipt(), Vector2.ZERO, Vector2.ONE)
+	cue.set_process(false)
+	check(is_equal_approx(launches.back().pitch, 1.0), "Nonfinite pitch settings and invalid cycle safely use bounded defaults")
+	cue._process(.11)
+	check(cue.get_active_snapshots()[0].positions.size() == 2, "Nonfinite stagger uses the finite default")
+	cue.clear_feedback()
+	AudioServer.set_bus_mute(0, old_mute)
+	cue.queue_free()
 
 
 func check_cleanup() -> void:
@@ -245,6 +367,7 @@ func run() -> void:
 	check_validation()
 	check_geometry_and_motion()
 	check_sound()
+	check_per_coin_audio()
 	await check_cleanup()
 	check_reentrant_signals()
 	check_passthrough(feedback)

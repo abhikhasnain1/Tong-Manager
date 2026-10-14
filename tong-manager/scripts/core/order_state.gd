@@ -5,6 +5,7 @@ extends RefCounted
 var _data: Dictionary = {}
 var _results: Dictionary = {}
 var _accepted_result: Dictionary = {}
+var _terminal_result: Dictionary = {}
 
 var order_id: StringName:
 	get: return _data.get("order_id", &"")
@@ -30,30 +31,41 @@ var created_time: float:
 var fulfilled: bool:
 	get: return not _accepted_result.is_empty()
 	set(_value): pass
+var closed: bool:
+	get: return not _terminal_result.is_empty()
+	set(_value): pass
 
 
-static func create(order_identity: StringName, customer_identity: StringName, request: Dictionary, time: float) -> OrderState:
+static func create(order_identity: StringName, customer_identity: StringName, request: Dictionary, time: float, service_policy: Dictionary = {}) -> OrderState:
 	if not OrderRequestDef.valid_identity(order_identity) or not OrderRequestDef.valid_identity(customer_identity): return null
 	if not is_finite(time) or time < 0.0 or not _valid_request_snapshot(request): return null
+	var policy := {"unhappy_response": &"accept", "remake_patience": &"continue"} if service_policy.is_empty() else service_policy.duplicate(true)
+	if (policy.size() != 2 or policy.get("unhappy_response") not in [&"accept", &"refuse_leave", &"refuse_retry"]
+		or policy.get("remake_patience") not in [&"continue", &"reset"]): return null
 	var order := OrderState.new()
 	order._data = {
 		"order_id": order_identity, "customer_id": customer_identity,
 		"request_id": request.id, "request_kind": request.kind,
 		"recipe_id": request.recipe_id, "item_id": request.item_id,
-		"created_time": time, "request": request.duplicate(true),
+		"created_time": time, "request": request.duplicate(true), "service_policy": policy,
 	}
 	return order
 
 
 func record_result(result: ServiceResult) -> bool:
-	if _data.is_empty() or result == null or fulfilled: return false
+	if _data.is_empty() or result == null or closed: return false
 	var data := result.get_snapshot()
 	if data.is_empty() or data.order_id != order_id or data.customer_id != customer_id or data.request_kind != request_kind:
 		return false
 	if _results.has(data.handoff_id): return false
 	_results[data.handoff_id] = data.duplicate(true)
 	if data.accepted: _accepted_result = data.duplicate(true)
+	if data.accepted or data.get("response") == &"refuse_leave": _terminal_result = data.duplicate(true)
 	return true
+
+
+func get_service_policy() -> Dictionary:
+	return (_data.get("service_policy", {}) as Dictionary).duplicate(true)
 
 
 func get_request() -> Dictionary:
@@ -74,12 +86,18 @@ func get_accepted_result() -> Dictionary:
 	return _accepted_result.duplicate(true)
 
 
+func get_terminal_result() -> Dictionary:
+	return _terminal_result.duplicate(true)
+
+
 func get_snapshot() -> Dictionary:
 	if _data.is_empty(): return {}
 	var snapshot := _data.duplicate(true)
 	snapshot["fulfilled"] = fulfilled
+	snapshot["closed"] = closed
 	snapshot["results"] = get_results()
 	snapshot["accepted_result"] = get_accepted_result()
+	snapshot["terminal_result"] = get_terminal_result()
 	return snapshot
 
 

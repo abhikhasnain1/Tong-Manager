@@ -5,14 +5,19 @@ extends Control
 signal feedback_started(source_id: StringName)
 signal feedback_finished(source_id: StringName)
 signal sound_requested(source_id: StringName)
+signal coin_launched(source_id: StringName, coin_index: int, pitch: float)
 
 const SAMPLE_RATE := 22050
-const CHIME_SECONDS := 0.26
+const CHIME_SECONDS := 0.12
+const COIN_COUNT := 2
 
 var config: PaymentFeedbackConfig = preload("res://data/balance/payment_feedback.tres")
 var _entries: Array[Dictionary] = []
 var _seen: Dictionary = {}
-var _audio: AudioStreamPlayer
+var _voices: Array[AudioStreamPlayer] = []
+var _chime: AudioStreamWAV
+var _pitch_serial := 0
+var _clear_revision := 0
 var _focused := true
 var _serial := 0
 
@@ -24,7 +29,6 @@ func _init() -> void:
 
 
 func _ready() -> void:
-	_ensure_audio()
 	_attach_lifecycle()
 
 
@@ -83,15 +87,17 @@ func show_payment(record: Dictionary, from_viewport: Vector2, to_viewport: Vecto
 		"from": inverse * from_viewport, "to": inverse * to_viewport,
 		"reduced_motion": config.reduced_motion, "scale": scale_value,
 		"arc": _finite_clamped(config.arc_height, 32.0, 0.0, 80.0),
-		"font_size": clampi(config.amount_font_size, 12, 32), "serial": _serial}
+		"font_size": clampi(config.amount_font_size, 12, 32), "serial": _serial,
+		"stagger": minf(duration * 0.45, _finite_clamped(config.coin_launch_stagger_seconds, 0.11, 0.04, 0.2)),
+		"coins": [{"launched": false, "pitch": 1.0}, {"launched": false, "pitch": 1.0}]}
 	_seen[key] = true
 	_entries.append(entry)
 	set_process(true)
 	queue_redraw()
 	var self_ref: WeakRef = weakref(self)
 	feedback_started.emit(source_id)
-	if self_ref.get_ref() != null and is_inside_tree() and _find_entry(key) >= 0:
-		_play_chime(source_id)
+	if self_ref.get_ref() != null and is_inside_tree() and not is_queued_for_deletion():
+		_launch_due_coins(key)
 	return true
 
 
@@ -114,35 +120,78 @@ func get_active_snapshots() -> Array[Dictionary]:
 
 
 func get_chime_stream() -> AudioStreamWAV:
-	_ensure_audio()
-	return _audio.stream as AudioStreamWAV
+	if _chime == null: _chime = _make_chime()
+	return _chime
 
 
 func is_sound_playing() -> bool:
-	return is_instance_valid(_audio) and _audio.playing
+	for voice in _voices:
+		if is_instance_valid(voice) and voice.playing: return true
+	return false
+
+
+func get_voice_snapshots() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for voice in _voices:
+		if is_instance_valid(voice) and voice.playing:
+			result.append({"voice_id": voice.get_instance_id(), "pitch": voice.pitch_scale,
+				"source_id": voice.get_meta("source_id", &""), "coin_index": voice.get_meta("coin_index", -1),
+				"bus": voice.bus, "volume_db": voice.volume_db})
+	return result
 
 
 func clear_feedback() -> void:
+	_clear_revision += 1
 	_entries.clear()
-	if is_instance_valid(_audio): _audio.stop()
+	for voice in _voices:
+		if is_instance_valid(voice): voice.stop()
 	set_process(false)
 	queue_redraw()
 
 
 func _process(delta: float) -> void:
 	if not is_finite(delta) or delta <= 0.0: return
+	var revision := _clear_revision
+	var keys: Array[String] = []
+	for entry in _entries: keys.append(entry.key)
 	var completed: Array[StringName] = []
-	for index in range(_entries.size() - 1, -1, -1):
+	var self_ref: WeakRef = weakref(self)
+	for key in keys:
+		var index := _find_entry(key)
+		if index < 0: continue
 		_entries[index].elapsed = minf(_entries[index].duration, _entries[index].elapsed + delta)
 		if _entries[index].elapsed >= _entries[index].duration:
 			completed.append(_entries[index].source_id)
 			_entries.remove_at(index)
+		else:
+			_launch_due_coins(key)
+			if self_ref.get_ref() == null or not is_inside_tree() or is_queued_for_deletion(): return
+			if revision != _clear_revision: return
 	set_process(not _entries.is_empty())
 	queue_redraw()
-	var self_ref: WeakRef = weakref(self)
 	for source_id in completed:
 		feedback_finished.emit(source_id)
-		if self_ref.get_ref() == null or not is_inside_tree(): return
+		if self_ref.get_ref() == null or not is_inside_tree() or is_queued_for_deletion(): return
+		if revision != _clear_revision: return
+
+
+func _launch_due_coins(key: String) -> void:
+	var self_ref: WeakRef = weakref(self)
+	for coin_index in COIN_COUNT:
+		var index := _find_entry(key)
+		if index < 0 or not is_inside_tree() or is_queued_for_deletion(): return
+		var entry: Dictionary = _entries[index]
+		if entry.coins[coin_index].launched or entry.elapsed < entry.stagger * coin_index: continue
+		var pitch := _finite_clamped(config.sound_base_pitch, 1.0, 0.5, 2.0) * pow(2.0,
+			_finite_clamped(config.sound_pitch_step_semitones, 2.0, 0.0, 7.0) * float(_pitch_serial % clampi(config.sound_pitch_cycle, 1, 8)) / 12.0)
+		pitch = clampf(pitch, 0.5, 4.0)
+		_pitch_serial += 1
+		entry.coins[coin_index] = {"launched": true, "pitch": pitch}
+		coin_launched.emit(entry.source_id, coin_index, pitch)
+		if self_ref.get_ref() == null or not is_inside_tree() or is_queued_for_deletion(): return
+		if _find_entry(key) < 0: return
+		_play_chime(entry.source_id, coin_index, pitch)
+		if self_ref.get_ref() == null or not is_inside_tree() or is_queued_for_deletion(): return
 
 
 func _key(source_id: StringName, generation: int) -> String:
@@ -163,9 +212,9 @@ func _local_view_rect() -> Rect2:
 func _coin_positions(entry: Dictionary) -> Array[Vector2]:
 	var result: Array[Vector2] = []
 	var bounds := _local_view_rect().grow(-14.0 * entry.scale)
-	var progress: float = clampf(entry.elapsed / entry.duration, 0.0, 1.0)
-	for index in 2:
-		var time := clampf(progress * 1.15 - float(index) * 0.12, 0.0, 1.0)
+	for index in COIN_COUNT:
+		if not entry.coins[index].launched: continue
+		var time := _coin_progress(entry, index)
 		var eased := time * time * (3.0 - 2.0 * time)
 		var location: Vector2 = entry.to if entry.reduced_motion else (entry.from as Vector2).lerp(entry.to, eased)
 		if not entry.reduced_motion:
@@ -174,6 +223,11 @@ func _coin_positions(entry: Dictionary) -> Array[Vector2]:
 		location = location.clamp(bounds.position, bounds.end)
 		result.append(location)
 	return result
+
+
+func _coin_progress(entry: Dictionary, index: int) -> float:
+	var delay: float = entry.stagger * index
+	return clampf((entry.elapsed - delay) / (entry.duration - delay), 0.0, 1.0)
 
 
 func _amount_rect(entry: Dictionary) -> Rect2:
@@ -192,8 +246,10 @@ func _draw() -> void:
 	for entry in _entries:
 		var progress: float = entry.elapsed / entry.duration
 		var alpha := minf(1.0, progress / 0.1) * minf(1.0, (1.0 - progress) / 0.18)
-		for location in _coin_positions(entry):
-			_draw_coin(location, 10.0 * entry.scale, alpha)
+		var positions := _coin_positions(entry)
+		for index in positions.size():
+			var coin_alpha := minf(1.0, _coin_progress(entry, index) / 0.045) * minf(1.0, (1.0 - progress) / 0.18)
+			_draw_coin(positions[index], 10.0 * entry.scale, coin_alpha)
 		if progress > 0.68 or entry.reduced_motion:
 			var rect := _amount_rect(entry)
 			var font := ThemeDB.fallback_font
@@ -212,18 +268,21 @@ func _draw_coin(center: Vector2, radius: float, alpha: float) -> void:
 	draw_line(center + Vector2(0, -radius * 0.5), center + Vector2(0, radius * 0.5), Color(config.edge, alpha * 0.75), 1.2, true)
 
 
-func _ensure_audio() -> void:
-	if is_instance_valid(_audio): return
-	_audio = AudioStreamPlayer.new()
-	_audio.name = "PaymentChime"
-	_audio.stream = _make_chime()
-	_audio.max_polyphony = 4
-	add_child(_audio)
+func _available_voice() -> AudioStreamPlayer:
+	for voice in _voices:
+		if is_instance_valid(voice) and not voice.playing: return voice
+	var voice := AudioStreamPlayer.new()
+	voice.name = "PaymentChime" if _voices.is_empty() else "PaymentCoinVoice%d" % _voices.size()
+	voice.stream = get_chime_stream()
+	# Each overlapping coin owns its pitch; never retune a playing voice.
+	voice.max_polyphony = 1
+	add_child(voice)
+	_voices.append(voice)
+	return voice
 
 
-func _play_chime(source_id: StringName) -> void:
-	if not config.sound_enabled or not _focused: return
-	_ensure_audio()
+func _play_chime(source_id: StringName, coin_index: int, pitch: float) -> void:
+	if not config.sound_enabled or not _focused or not is_visible_in_tree(): return
 	var bus := config.sound_bus if AudioServer.get_bus_index(config.sound_bus) >= 0 else &"Master"
 	var current := AudioServer.get_bus_index(bus)
 	var checked: Array[int] = []
@@ -232,9 +291,13 @@ func _play_chime(source_id: StringName) -> void:
 		if AudioServer.is_bus_mute(current): return
 		if current == 0: break
 		current = AudioServer.get_bus_index(AudioServer.get_bus_send(current))
-	_audio.bus = bus
-	_audio.volume_db = _finite_clamped(config.sound_volume_db, -17.0, -60.0, 0.0)
-	_audio.play()
+	var voice := _available_voice()
+	voice.bus = bus
+	voice.volume_db = _finite_clamped(config.sound_volume_db, -17.0, -60.0, 0.0)
+	voice.pitch_scale = pitch
+	voice.set_meta("source_id", source_id)
+	voice.set_meta("coin_index", coin_index)
+	voice.play()
 	sound_requested.emit(source_id)
 
 
@@ -249,12 +312,16 @@ static func _make_chime() -> AudioStreamWAV:
 	data.resize(count * 2)
 	for index in count:
 		var t := float(index) / SAMPLE_RATE
-		var attack := minf(1.0, t / 0.004)
-		var tail := clampf((CHIME_SECONDS - t) / 0.025, 0.0, 1.0)
-		var tone := sin(TAU * 1174.66 * t) * exp(-t * 21.0)
-		tone += 0.42 * sin(TAU * 1760.0 * t) * exp(-t * 26.0)
-		tone += 0.14 * sin(TAU * 2637.0 * t) * exp(-t * 35.0)
-		data.encode_s16(index * 2, roundi(clampf(tone * attack * tail * 0.36, -0.9, 0.9) * 32767.0))
+		var attack := minf(1.0, t / 0.002)
+		var tail := clampf((CHIME_SECONDS - t) / 0.018, 0.0, 1.0)
+		# Original bright electronic pip: quick upward glint, then a clear high note.
+		# Harmonics stay related to one fundamental instead of a thick bell chord.
+		var glide_seconds := 0.012
+		var ramp := minf(t, glide_seconds)
+		var phase := TAU * (1500.0 * ramp + 500.0 * ramp * ramp / (2.0 * glide_seconds)
+			+ 2000.0 * maxf(0.0, t - glide_seconds))
+		var tone := sin(phase) + 0.18 * sin(phase * 2.0) + 0.07 * sin(phase * 3.0)
+		data.encode_s16(index * 2, roundi(clampf(tone * attack * tail * exp(-t * 23.0) * 0.42, -0.9, 0.9) * 32767.0))
 	stream.data = data
 	return stream
 

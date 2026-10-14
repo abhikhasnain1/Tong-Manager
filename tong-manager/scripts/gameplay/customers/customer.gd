@@ -6,7 +6,7 @@ signal state_changed(state: State)
 signal departure_finished
 signal service_result_presented(snapshot: Dictionary)
 
-enum State { ARRIVING, WAITING, ORDERING, SERVED, LEAVING }
+enum State { ARRIVING, WAITING, ORDERING, SERVED, LEAVING, REFUSED }
 
 const BODY_SHADER := preload("res://scripts/gameplay/customers/customer_body.gdshader")
 const MALE_TURN := preload("res://assets/art/customers/customer_male_turnaway_provisional.png")
@@ -169,7 +169,7 @@ func leave() -> void:
 
 
 func prepare_timeout_departure() -> bool:
-	if not _live() or not is_visible_in_tree() or _moving or _state not in [State.WAITING, State.ORDERING] or (_order != null and _order.fulfilled):
+	if not _live() or not is_visible_in_tree() or _moving or _state not in [State.WAITING, State.ORDERING] or (_order != null and _order.closed):
 		return false
 	_emotion = &"unhappy"
 	_feedback_text = "Waited too long"
@@ -215,31 +215,39 @@ func set_external_order_bubble(enabled: bool) -> void:
 
 
 func apply_service_result(result: ServiceResult) -> bool:
-	if not _live() or not is_visible_in_tree() or _moving or _state not in [State.WAITING, State.ORDERING, State.SERVED] or _order == null or result == null or not _accepted.is_empty():
+	if not _live() or not is_visible_in_tree() or _moving or _state not in [State.WAITING, State.ORDERING, State.SERVED, State.REFUSED] or _order == null or result == null or not _accepted.is_empty():
 		return false
 	var data := result.get_snapshot()
 	if data.is_empty() or data.order_id != _order.order_id or data.customer_id != _definition_id or data.request_kind != _order.request_kind:
 		return false
 	if _presented_ids.has(data.handoff_id): return false
-	if _order.fulfilled and _order.get_accepted_result() != data: return false
+	if _order.closed and _order.get_terminal_result() != data: return false
 	var recorded := _order.get_result(data.handoff_id)
 	if recorded.is_empty():
 		if not _order.record_result(result): return false
 	elif recorded != data:
 		return false
 	_presented_ids[data.handoff_id] = true
+	if data.bad_review:
+		_review_reason = data.reason
+		_review_count += 1
 	if data.accepted:
 		_accepted = data.duplicate(true)
 		_emotion = (&"cold" if data.cold_at_handoff else &"unhappy") if data.bad_review else &"happy"
 		_review_reason = data.reason
-		if data.bad_review: _review_count += 1
 		_feedback_text = ("Cold tea accepted · unhappy · bad review" if data.cold_at_handoff else "Order served · unhappy · bad review") if data.bad_review else "Order accepted · happy"
+	elif data.get("response") == &"refuse_leave":
+		_emotion = &"cold" if data.cold_at_handoff else &"unhappy"
+		_feedback_text = "Order refused · leaving · no payment"
+	elif data.bad_review:
+		_emotion = &"cold" if data.cold_at_handoff else &"wrong"
+		_feedback_text = "Order refused · remake please · no payment"
 	else:
 		_emotion = &"wrong"
 		_feedback_text = "Wrong item · still waiting · no review"
 	_refresh_feedback()
 	var epoch := _generation
-	_set_state(State.SERVED if data.accepted else State.ORDERING)
+	_set_state(State.SERVED if data.accepted else (State.REFUSED if data.get("response") == &"refuse_leave" else State.ORDERING))
 	if _live() and epoch == _generation:
 		service_result_presented.emit(data.duplicate(true))
 	return true
@@ -248,7 +256,7 @@ func apply_service_result(result: ServiceResult) -> bool:
 func is_serve_enabled() -> bool:
 	return (_live() and is_visible_in_tree() and not _moving and _front_texture != null
 		and _state in [State.WAITING, State.ORDERING] and _order != null
-		and not _order.fulfilled and _accepted.is_empty())
+		and not _order.closed and _accepted.is_empty())
 
 
 func contains_serve_point(global_point: Vector2) -> bool:
@@ -336,7 +344,8 @@ func _clear_result_history() -> void:
 
 func _resting_state() -> State:
 	if _order == null: return State.WAITING
-	return State.SERVED if _order.fulfilled or not _accepted.is_empty() else State.ORDERING
+	if _order.fulfilled or not _accepted.is_empty(): return State.SERVED
+	return State.REFUSED if _order.closed else State.ORDERING
 
 
 func _set_state(value: State) -> void:
@@ -425,7 +434,8 @@ func _blend_turn(progress: float) -> void:
 		_set_pose(3, 3, 0.0)
 		return
 	var position := _ease(progress) * 4.0
-	var segment := int(floor(position))
+	# Smoothstep can round to exactly 1 just before the terminal frame.
+	var segment := mini(3, int(floor(position)))
 	var amount := position - float(segment)
 	_turn_frame = segment - 1 if amount < 0.5 else segment
 	_set_pose(segment - 1, segment, amount)

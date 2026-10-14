@@ -6,8 +6,8 @@ still arriving or leaving. When a place is unavailable, the next visitor waits
 offscreen. The schedule keeps its order and spacing instead of dropping visits
 or spawning a crowd at once.
 
-The review panel offers two short authored days, the generated demo schedule
-and a longer-patience serving review.
+The review panel offers two short authored days, the generated demo schedule,
+a longer-patience serving review and **Payment · unhappy responses**.
 The authored examples deliberately use short patience so you can see a whole
 sequence quickly. **Preview left/right departure** only demonstrates freeing a
 place; it does not serve the customer's order. **Restart this schedule** starts
@@ -17,8 +17,9 @@ Opening either Khata view keeps arrivals and patience running.
 ## What controls a day
 
 `DayConfig` contains starting supplies and a `Customer Schedule` resource.
-The customer schedule controls this slice of the day. It does not yet advance
-the campaign, collect payment or reset supplies between consecutive days.
+The customer schedule controls arrivals and response settings. It does not
+advance the campaign or reset supplies between consecutive days. Automatic
+payment is a separate connected consumer of accepted service.
 
 | Setting | What it controls |
 | --- | --- |
@@ -26,7 +27,7 @@ the campaign, collect payment or reset supplies between consecutive days.
 | Mode: Authored | Use the exact list of arrival entries. The list length controls the total; the generated count minimum/maximum are ignored. |
 | Max Active | How many places may be occupied at once. Default: two. Add matching scene markers before raising it. |
 | Timeout Reaction Seconds | How long disappointment remains visible before a timed-out customer turns away. Default: 0.8 seconds. |
-| Customer profile | Portrait, possible orders and default patience. The same profile can visit more than once. Each visit gets its own order and runtime identity. |
+| Customer profile | Portrait, possible orders, default patience, unhappy response and remake-patience policy. The same profile can visit more than once. Each visit gets its own order and runtime identity. |
 
 The normal demo is `data/balance/demo_day_1.tres`. Its generated schedule starts
 after 3 seconds, spaces visitors by 15 seconds, and uses the existing 4–5 daily
@@ -51,6 +52,10 @@ edits, stop the running scene and press F6 again to load the new settings.
      customer's pool. A fixed request must belong to that pool.
    - **Patience Override** changes patience for this visit only. Zero uses the
      profile's default; a positive value is measured in seconds.
+   - **Unhappy Response Override** selects Accept, Refuse and leave, or Refuse
+     and retry. **Inherit (-1)** uses the profile's **Unhappy Response**.
+   - **Remake Patience Override** selects Continue or Reset after a retry
+     refusal. **Inherit (-1)** uses the profile's **Remake Patience**.
 4. Keep entries in chronological order. Equal times are allowed, subject to
    available places. If the counter is full, deferred arrivals keep their
    authored spacing.
@@ -61,6 +66,22 @@ Patience begins after the customer has finished walking up. A timeout disables
 their serving target, briefly shows disappointment, then starts departure. It
 does not fulfill an order, produce an accepted-service bad review or charge
 money. The place becomes free only after departure finishes.
+
+For profile defaults, open `data/customers/customer_a.tres` or
+`customer_b.tres` in FileSystem, then change **Unhappy Response** and
+**Remake Patience** in the Inspector. Continue preserves remaining time; Reset
+starts the visit's full allowance again after each new retry refusal. Defaults
+are Accept and Continue. Author a visit override when only one appearance should
+behave differently. The selected policies are copied at schedule start; they are
+not randomly rolled and do not change when a saved resource is edited mid-run.
+Khata pauses neither. On the scene's **CustomerQueueManager**, **Refused Reaction
+Seconds** controls the refusal-and-leave reaction (default 0.25 seconds).
+
+`payment_response_review.tres` demonstrates six visits: plain tea Retry/Continue,
+banana Leave, sweet tea Accept, biscuit Retry/Reset, sweet milk tea Leave and
+unsweetened milk tea Accept. `PaymentPreview.tscn` starts on this fifth picker
+entry (`initial_day = 4`). See [Automatic payment](payments.md) for the full
+walkthrough, item returns and coin controls.
 
 ## Create another day without changing the existing one
 
@@ -106,9 +127,11 @@ current requests. Optional dialogue is not required to distinguish them.
 
 The cue reads that visit's saved `OrderState` request. Recipe edits affect newly
 created orders; an active visit keeps its captured request. Cues follow their
-customer, avoid fixed HUD/Peek controls and pass mouse input through. Real service,
-including a wrong delivery, removes the fulfilled request and shows its reaction.
-Structural failures leave the request intact; timeout or departure removes it.
+customer, avoid fixed HUD/Peek controls and pass mouse input through. Accepted
+service removes the fulfilled request and shows its reaction. A refusal-and-retry
+keeps the same request available beside the reaction. Refusal-and-leave closes
+the order unpaid; timeout or departure also removes the request. Structural
+failures leave the request intact.
 
 For presentation tuning, select `HUDLayer/RootUI/CustomerOrderOverlay` in
 `TongDayScreen.tscn` to adjust screen margin and separation. The reusable

@@ -5,7 +5,7 @@
 
 [node name="PaymentPreview" type="Node"]
 script = ExtResource("1")
-initial_day = 3
+initial_day = 4
 show_finance_review = true
 
 [node name="TongDayScreen" parent="." instance=ExtResource("2")]
