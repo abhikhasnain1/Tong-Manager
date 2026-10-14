@@ -1,5 +1,39 @@
 # Hanging sources, portions, placement and brewing verification
 
+## Floating vessel status markers
+
+Open `scenes/development/StatusMarkersPreview.tscn` and press **F6**. Its clearly
+labelled development picker seeds vessel examples for heating/boiling water,
+brewing with the burner off, brewed warm/cold drinks, dirty cups, dry ingredients,
+and extra or fractional portions. These examples neither consume nor replenish
+shared inventory or daily water. **Reset vessels · play normally** makes clean,
+empty sample vessels for ordinary interaction. Simulation remains live: brewing and cooling
+continue while the scene is open.
+
+The normal Tong scene uses the same owner-bound marker layer. Markers are hidden
+until the actual vessel is hovered. Its group fades in, rises gently, and keeps
+drifting together within a small range. Leaving dissolves it; quickly returning
+reverses the fade. Inspect ingredient art and corner quantities, rough fill and
+contents heat, actionable brewing changes, and used/dirty cups. Clean cups add no
+cleanliness decoration, and stove heat is already shown on the stove.
+Move individual cups and populated trays and add or discard portions. Markers
+must not intercept dragging or cover other vessels.
+Fill, cold temperature and a brewed state do not assert an order/recipe match.
+Discarding a dirty cup's contents must not remove its washing cue.
+
+Run `godot --headless --path . --script res://tests/status_markers_test.gd`
+after importing the project. It checks live catalog artwork, independent vessel
+states, uncapped whole/fractional amounts, stock-neutral examples, dynamic owner
+lifecycle, projection, visible/fading-only packing, reversible fades, bounded
+group motion and input-transparent controls. Run
+`status_markers_runtime_probe.gd` **without** `--headless` at 1920x1080,
+1600x900, 1366x768 and 1280x800 for actual pointer hover/drag, overlap selection,
+pointer switching, stationary UI suppression and rendered captures of the
+unhovered scene, hovered examples and intermediate fades. An optional directory after `--`
+receives the captures. On Windows, use `--position 60,60` and run native pointer
+tests sequentially. Supply a unique writable absolute `--log-file` path when
+running in an environment without writable user-data logs.
+
 ## Production inventory contract
 
 Run `godot --headless --path . --script res://tests/inventory_state_test.gd` from

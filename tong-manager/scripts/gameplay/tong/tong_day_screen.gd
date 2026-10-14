@@ -39,6 +39,7 @@ func _ready() -> void:
 	if game_state.ensure_inventory(day_config):
 		set_portion_provider(game_state.inventory)
 	_sync_inventory_targets()
+	$HUDLayer/RootUI/StatusBadges.bind_scope(self)
 	$WorldRoot/ToolLayer/KhataStation/KhataHotspot.input_event.connect(_on_khata_input)
 	_verify_layout_contract()
 

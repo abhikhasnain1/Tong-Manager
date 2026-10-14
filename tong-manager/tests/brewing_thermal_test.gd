@@ -142,7 +142,9 @@ func run() -> void:
 	cup.advance_cooling(NAN)
 	cup.advance_cooling(-1)
 	check(cup.temperature == stable_temperature, "Invalid cup cooling leaves temperature unchanged")
-	check(cup.get_node("VolumeMarker").text.contains("°C"), "Cup marker exposes temperature without blocking use")
+	var old_marker := cup.get_node("VolumeMarker") as Label
+	check(not old_marker.visible and old_marker.text.is_empty() and cup.temperature == stable_temperature,
+		"Old numeric marker stays hidden while the cup retains its thermal state")
 	var holder := Node2D.new()
 	screen.add_child(holder)
 	var cup_transform := cup.transform
