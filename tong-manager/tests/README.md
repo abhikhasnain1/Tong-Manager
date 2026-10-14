@@ -1,5 +1,33 @@
 # Hanging sources, portions, placement and brewing verification
 
+## Customer and order data
+
+Open `scenes/development/CustomerOrdersPreview.tscn` and press **F6**. Select either
+editable profile and one of four tea recipes or two ready-item requests. Each
+order requests one cup or one piece. The buttons simulate warm/cold acceptance,
+rejection, a corrected attempt, duplicate replay and an invalid reference made
+on a disposable copy. Fulfilled cold tea still displays an unhappy/bad-review
+outcome. Use **New order** to start a separate example.
+
+This preview reads Catalog definitions and owns isolated order/result snapshots.
+It does not match real cup contents, hand over portions, start patience timers,
+change shared stock/water or pay money. Reopening it resets only its local examples.
+See [Customer and order authoring](../docs/customer-orders.md) for resource fields
+and the boundary between request data and future customer gameplay.
+
+Run `godot --headless --path . --script res://tests/customer_order_data_test.gd`
+after importing. It covers both request kinds, recipe support/unlock/price/unit/
+volume validation, ready-item identity, profile pools, copied snapshots and
+stable handoff history. It preserves shared stock/water and an unrelated live cup.
+
+Run `res://tests/customer_orders_preview_test.gd` **without** `--headless` at
+1920x1080, 1600x900, 1366x768 and 1280x800. Public selection methods select the
+profile/request fixtures; actual mouse events exercise the scenario buttons.
+The probe checks layout, visible outcomes, replay/retry behavior, invalid-copy
+isolation, partial/all-invalid startup and preview recreation. An optional
+directory after `--` receives seven captures. Run native tests sequentially and supply a unique writable absolute
+`--log-file` path.
+
 ## Floating vessel status markers
 
 Open `scenes/development/StatusMarkersPreview.tscn` and press **F6**. Its clearly

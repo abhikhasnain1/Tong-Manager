@@ -3,11 +3,13 @@ extends Node
 @export var item_folder_path: String = "res://data/items"
 @export var recipe_folder_path: String = "res://data/recipes"
 @export var customer_folder_path: String = "res://data/customers"
+@export var order_folder_path: String = "res://data/orders"
 @export var balance_folder_path: String = "res://data/balance"
 
 var items: Dictionary = {}
 var recipes: Dictionary = {}
 var customers: Dictionary = {}
+var order_requests: Dictionary = {}
 var tool_defs: Dictionary = {}
 var day_configs: Dictionary = {}
 
@@ -20,11 +22,13 @@ func load_all() -> void:
 	items.clear()
 	recipes.clear()
 	customers.clear()
+	order_requests.clear()
 	tool_defs.clear()
 	day_configs.clear()
 
 	_load_id_resources(item_folder_path, items, "item")
 	_load_id_resources(recipe_folder_path, recipes, "recipe")
+	_load_id_resources(order_folder_path, order_requests, "order request")
 	_load_id_resources(customer_folder_path, customers, "customer")
 	_load_named_resources(balance_folder_path, tool_defs, "tool_def", "tool")
 	_load_named_resources(balance_folder_path, day_configs, "day_config", "day config")
@@ -59,6 +63,50 @@ func get_pantry_items() -> Array[ItemDef]:
 
 func get_recipe(id: StringName) -> Resource:
 	return _get_resource(recipes, id, "recipe")
+
+
+func get_customer(id: StringName) -> CustomerDef:
+	return customers.get(id) as CustomerDef
+
+
+func get_order_request(id: StringName) -> OrderRequestDef:
+	return order_requests.get(id) as OrderRequestDef
+
+
+func get_available_customers() -> Array[CustomerDef]:
+	var available: Array[CustomerDef] = []
+	for id: StringName in customers:
+		var customer := get_customer(id)
+		if customer != null and customer.id == id and customer.validate(self).is_empty():
+			available.append(customer)
+	available.sort_custom(func(first: CustomerDef, second: CustomerDef) -> bool:
+		return String(first.id) < String(second.id))
+	return available
+
+
+func validate_customer_orders() -> PackedStringArray:
+	var errors := PackedStringArray()
+	for id: StringName in order_requests:
+		var request := get_order_request(id)
+		if request == null or request.id != id:
+			errors.append("Invalid order request resource: " + String(id))
+			continue
+		for error in request.validate(self): errors.append("%s: %s" % [id, error])
+	for id: StringName in customers:
+		var customer := get_customer(id)
+		if customer == null or customer.id != id:
+			errors.append("Invalid customer resource: " + String(id))
+			continue
+		for error in customer.validate(self): errors.append("%s: %s" % [id, error])
+	return errors
+
+
+func create_order(order_id: StringName, customer_id: StringName, request_id: StringName, created_time: float) -> OrderState:
+	var customer := get_customer(customer_id)
+	if customer == null or customer.id != customer_id or not customer.validate(self).is_empty(): return null
+	var request := customer.get_request(request_id)
+	if request == null: return null
+	return OrderState.create(order_id, customer_id, request.snapshot(self), created_time)
 
 
 func get_tool_def(id: StringName) -> Resource:
