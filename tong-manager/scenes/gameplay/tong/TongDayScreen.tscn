@@ -34,6 +34,7 @@
 [ext_resource type="PackedScene" path="res://scenes/gameplay/customers/Customer.tscn" id="36_customer"]
 [ext_resource type="Resource" path="res://data/customers/customer_a.tres" id="37_customer_a"]
 [ext_resource type="Resource" path="res://data/customers/customer_b.tres" id="38_customer_b"]
+[ext_resource type="Script" path="res://scripts/gameplay/customers/customer_queue_manager.gd" id="39_customer_queue"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_khata"]
 size = Vector2(117, 360)
@@ -75,13 +76,12 @@ z_index = 10
 [node name="CustomerQueueSlots" type="Node2D" parent="WorldRoot/CustomerLayer" unique_id=847268434]
 
 [node name="CustomerSlotLeft" type="Marker2D" parent="WorldRoot/CustomerLayer/CustomerQueueSlots" unique_id=1726568719 groups=["critical_interaction_anchor"]]
-position = Vector2(610, 510)
-
-[node name="CustomerSlotCenter" type="Marker2D" parent="WorldRoot/CustomerLayer/CustomerQueueSlots" unique_id=2116701107 groups=["critical_interaction_anchor"]]
-position = Vector2(960, 500)
+position = Vector2(760, 740)
 
 [node name="CustomerSlotRight" type="Marker2D" parent="WorldRoot/CustomerLayer/CustomerQueueSlots" unique_id=946684411 groups=["critical_interaction_anchor"]]
-position = Vector2(1310, 510)
+position = Vector2(1160, 740)
+
+[node name="ActiveCustomers" type="Node2D" parent="WorldRoot/CustomerLayer"]
 
 [node name="CustomerA" parent="WorldRoot/CustomerLayer" instance=ExtResource("36_customer")]
 position = Vector2(760, 740)
@@ -496,6 +496,10 @@ mouse_filter = 2
 
 [node name="BrewingWorkstation" type="Node" parent="."]
 script = ExtResource("28_brewing")
+
+[node name="CustomerQueueManager" type="Node" parent="."]
+script = ExtResource("39_customer_queue")
+customer_scene = ExtResource("36_customer")
 
 [node name="PlacementBody" type="Area2D" parent="WorldRoot/ToolLayer/ReadyItemRail/TeaBox"]
 

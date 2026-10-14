@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="CustomerSchedule" format=3]
+[ext_resource type="Script" path="res://scripts/data/customer_schedule.gd" id="1_schedule"]
+[ext_resource type="Script" path="res://scripts/data/customer_def.gd" id="2_customer"]
+[ext_resource type="Resource" path="res://data/customers/customer_a.tres" id="3_a"]
+[ext_resource type="Resource" path="res://data/customers/customer_b.tres" id="4_b"]
+[resource]
+script = ExtResource("1_schedule")
+id = &"demo_generated"
+max_active = 2
+first_delay_seconds = 3.0
+gap_seconds = 15.0
+timeout_reaction_seconds = 0.8
+customer_pool = Array[ExtResource("2_customer")]([ExtResource("3_a"), ExtResource("4_b")])

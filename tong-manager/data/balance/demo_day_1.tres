@@ -1,6 +1,7 @@
 [gd_resource type="Resource" format=3 uid="uid://bxq730vben0as"]
 
 [ext_resource type="Script" uid="uid://bmmfi0xbcgtft" path="res://scripts/data/day_config.gd" id="1_day_config"]
+[ext_resource type="Resource" path="res://data/customer_schedules/demo_generated.tres" id="2_schedule"]
 
 [resource]
 script = ExtResource("1_day_config")
@@ -8,6 +9,7 @@ start_hour = 6
 interaction_minutes = 10
 customer_count_min = 4
 customer_count_max = 5
+customer_schedule = ExtResource("2_schedule")
 starting_cash = 100
 daily_water_ml = 3000.0
 starting_inventory = {

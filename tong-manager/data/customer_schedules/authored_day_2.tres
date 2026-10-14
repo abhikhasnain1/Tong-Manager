@@ -1,0 +1,58 @@
+[gd_resource type="Resource" script_class="CustomerSchedule" format=3]
+[ext_resource type="Script" path="res://scripts/data/customer_schedule.gd" id="1_schedule"]
+[ext_resource type="Script" path="res://scripts/data/customer_arrival_def.gd" id="2_arrival"]
+[ext_resource type="Resource" path="res://data/customers/customer_a.tres" id="3_a"]
+[ext_resource type="Resource" path="res://data/customers/customer_b.tres" id="4_b"]
+[ext_resource type="Resource" path="res://data/orders/ready_biscuits.tres" id="5_request"]
+[ext_resource type="Resource" path="res://data/orders/tea_cha.tres" id="6_request"]
+[ext_resource type="Resource" path="res://data/orders/ready_banana.tres" id="7_request"]
+[ext_resource type="Resource" path="res://data/orders/tea_dudh_cha_no_sugar.tres" id="8_request"]
+[ext_resource type="Resource" path="res://data/orders/tea_cha_no_sugar.tres" id="9_request"]
+
+[sub_resource type="Resource" id="Arrival_1"]
+script = ExtResource("2_arrival")
+id = &"visit_1"
+due_seconds = 1.0
+customer = ExtResource("4_b")
+request = ExtResource("5_request")
+patience_override = 12.0
+
+[sub_resource type="Resource" id="Arrival_2"]
+script = ExtResource("2_arrival")
+id = &"visit_2"
+due_seconds = 5.0
+customer = ExtResource("3_a")
+request = ExtResource("6_request")
+patience_override = 14.0
+
+[sub_resource type="Resource" id="Arrival_3"]
+script = ExtResource("2_arrival")
+id = &"visit_3"
+due_seconds = 9.0
+customer = ExtResource("4_b")
+request = ExtResource("7_request")
+patience_override = 16.0
+
+[sub_resource type="Resource" id="Arrival_4"]
+script = ExtResource("2_arrival")
+id = &"visit_4"
+due_seconds = 13.0
+customer = ExtResource("3_a")
+request = ExtResource("8_request")
+patience_override = 18.0
+
+[sub_resource type="Resource" id="Arrival_5"]
+script = ExtResource("2_arrival")
+id = &"visit_5"
+due_seconds = 17.0
+customer = ExtResource("4_b")
+request = ExtResource("9_request")
+patience_override = 20.0
+
+[resource]
+script = ExtResource("1_schedule")
+id = &"authored_day_2"
+mode = 1
+max_active = 2
+timeout_reaction_seconds = 0.8
+arrivals = Array[ExtResource("2_arrival")]([SubResource("Arrival_1"), SubResource("Arrival_2"), SubResource("Arrival_3"), SubResource("Arrival_4"), SubResource("Arrival_5")])
