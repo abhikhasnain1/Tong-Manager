@@ -57,5 +57,14 @@ an unhappy/bad-review cue; a rejection remains waiting.
 the existing interaction controller. It accepts only tokens created by that
 preview. Physical cups, pantry exports and hanging portions cannot use it as
 a production service endpoint. The normal stall's customer queue is independent
-of these fixtures. Detailed active-order bubble integration, real stock/cup
-handoff and payment remain separate features.
+of these fixtures. Its `CustomerOrderOverlay` now follows each active customer's
+`OrderAnchor` and presents the captured order's cup additions or ready-item icon.
+It replaces only the old neutral request cue; customer reactions and optional
+dialogue retain their existing behavior. A wrong-item reaction keeps the order
+readable, while fulfillment, timeout and departure remove the active request.
+
+Review these live bindings in `CustomerQueuePreview.tscn`; the isolated
+`CustomerScenePreview` keeps its original sample cue. The bubble's
+`get_accessibility_summary()` exposes a readable description to code and tests;
+this does not add platform screen-reader integration. Real stock/cup handoff,
+order matching and payment remain separate features.

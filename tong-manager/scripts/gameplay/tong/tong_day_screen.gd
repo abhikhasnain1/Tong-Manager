@@ -23,6 +23,7 @@ var khata_modal: KhataModal
 var _extra_portion_targets: Array[DropZone] = []
 var _export_targets: Array[DropZone] = []
 var customer_queue: CustomerQueueManager
+var customer_order_overlay: CustomerOrderOverlay
 
 
 func _ready() -> void:
@@ -48,6 +49,9 @@ func _ready() -> void:
 	$WorldRoot/ToolLayer/KhataStation/KhataHotspot.input_event.connect(_on_khata_input)
 	_verify_layout_contract()
 	_configure_customer_queue()
+	customer_order_overlay = $HUDLayer/RootUI/CustomerOrderOverlay
+	if customer_queue_enabled:
+		customer_order_overlay.bind_queue(customer_queue, get_node("/root/Catalog"))
 
 
 func _configure_customer_queue() -> void:

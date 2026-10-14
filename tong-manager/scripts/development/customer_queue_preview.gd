@@ -48,6 +48,7 @@ func _build_controls() -> void:
 	panel.position = Vector2(18, 88)
 	panel.custom_minimum_size.x = 230
 	ui.add_child(panel)
+	screen.customer_order_overlay.add_exclusion(panel)
 	var paper := StyleBoxFlat.new()
 	paper.bg_color = Color("f2e7cc")
 	paper.border_color = Color("b6a17d")
@@ -83,7 +84,7 @@ func _build_controls() -> void:
 	event_label = _label(rows, "", 12)
 	event_label.custom_minimum_size = Vector2(206, 48)
 	event_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_label(rows, "Quick days use shorter patience.\nOpen the Khata: time keeps moving.\nDeparture buttons are review tools;\nthey do not serve or pay an order.\nRestart preserves supplies and cups.", 11)
+	_label(rows, "Icons show each customer's order.\nItem handoff is not connected yet.\nQuick days use shorter patience.\nOpen the Khata: time keeps moving.\nDeparture buttons only free a place.\nRestart preserves supplies and cups.", 11)
 
 
 func _label(parent: Node, text: String, size: int) -> Label:

@@ -18,6 +18,8 @@ script = ExtResource("2_feedback")
 
 [node name="BubbleAnchor" type="Marker2D" parent="VisualRoot/BobRoot"]
 
+[node name="OrderAnchor" type="Marker2D" parent="VisualRoot/BobRoot"]
+
 [node name="Dialogue" type="Panel" parent="VisualRoot/BobRoot/BubbleAnchor"]
 mouse_filter = 2
 
