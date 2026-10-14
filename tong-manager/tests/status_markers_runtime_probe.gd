@@ -79,8 +79,12 @@ func check_layout(label: String) -> void:
 	var rectangles: Array[Rect2] = []
 	for vessel in layer.get_vessels():
 		var badge := layer.get_badge_for(vessel)
-		check(badge != null and badge.visible, label + ": live owner has a visible marker group")
+		check(badge != null, label + ": live owner retains one marker group")
 		if badge == null: continue
+		if not badge.visible:
+			check(badge.modulate.a == 0.0, label + ": a hidden group is fully transparent")
+			continue
+		check(badge.modulate.a > 0.0, label + ": a visible group is hovered or still fading")
 		var rect := Rect2(badge.position, badge.get_badge_size())
 		check(root.get_visible_rect().encloses(rect), label + ": marker group fits the rendered viewport")
 		for previous in rectangles:
@@ -101,57 +105,104 @@ func front_cup() -> Cup:
 	return null
 
 
-func check_hover_and_pointer(value: Cup) -> void:
-	controller.set_mode(InteractionController.MODE_NEUTRAL)
-	await move_pointer(Vector2(12, root.size.y - 12))
-	await create_timer(layer.config.hover_return_seconds + 0.15).timeout
-	var badge := layer.get_badge_for(value)
-	var resting := badge.position
-	await move_pointer(point(value))
-	check(value.is_status_hovered(), "Real vessel hover activates the owner marker group")
-	await create_timer(0.35).timeout
-	check(badge.position.y < resting.y, "Real hover gently raises the marker group")
+func away_point() -> Vector2:
+	return Vector2(12, root.get_visible_rect().size.y - 12)
+
+
+func hover_point(vessel: Node2D) -> Vector2:
+	if vessel is Kettle:
+		return point(vessel.get_node("GripAnchor") as Marker2D)
+	return point(vessel)
+
+
+func leave_all() -> void:
+	await move_pointer(away_point())
+	await create_timer(layer.config.hover_fade_out_seconds + 0.15).timeout
+	for vessel: Node in layer.get_vessels():
+		var badge: ObjectStatusBadge = layer.get_badge_for(vessel)
+		check(not badge.visible and badge.modulate.a == 0.0, "Leaving the vessels finishes every outgoing fade")
+
+
+func hover_settled(vessel: Node2D, label: String) -> ObjectStatusBadge:
+	await move_pointer(hover_point(vessel))
+	check(vessel.is_status_hovered(), label + ": real owner hit region receives hover")
+	await create_timer(maxf(layer.config.hover_rise_seconds, layer.config.hover_fade_in_seconds) + 0.1).timeout
+	var badge: ObjectStatusBadge = layer.get_badge_for(vessel)
+	check(badge.visible and is_equal_approx(badge.modulate.a, 1.0), label + ": sustained hover reveals the group completely")
+	check_layout(label)
+	return badge
+
+
+func check_group_motion(vessel: Node2D, label: String) -> void:
+	await leave_all()
+	var badge: ObjectStatusBadge = layer.get_badge_for(vessel)
+	var token_rects: Array[Rect2] = badge.get_token_rects()
+	await move_pointer(hover_point(vessel))
+	check(vessel.is_status_hovered() and badge.visible, label + ": real pointer begins the reveal")
+	await create_timer(layer.config.hover_rise_seconds * 0.2).timeout
+	var early_position: Vector2 = badge.position
 	await create_timer(layer.config.hover_rise_seconds).timeout
-	check(absf(badge.position.y - (resting.y - layer.config.hover_lift)) < 0.1, "Sustained hover reaches its configured lift")
-	await capture("hover-raised")
-	# Cover the still-hovered owner with a real Control; feedback follows world
-	# input routing, including a control appearing beneath a stationary pointer.
+	check(badge.position.y < early_position.y and is_equal_approx(badge.modulate.a, 1.0),
+		label + ": group gently rises while completing its fade")
+	var motion_bounds := Rect2(badge.position, Vector2.ZERO)
+	for _sample in 8:
+		await create_timer(layer.config.hover_bob_period / 8.0).timeout
+		motion_bounds = motion_bounds.expand(badge.position)
+		check(badge.get_token_rects() == token_rects, label + ": icons move together without individual jitter")
+		check_layout(label + " drifting")
+	check(motion_bounds.size.y > 1.0 and motion_bounds.size.x > 0.5, label + ": motion continues under a stationary pointer")
+	check(motion_bounds.size.y <= layer.config.hover_bob_amplitude * 2.0 + 0.1
+		and motion_bounds.size.x <= layer.config.hover_sway_amplitude * 2.0 + 0.1,
+		label + ": sustained motion stays bounded by its configured bob and sway")
+	await capture(label + "-hover-drifting")
+	# UI appearing beneath a stationary pointer must suppress the world hover.
+	var location: Vector2 = hover_point(vessel)
 	var overlay := Control.new()
-	overlay.position = point(value) - Vector2(45, 45)
-	overlay.size = Vector2(90, 90)
+	overlay.position = location - Vector2(45, 35)
+	overlay.size = Vector2(90, 70)
 	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	screen.get_node("HUDLayer/RootUI").add_child(overlay)
 	await frames()
-	check(controller.is_pointer_over_ui_at(point(value)) and not value.is_status_hovered(), "An overlaid UI control suppresses world-owner hover")
-	await create_timer(layer.config.hover_return_seconds + 0.15).timeout
-	check(badge.position.is_equal_approx(resting), "UI coverage settles the marker without moving the vessel")
+	check(controller.is_pointer_over_ui_at(location) and not vessel.is_status_hovered(),
+		label + ": stationary UI coverage suppresses world hover")
+	await create_timer(layer.config.hover_fade_out_seconds * 0.25).timeout
+	check(badge.visible and badge.modulate.a > 0.0 and badge.modulate.a < 1.0,
+		label + ": covered markers dissolve rather than vanishing abruptly")
+	await capture(label + "-fading-under-ui")
+	await create_timer(layer.config.hover_fade_out_seconds).timeout
+	check(not badge.visible and badge.modulate.a == 0.0 and badge.get_token_rects() == token_rects,
+		label + ": covered markers disappear without rearranging their contents")
 	overlay.queue_free()
 	await frames()
-	await move_pointer(Vector2(12, root.size.y - 12))
-	await create_timer(layer.config.hover_return_seconds + 0.15).timeout
-	check(badge.position.is_equal_approx(resting), "Pointer exit returns the markers to their resting position")
-	# Force a marker over the cup only for this passthrough regression, so the
-	# physical click must travel through the actual presentation Control.
+	await leave_all()
+
+
+func check_hover_and_pointer(value: Cup) -> void:
+	controller.set_mode(InteractionController.MODE_NEUTRAL)
+	await check_group_motion(value, "cup")
+	var badge: ObjectStatusBadge = await hover_settled(value, "Cup passthrough setup")
+	# Force a visible marker over the cup for this input regression only.
 	layer.set_process(false)
 	badge.position = point(value) - badge.get_badge_size() * 0.5
 	controller.set_mode(InteractionController.MODE_ORGANIZE)
-	var origin := value.global_transform
-	var anchor := layer.get_anchor_position(value)
+	var origin: Transform2D = value.global_transform
+	var anchor: Vector2 = layer.get_anchor_position(value)
 	await mouse(point(value), true)
-	check(controller.is_dragging() and controller.current_payload.world_node == value, "A marker overlapping a cup does not intercept the real Organize press")
+	check(controller.is_dragging() and controller.current_payload.world_node == value,
+		"A visible marker overlapping a cup does not intercept the real Organize press")
 	layer.set_process(true)
 	if controller.is_dragging():
 		await move_pointer(point(value) + Vector2(-65, -35), true)
-		check(layer.get_badge_for(value) == badge, "The same marker instance follows a held cup through drag-layer reparenting")
+		check(layer.get_badge_for(value) == badge, "The same marker follows a held cup through drag-layer reparenting")
 		check(not layer.get_anchor_position(value).is_equal_approx(anchor), "Held cup movement moves its projected marker anchor")
-		await capture("drag-follow")
+		check_layout("Held cup")
+		await capture("cup-drag-follow")
 		await escape()
 		await mouse(point(value), false)
 		check(not controller.is_dragging() and value.global_transform.is_equal_approx(origin), "Cancel restores the actual cup exactly")
 		check(layer.get_anchor_position(value).is_equal_approx(anchor), "Cancel restores the same cup marker anchor")
 	controller.set_mode(InteractionController.MODE_NEUTRAL)
-	await move_pointer(Vector2(12, root.size.y - 12))
-	await create_timer(layer.config.hover_return_seconds + 0.15).timeout
+	await leave_all()
 
 
 func check_overlap_hover() -> void:
@@ -180,6 +231,10 @@ func check_overlap_hover() -> void:
 		await move_pointer(location)
 		check(front_handle._is_frontmost_at(location) and not back_handle._is_frontmost_at(location), "Y ordering identifies the visible front cup")
 		check(front.is_status_hovered() and not back.is_status_hovered(), "Only the front cup raises its markers in overlapping real hit regions")
+		await create_timer(layer.config.hover_fade_out_seconds + layer.config.hover_fade_in_seconds).timeout
+		check(layer.get_badge_for(front).visible and not layer.get_badge_for(back).visible,
+			"After overlap hover settles only the visible front cup has markers")
+		check_layout("Overlapping cup hover")
 		await capture("overlap-front-hover")
 	front.transform = old_transform
 	check(surface.commit_item(front), "Overlap fixture restores the original committed placement")
@@ -189,74 +244,29 @@ func check_overlap_hover() -> void:
 func check_kettle_hover_and_pointer() -> void:
 	var kettle: Kettle = view.kettle as Kettle
 	var grip: Marker2D = kettle.get_node("GripAnchor") as Marker2D
-	var away: Vector2 = Vector2(12, root.get_visible_rect().size.y - 12)
 	controller.set_mode(InteractionController.MODE_NEUTRAL)
-	await move_pointer(away)
-	await create_timer(layer.config.hover_return_seconds + 0.15).timeout
-	var badge: ObjectStatusBadge = layer.get_badge_for(kettle)
-	check(badge != null, "The live kettle has its own marker group")
-	if badge == null: return
-	var resting: Vector2 = badge.position
+	await check_group_motion(kettle, "kettle")
+	var badge: ObjectStatusBadge = await hover_settled(kettle, "Kettle pickup setup")
 	var token_rects: Array[Rect2] = badge.get_token_rects()
-	var dimensions: Vector2 = badge.get_badge_size()
-	var hover_point: Vector2 = point(grip)
-	check(not controller.is_pointer_over_ui_at(hover_point), "The real kettle grip is reachable outside UI")
-	await move_pointer(hover_point)
-	check(kettle.is_status_hovered(), "Real kettle grip hover activates the kettle marker group")
-	await create_timer(layer.config.hover_rise_seconds * 0.25).timeout
-	check(badge.position.y < resting.y and badge.position.y > resting.y - layer.config.hover_lift,
-		"Kettle hover rises partway before completing its animation")
-	check(badge.get_token_rects() == token_rects and badge.get_badge_size() == dimensions,
-		"Kettle icons retain their relative arrangement during the rise")
-	await create_timer(layer.config.hover_rise_seconds).timeout
-	check(badge.position.is_equal_approx(resting - Vector2(0, layer.config.hover_lift)),
-		"Sustained kettle hover lifts the whole group by the configured amount")
-	check(badge.get_token_rects() == token_rects,
-		"Kettle hover has no independent icon jitter at full lift")
-	await capture("kettle-hover-raised")
-
-	var overlay: Control = Control.new()
-	overlay.position = hover_point - Vector2(45, 35)
-	overlay.size = Vector2(90, 70)
-	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
-	screen.get_node("HUDLayer/RootUI").add_child(overlay)
-	await frames()
-	check(controller.is_pointer_over_ui_at(hover_point) and not kettle.is_status_hovered(),
-		"UI appearing beneath the stationary kettle pointer suppresses world hover")
-	await create_timer(layer.config.hover_return_seconds + 0.15).timeout
-	check(badge.position.is_equal_approx(resting),
-		"Covered kettle markers return to their resting position")
-	check(badge.get_token_rects() == token_rects,
-		"The kettle group retains its internal layout during the return")
-	overlay.queue_free()
-	await frames()
-	await move_pointer(away)
-	await create_timer(layer.config.hover_return_seconds + 0.15).timeout
-	check(not kettle.is_status_hovered() and badge.position.is_equal_approx(resting),
-		"Removing UI and leaving the kettle restores its unhovered presentation")
-
 	controller.set_mode(InteractionController.MODE_INTERACT)
 	var origin: Transform2D = kettle.global_transform
 	var origin_anchor: Vector2 = layer.get_anchor_position(kettle)
 	var pickup_point: Vector2 = point(grip)
 	await mouse(pickup_point, true)
 	check(controller.is_dragging() and controller.current_payload.world_node == kettle and kettle.is_held,
-		"The real grip still picks up the kettle beneath its floating markers")
+		"The real grip picks up the kettle beneath its floating markers")
 	if controller.is_dragging() and controller.current_payload.world_node == kettle:
 		await move_pointer(pickup_point + Vector2(100, -25), true)
-		check(layer.get_badge_for(kettle) == badge,
-			"Held kettle reparenting preserves the same marker group")
-		check(not layer.get_anchor_position(kettle).is_equal_approx(origin_anchor),
-			"The held kettle moves its actual status anchor")
-		check(badge.get_token_rects() == token_rects,
-			"Held kettle markers keep their icon arrangement")
+		check(layer.get_badge_for(kettle) == badge, "Held kettle reparenting preserves marker identity")
+		check(not layer.get_anchor_position(kettle).is_equal_approx(origin_anchor), "The held kettle moves its actual status anchor")
+		check(badge.get_token_rects() == token_rects, "Held kettle markers keep their icon arrangement")
 		var spout_point: Vector2 = point(kettle.get_node("Spout") as Marker2D)
 		for vessel: Node in layer.get_vessels():
 			var visible_badge: ObjectStatusBadge = layer.get_badge_for(vessel)
 			if visible_badge == null or not visible_badge.visible: continue
-			var marker_rect: Rect2 = Rect2(visible_badge.get_global_transform_with_canvas().origin, visible_badge.get_badge_size())
-			check(not marker_rect.has_point(spout_point),
-				"Floating marker groups leave the held kettle's pouring spout visible")
+			var marker_rect := Rect2(visible_badge.get_global_transform_with_canvas().origin, visible_badge.get_badge_size())
+			check(not marker_rect.has_point(spout_point), "Visible or fading groups leave the held kettle spout clear")
+		check_layout("Held kettle")
 		await capture("kettle-drag-follow")
 		await escape()
 		await mouse(point(grip), false)
@@ -265,10 +275,27 @@ func check_kettle_hover_and_pointer() -> void:
 		check(layer.get_badge_for(kettle) == badge and layer.get_anchor_position(kettle).is_equal_approx(origin_anchor),
 			"Kettle cancellation restores the same marker identity and anchor")
 	controller.set_mode(InteractionController.MODE_NEUTRAL)
-	await move_pointer(away)
-	await create_timer(layer.config.hover_return_seconds + 0.15).timeout
-	check(badge.position.is_equal_approx(resting) and badge.get_token_rects() == token_rects,
-		"After kettle pickup and cancellation its marker group settles without rearranging")
+	await leave_all()
+
+
+func check_pointer_switching(first: Cup, second: Kettle) -> void:
+	await leave_all()
+	var a: ObjectStatusBadge = await hover_settled(first, "Pointer switching setup")
+	var b: ObjectStatusBadge = layer.get_badge_for(second)
+	await move_pointer(hover_point(second))
+	await create_timer(layer.config.hover_fade_in_seconds).timeout
+	check(a.visible and a.modulate.a > 0.0 and a.modulate.a < 1.0 and b.visible and is_equal_approx(b.modulate.a, 1.0),
+		"Moving Cup to Kettle reveals the new group while the old one fades")
+	check_layout("Pointer switching overlap")
+	await capture("pointer-switching")
+	await move_pointer(hover_point(first))
+	check(first.is_status_hovered() and a.visible and a.modulate.a > 0.0,
+		"Rapid pointer return resumes the cup reveal before its fade finishes")
+	await create_timer(layer.config.hover_fade_out_seconds + 0.15).timeout
+	check(a.visible and is_equal_approx(a.modulate.a, 1.0) and not b.visible and b.modulate.a == 0.0,
+		"Pointer switching settles to only the final hovered owner")
+	check_layout("Pointer switching settled")
+	await leave_all()
 
 
 func run() -> void:
@@ -289,18 +316,24 @@ func run() -> void:
 	view.kettle.set_process(false)
 	for value: Cup in screen.get_cups(): value.set_process(false)
 	for burner in view.stove.burners: burner.set_process(false)
-	await move_pointer(Vector2(12, root.size.y - 12))
+	await leave_all()
+	await capture("initial-no-hover")
 	for index in view.EXAMPLES.size():
 		view.apply_example(index)
 		await frames(3)
-		check_layout("Example %d" % index)
-		await capture("example-%d" % index)
+		await hover_settled(view.kettle as Kettle, "Example %d kettle" % index)
+		await capture("example-%d-kettle-hover" % index)
+		var example_cup: Cup = screen.get_cups()[0]
+		await hover_settled(example_cup, "Example %d cup" % index)
+		await capture("example-%d-cup-hover" % index)
+		await leave_all()
 	view.apply_example(6)
 	await frames()
 	var selected := front_cup()
 	check(selected != null, "At least one visible cup can receive actual input")
 	if selected != null:
 		await check_hover_and_pointer(selected)
+		await check_pointer_switching(selected, view.kettle as Kettle)
 	await check_kettle_hover_and_pointer()
 	await check_overlap_hover()
 	var tray := screen.get_node("WorldRoot/ToolLayer/TrayStation") as TrayStation
@@ -310,6 +343,7 @@ func run() -> void:
 	tray.position += Vector2(-45, -22)
 	await frames()
 	check(not layer.get_anchor_position(cup).is_equal_approx(initial_anchor), "Populated tray movement carries its children's markers")
+	await hover_settled(cup, "Moved populated tray hover")
 	check_layout("Moved populated tray")
 	await capture("moved-tray")
 	tray.transform = initial

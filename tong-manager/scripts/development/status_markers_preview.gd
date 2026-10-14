@@ -67,7 +67,7 @@ func _build_controls() -> void:
 	rows.add_child(clear_button)
 	var note := Label.new()
 	note.name = "FixtureNote"
-	note.text = "Vessel fixtures · supplies unchanged.\nReset makes clean, empty sample vessels."
+	note.text = "Hover a cup or kettle to reveal its icons.\nMove away to let them fade out.\nVessel fixtures · supplies unchanged.\nReset makes clean, empty sample vessels."
 	note.add_theme_font_size_override("font_size", 11)
 	note.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rows.add_child(note)

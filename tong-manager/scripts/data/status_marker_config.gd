@@ -12,7 +12,11 @@ extends Resource
 @export_group("Owner placement and hover")
 @export var hover_lift := 14.0
 @export var hover_rise_seconds := 1.0
-@export var hover_return_seconds := 0.65
+@export var hover_fade_in_seconds := 0.25
+@export var hover_fade_out_seconds := 0.8
+@export var hover_bob_amplitude := 3.0
+@export var hover_sway_amplitude := 2.0
+@export var hover_bob_period := 3.8
 @export var anchor_gap := 7.0
 @export var screen_margin := 10.0
 @export var cluster_gap := 5.0

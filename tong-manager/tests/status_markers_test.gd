@@ -115,7 +115,7 @@ func check_content_semantics() -> void:
 	check(by_kind(discarded, &"cleanliness").get("band") == &"dirty", "Discarding contents never washes the dirty marker")
 	check(by_kind(discarded, &"fill").get("band") == &"empty" and ingredient(discarded, &"sugar").is_empty(), "Discard clears old fill and portions immediately")
 	value.reset_clean()
-	check(by_kind(tokens(value), &"cleanliness").get("band") == &"clean", "An actual clean reset updates cleanliness")
+	check(by_kind(tokens(value), &"cleanliness").is_empty(), "A clean cup adds no redundant cleanliness decoration")
 	var custom := ItemDef.new()
 	custom.id = &"marker_test_spice"
 	custom.unit = &"piece"
@@ -142,8 +142,11 @@ func check_brewing_semantics() -> void:
 	var source := kettle()
 	source.add_water(1000.0)
 	check(by_kind(tokens(source), &"fill").get("liquid_id") == &"water", "Plain water does not masquerade as brewed tea")
+	check(by_kind(tokens(source), &"brew").is_empty(), "Warming water adds no redundant heating-stage marker")
+	check(not by_kind(tokens(source), &"thermal").is_empty(), "Water retains its contents-temperature cue before boiling")
 	source.apply_heat(20.0, 1.0)
 	check(by_kind(tokens(source), &"brew").get("band") == &"boiling", "Boiling plain water has a brewing-state marker")
+	check(by_kind(tokens(source), &"thermal").is_empty(), "Boiling bubbles replace a duplicate hot marker")
 	check(by_kind(tokens(source), &"heating").is_empty(), "Hot water without an active burner has no burner-on marker")
 	source.apply_ingredient(&"black_tea", 5, &"infuse", &"black_tea")
 	var brewing := tokens(source)
@@ -152,7 +155,9 @@ func check_brewing_semantics() -> void:
 	check(by_kind(brewing, &"brew").get("band") == &"steeping", "Infusing bags do not immediately claim a finished brew")
 	source.is_held = true
 	source.advance_brewing(source.config.steep_seconds)
-	check(by_kind(tokens(source), &"brew").get("band") == &"liquor_ready", "Held off-stove brewing progresses to a brewed marker")
+	check(source.state == Kettle.BrewState.LIQUOR_READY, "Held off-stove brewing still progresses to a finished batch")
+	check(by_kind(tokens(source), &"brew").is_empty() and by_kind(tokens(source), &"fill").get("liquid_id") == &"black_tea",
+		"Finished tea is conveyed by its liquid identity without a redundant done marker")
 	check(by_kind(tokens(source), &"heating").is_empty(), "Held kettle does not claim applied stove heat")
 	source.is_held = false
 	source.temperature = source.config.cold_temperature - 1.0
@@ -193,6 +198,125 @@ func check_layout(layer: ObjectStatusBadgeLayer, label: String) -> void:
 		rectangles.append(rect)
 
 
+func reveal_for_layout(layer: ObjectStatusBadgeLayer, vessel: Node) -> void:
+	# This suite isolates elapsed presentation from native pointer picking, which
+	# the rendered probe covers separately using real Cup/Kettle input events.
+	var interaction: InteractionController = vessel.controller
+	vessel.controller = null
+	vessel._on_hover(true)
+	layer._process(maxf(CONFIG.hover_rise_seconds, CONFIG.hover_fade_in_seconds) + 0.01)
+	vessel.controller = interaction
+	check(layer.get_badge_for(vessel).visible and is_equal_approx(layer.get_badge_for(vessel).modulate.a, 1.0),
+		"Layout fixture reveals the actual owner's group before checking its bounds")
+
+
+func check_hover_animation() -> void:
+	var scope := Node2D.new()
+	root.add_child(scope)
+	var first := CUP.instantiate() as Cup
+	var second := CUP.instantiate() as Cup
+	scope.add_child(first)
+	scope.add_child(second)
+	for value in [first, second]:
+		value.position = root.get_visible_rect().size * 0.5
+		value.set_process(false)
+	var layer := ObjectStatusBadgeLayer.new()
+	root.add_child(layer)
+	layer.bind_scope(scope)
+	layer.set_process(false)
+	var a: ObjectStatusBadge = layer.get_badge_for(first)
+	var b: ObjectStatusBadge = layer.get_badge_for(second)
+	check(not a.visible and not b.visible and a.modulate.a == 0.0 and b.modulate.a == 0.0,
+		"Unhovered owners start fully hidden without discarding their readable state")
+	check(not a.get_tokens().is_empty(), "Hidden owner state stays available without a visible cluster")
+	first._on_hover(true)
+	layer._process(CONFIG.hover_fade_in_seconds * 0.4)
+	var fading_in: float = a.modulate.a
+	var early_position: Vector2 = a.position
+	check(a.visible and fading_in > 0.0 and fading_in < 1.0, "Hover fades in progressively")
+	var local_rects: Array[Rect2] = a.get_token_rects()
+	first._on_hover(false)
+	layer._process(CONFIG.hover_fade_out_seconds * 0.1)
+	var fading_out: float = a.modulate.a
+	check(a.visible and fading_out > 0.0 and fading_out < fading_in, "Leaving reverses a partial fade without disappearing")
+	var interrupted_position: Vector2 = a.position
+	first._on_hover(true)
+	layer._process(0.001)
+	check(a.modulate.a > fading_out and a.modulate.a < 1.0, "Rapid reentry resumes from current opacity rather than restarting or jumping")
+	check(a.position.distance_to(interrupted_position) < 1.0, "Rapid reentry preserves a continuous group position")
+	layer._process(CONFIG.hover_rise_seconds + CONFIG.hover_fade_in_seconds)
+	check(is_equal_approx(a.modulate.a, 1.0) and a.position.y < early_position.y,
+		"Sustained hover completes its fade and gentle rise")
+	var motion_bounds := Rect2(a.position, Vector2.ZERO)
+	for _sample in 16:
+		layer._process(CONFIG.hover_bob_period / 8.0)
+		motion_bounds = motion_bounds.expand(a.position)
+		check(a.get_token_rects() == local_rects, "Continuing smoke-like motion preserves every icon's relative placement")
+		check_layout(layer, "Sustained group motion")
+	check(motion_bounds.size.y > 1.0 and motion_bounds.size.x > 0.5, "Stationary sustained hover keeps drifting vertically and sideways")
+	check(motion_bounds.size.y <= CONFIG.hover_bob_amplitude * 2.0 + 0.01
+		and motion_bounds.size.x <= CONFIG.hover_sway_amplitude * 2.0 + 0.01,
+		"Continuing group drift stays inside the configured motion envelope")
+	# Both owners intentionally share the same anchor. Their body remains an
+	# obstacle, but the second, fully hidden badge cannot reserve a second slot.
+	first._on_hover(false)
+	second._on_hover(true)
+	layer._process(CONFIG.hover_fade_in_seconds)
+	check(a.visible and a.modulate.a > 0.0 and b.visible and is_equal_approx(b.modulate.a, 1.0),
+		"Pointer switching shows the new group while the previous group fades")
+	check(not Rect2(a.position, a.get_badge_size()).intersects(Rect2(b.position, b.get_badge_size())),
+		"A fading group still reserves its space against the newly hovered group")
+	layer._process(CONFIG.hover_fade_out_seconds + CONFIG.hover_rise_seconds)
+	check(not a.visible and a.modulate.a == 0.0 and b.visible, "Only the newly hovered group remains after the old fade finishes")
+	second._on_hover(false)
+	layer._process(CONFIG.hover_fade_out_seconds + 0.1)
+	first._on_hover(true)
+	layer._process(CONFIG.hover_rise_seconds + CONFIG.hover_fade_in_seconds)
+	var first_only: Vector2 = a.position
+	first._on_hover(false)
+	layer._process(CONFIG.hover_fade_out_seconds + 0.1)
+	second._on_hover(true)
+	layer._process(CONFIG.hover_rise_seconds + CONFIG.hover_fade_in_seconds)
+	check(b.position.is_equal_approx(first_only), "A fully faded peer releases its old packing slot for the next hover")
+	var before_focus_loss: Vector2 = b.position
+	layer.notification(MainLoop.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	layer._process(CONFIG.hover_fade_out_seconds * 0.5)
+	check(b.visible and b.modulate.a > 0.0 and b.modulate.a < 1.0,
+		"Window focus loss fades a group despite its stale owner hover flag")
+	check(absf(b.position.y - before_focus_loss.y) <= CONFIG.hover_bob_amplitude * 2.0 + 0.01,
+		"A leaving group holds its rise while dissolving, with only bounded bob remaining")
+	layer._process(CONFIG.hover_fade_out_seconds)
+	check(not b.visible and b.modulate.a == 0.0, "Focus loss finishes with no visible stale owner markers")
+	check(not layer.get_vessel_bounds(second).has_point(root.get_mouse_position()),
+		"Headless focus-return fixture places the pointer outside the old owner")
+	layer.notification(MainLoop.NOTIFICATION_APPLICATION_FOCUS_IN)
+	layer._process(CONFIG.hover_fade_in_seconds)
+	check(not b.visible, "Focus return does not revive a stale hover after the pointer left the owner")
+	second._on_hover(false)
+	layer._process(0.01)
+	second._on_hover(true)
+	layer._process(CONFIG.hover_fade_in_seconds)
+	check(b.visible, "A fresh owner hover works normally after returning focus")
+	second.hide()
+	layer.refresh()
+	check(not b.visible and b.modulate.a == 0.0, "Hiding an owner immediately clears even its in-progress presentation")
+	second.show()
+	layer._process(CONFIG.hover_fade_in_seconds)
+	check(not b.visible, "Showing an owner with stale hover outside its hit region does not resurrect markers")
+	second._on_hover(false)
+	layer._process(0.01)
+	second._on_hover(true)
+	layer._process(CONFIG.hover_fade_in_seconds)
+	layer.hide()
+	check(not b.visible and b.modulate.a == 0.0, "Hiding the presentation layer clears its visible animation state")
+	layer.show()
+	layer._process(CONFIG.hover_fade_in_seconds)
+	check(not b.visible, "Showing the layer does not replay a stale hover outside the owner")
+	layer.queue_free()
+	scope.queue_free()
+	await frames()
+
+
 func check_layer_lifecycle() -> void:
 	var screen := TONG.instantiate() as Node2D
 	root.add_child(screen)
@@ -206,6 +330,9 @@ func check_layer_lifecycle() -> void:
 	for burner in (screen.get_node("WorldRoot/ToolLayer/StoveStation") as Stove).burners: burner.set_process(false)
 	layer.refresh()
 	check(layer.get_vessels().size() == cups.size() + 1, "Initial cups and kettle each have owner-bound markers")
+	for vessel in layer.get_vessels():
+		check(not layer.get_badge_for(vessel).visible and layer.get_badge_for(vessel).modulate.a == 0.0,
+			"A newly opened stall has no unhovered floating markers")
 	check_controls_ignore(layer)
 	var value := cups[0]
 	value.receive_liquid(&"black_tea", 125.0, 70.0, {&"condensed_milk": 0.25})
@@ -246,7 +373,7 @@ func check_layer_lifecycle() -> void:
 	check(not layer.get_badge_for(value).visible, "Hidden vessels do not leave floating markers")
 	value.show()
 	layer.refresh()
-	check(layer.get_badge_for(value).visible, "Showing a live vessel restores its marker")
+	check(not layer.get_badge_for(value).visible, "Showing an unhovered vessel keeps its marker hidden")
 	var spawned := CUP.instantiate() as Cup
 	spawned.name = "MarkerLifecycleCup"
 	holder.add_child(spawned)
@@ -263,11 +390,16 @@ func check_layer_lifecycle() -> void:
 	layer.refresh()
 	check(layer.get_badge_for(spawned) == null, "Queued owner deletion removes its marker before the next frame")
 	await frames()
+	layer.set_process(false)
 	for dimensions in [Vector2i(1920, 1080), Vector2i(1600, 900), Vector2i(1366, 768), Vector2i(1280, 800)]:
 		root.size = dimensions
 		await frames(3)
 		layer.refresh()
-		check_layout(layer, str(dimensions))
+		for vessel in layer.get_vessels():
+			reveal_for_layout(layer, vessel)
+			check_layout(layer, str(dimensions))
+			vessel._on_hover(false)
+			layer._process(CONFIG.hover_fade_out_seconds + 0.1)
 		var expected: Vector2 = value.get_node("StatusBadgeAnchor").get_global_transform_with_canvas().origin
 		var actual := layer.get_global_transform_with_canvas() * layer.get_anchor_position(value)
 		check(actual.is_equal_approx(expected), "Owner anchor projection follows world fitting at " + str(dimensions))
@@ -281,30 +413,16 @@ func check_layer_lifecycle() -> void:
 		check(began, "Edge-layout fixture starts a real cup drag at " + str(dimensions))
 		if began:
 			interaction.update_drag(Vector2(root.get_visible_rect().size.x * 0.25, 30.0))
-			layer.refresh()
+			reveal_for_layout(layer, value)
 			check(layer.get_anchor_position(value).y < layer.get_badge_for(value).get_badge_size().y,
 				"Top-edge owner has insufficient space for its usual above-object markers")
 			check_layout(layer, "Held near top " + str(dimensions))
 			interaction.cancel_drag()
 			layer.refresh()
 			check(value.global_transform.is_equal_approx(origin), "Top-edge layout review preserves drag cancellation")
+			value._on_hover(false)
+			layer._process(CONFIG.hover_fade_out_seconds + 0.1)
 		interaction.set_mode(InteractionController.MODE_NEUTRAL)
-	# Trigger the same owner hover signal; elapsed-time animation is tested without
-	# relying on a native pointer in the headless runner.
-	layer.set_process(false)
-	value._on_hover(false)
-	layer._process(CONFIG.hover_return_seconds + 0.1)
-	badge = layer.get_badge_for(value)
-	var resting := badge.position
-	value._on_hover(true)
-	layer._process(CONFIG.hover_rise_seconds * 0.5)
-	var middle := badge.position
-	check(middle.y < resting.y and middle.y > resting.y - CONFIG.hover_lift, "Hover rises progressively rather than jumping instantly")
-	layer._process(CONFIG.hover_rise_seconds)
-	check(is_equal_approx(badge.position.y, resting.y - CONFIG.hover_lift), "Hover reaches the configured lift")
-	value._on_hover(false)
-	layer._process(CONFIG.hover_return_seconds + 0.1)
-	check(badge.position.is_equal_approx(resting), "Leaving the owner settles markers exactly to their resting anchor")
 	screen.queue_free()
 	await frames()
 
@@ -355,6 +473,7 @@ func run() -> void:
 	for node in owned:
 		if is_instance_valid(node): node.queue_free()
 	await frames()
+	await check_hover_animation()
 	await check_layer_lifecycle()
 	await check_preview_boundary()
 	print("STATUS_MARKERS: %d checks; %d failures" % [checks, failures.size()])

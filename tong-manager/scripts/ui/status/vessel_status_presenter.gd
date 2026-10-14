@@ -28,7 +28,10 @@ static func snapshot(vessel: Node, catalog: Node, config: StatusMarkerConfig) ->
 	var fill := _token(&"fill", &"fill", fill_label, fill_label + (" · " + liquid_label if not liquid_label.is_empty() else ""))
 	fill.merge({"band": fill_band, "fill_ratio": ratio, "liquid_id": liquid_id, "liquid_label": liquid_label})
 	result.append(fill)
-	if volume > 0.0 and is_finite(vessel.temperature):
+	# Bubbling already communicates hot water. All other liquid retains its
+	# thermal cue, including cooling or cold tea during/after brewing.
+	var bubbling: bool = is_kettle and vessel.get_ingredient_stage() == &"boiling"
+	if volume > 0.0 and is_finite(vessel.temperature) and not bubbling:
 		var cold_limit: float = vessel.config.cold_temperature
 		var thermal_band: StringName = &"cool" if vessel.temperature <= cold_limit else (&"hot" if vessel.temperature >= maxf(settings.hot_temperature, cold_limit) else &"warm")
 		var thermal_label: String = {&"cool": "Cool", &"warm": "Warm", &"hot": "Hot"}[thermal_band]
@@ -38,9 +41,9 @@ static func snapshot(vessel: Node, catalog: Node, config: StatusMarkerConfig) ->
 	if is_kettle:
 		_append_kettle_state(result, vessel)
 	_append_ingredients(result, amounts, catalog)
-	if vessel is Cup:
-		var band: StringName = &"dirty" if vessel.state == Cup.CupState.DIRTY else (&"served" if vessel.state == Cup.CupState.SERVED else &"clean")
-		var label: String = {&"dirty": "Needs washing", &"served": "Used cup", &"clean": "Clean cup"}[band]
+	if vessel is Cup and vessel.state in [Cup.CupState.DIRTY, Cup.CupState.SERVED]:
+		var band: StringName = &"dirty" if vessel.state == Cup.CupState.DIRTY else &"served"
+		var label: String = {&"dirty": "Needs washing", &"served": "Used cup"}[band]
 		var cleanliness := _token(&"cleanliness", &"cleanliness", label, label)
 		cleanliness.merge({"band": band, "lifecycle": vessel.get_ingredient_stage()})
 		result.append(cleanliness)
@@ -49,18 +52,13 @@ static func snapshot(vessel: Node, catalog: Node, config: StatusMarkerConfig) ->
 
 static func _append_kettle_state(result: Array[Dictionary], kettle: Kettle) -> void:
 	var stage := kettle.get_ingredient_stage()
-	var labels := {&"heating": "Water heating", &"boiling": "Water bubbling", &"steeping": "Steeping", &"liquor_ready": "Brewed", &"oversteeped": "Oversteeped"}
+	# Keep actionable changes. The stove shows its own heat setting and the
+	# liquid fill marker already distinguishes brewed tea from water.
+	var labels := {&"boiling": "Water bubbling", &"steeping": "Steeping", &"oversteeped": "Oversteeped"}
 	if labels.has(stage) and kettle.volume_ml > 0.0:
 		var brew := _token(&"brew", &"brew", labels[stage], labels[stage])
 		brew["band"] = stage
 		result.append(brew)
-	var burner := kettle.current_burner as Burner
-	if is_instance_valid(burner) and not burner.is_queued_for_deletion() and burner.seated_kettle == kettle and burner.heat_level > 0 and not kettle.is_held and not kettle.is_pouring:
-		var band: StringName = &"low" if burner.heat_level == 1 else (&"medium" if burner.heat_level == 2 else &"high")
-		var label: String = {&"low": "Gentle heat", &"medium": "Medium heat", &"high": "High heat"}[band]
-		var heating := _token(&"heating", &"heating", label, "Burner on · " + label.to_lower())
-		heating["band"] = band
-		result.append(heating)
 
 
 static func _append_ingredients(result: Array[Dictionary], amounts: Dictionary, catalog: Node) -> void:
