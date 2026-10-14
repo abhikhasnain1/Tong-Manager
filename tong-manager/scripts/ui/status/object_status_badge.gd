@@ -136,7 +136,7 @@ func _background(token: Dictionary) -> Color:
 		return _config.blue if band == &"cool" else (_config.peach if band == &"hot" else _config.pink)
 	if kind == &"heating" or band in [&"oversteeped", &"dirty", &"served", &"boiling"]:
 		return _config.peach
-	if kind == &"brew" and band == &"steeping":
+	if kind == &"brew" and band in [&"steeping", &"underbrewed"]:
 		return _config.lilac
 	if kind == &"fill" and token.get("liquid_id", &"") == &"water":
 		return _config.blue
@@ -191,7 +191,7 @@ func _draw_symbol(token: Dictionary) -> void:
 				_line([Vector2(x, 10), Vector2(x - 3, 4), Vector2(x + 1, -3), Vector2(x + 2, -10), Vector2(x + 5, 1), Vector2(x + 4, 7), Vector2(x, 10)], ink, 1.6)
 		&"brew":
 			match band:
-				&"steeping":
+				&"steeping", &"underbrewed":
 					_line([Vector2(-8, -11), Vector2(8, -11), Vector2(7, -6), Vector2(-6, 6), Vector2(-8, 11), Vector2(8, 11), Vector2(6, 6), Vector2(-7, -6), Vector2(-8, -11)], ink)
 					draw_line(Vector2(-4, 7), Vector2(4, 7), ink, 2.0, true)
 				&"boiling":

@@ -24,6 +24,7 @@ var _extra_portion_targets: Array[DropZone] = []
 var _export_targets: Array[DropZone] = []
 var customer_queue: CustomerQueueManager
 var customer_order_overlay: CustomerOrderOverlay
+var customer_service: CustomerService
 
 
 func _ready() -> void:
@@ -49,6 +50,13 @@ func _ready() -> void:
 	$WorldRoot/ToolLayer/KhataStation/KhataHotspot.input_event.connect(_on_khata_input)
 	_verify_layout_contract()
 	_configure_customer_queue()
+	if customer_queue_enabled:
+		customer_service = CustomerService.new()
+		customer_service.name = "CustomerService"
+		add_child(customer_service)
+		customer_service.targets_changed.connect(_sync_inventory_targets)
+		customer_service.configure(self, interaction, customer_queue)
+		_sync_inventory_targets()
 	customer_order_overlay = $HUDLayer/RootUI/CustomerOrderOverlay
 	if customer_queue_enabled:
 		customer_order_overlay.bind_queue(customer_queue, get_node("/root/Catalog"))
@@ -120,6 +128,9 @@ func _sync_inventory_targets() -> void:
 	for zone in _extra_portion_targets:
 		if is_instance_valid(zone) and zone.is_inside_tree() and not zone.is_queued_for_deletion() and not targets.has(zone):
 			targets.append(zone)
+	if is_instance_valid(customer_service):
+		for zone in customer_service.get_drop_targets():
+			if not targets.has(zone): targets.append(zone)
 	if targets != _export_targets:
 		_export_targets = targets
 		khata_modal.configure_export_targets(targets)
@@ -245,14 +256,14 @@ func _configure_table_placement() -> void:
 func get_cups() -> Array[Cup]:
 	var result: Array[Cup] = []
 	for node in get_tree().get_nodes_in_group(&"cups"):
-		if node is Cup and is_ancestor_of(node) and not node.is_queued_for_deletion():
+		if node is Cup and is_ancestor_of(node) and not node.is_queued_for_deletion() and node.state != Cup.CupState.SERVED:
 			result.append(node)
 	return result
 
 
 func configure_cup(cup: Cup) -> bool:
 	if (not is_instance_valid(cup) or not is_ancestor_of(cup) or cup.is_queued_for_deletion()
-		or not is_instance_valid(table_surface)):
+		or cup.state == Cup.CupState.SERVED or not is_instance_valid(table_surface)):
 		return false
 	var tray := $WorldRoot/ToolLayer/TrayStation as TrayStation
 	var handle := cup.get_node_or_null("PlacementHandle") as TablePlaceable

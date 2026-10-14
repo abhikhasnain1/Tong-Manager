@@ -1,5 +1,22 @@
 # Hanging sources, portions, placement and brewing verification
 
+## Real customer handoff
+
+Open `scenes/development/CustomerHandoffPreview.tscn` and press **F6**.
+This uses real cups, stock reservations and the production queue, with longer
+patience for trying all six orders. Wrong orders and poor brews are accepted
+with bad-review reasons. See [Customer serving](../docs/customer-service.md)
+for the review steps, tuning and the scene-reload boundary.
+
+Run `service_evaluation_test.gd`, `brewing_provenance_test.gd`,
+`drop_rejection_test.gd` and `customer_handoff_test.gd` headlessly after import.
+Run `customer_handoff_test.gd` with a rendered window at 1920x1080, 1600x900,
+1366x768 and 1280x800, passing a capture directory after `--`. It uses actual
+mouse pickup/release for cups, hanging snacks and both pantry views, and checks
+conservation, accepted mistakes, retained cups, stale targets and callback races.
+Run rendered processes sequentially. Money and cup return are not implemented
+by this slice.
+
 ## Customer scene
 
 Open `scenes/development/CustomerScenePreview.tscn` and press **F6**. The sample
@@ -10,7 +27,7 @@ customers and reduced motion; replay arrival and compare the back-facing exit.
 See [Customer scene and motion](../docs/customer-scene.md) for tuning and scope.
 
 The sample tokens do not consume inventory, alter cups or pay money. The
-production scene component has no queue or actual handoff command yet.
+sample is separate from the production queue and real handoff entry point above.
 Run `res://tests/customer_scene_test.gd` headlessly after importing, then
 `res://tests/customer_scene_preview_test.gd` with a rendered window at
 1920x1080, 1600x900, 1366x768 and 1280x800. Keep engine runs sequential and use
@@ -90,15 +107,15 @@ scene recreation and no refund on disposal. Explicit demo reset is tested with
 the separate measured-water authority, including invalid and reentrant resets.
 
 These are stock and adapter checks. Ingredient destinations and doses are
-covered by the shared command tests below; customer handoff, payments and
-persistence remain separate work. `BrewingPreview.tscn` keeps its separate
+covered by the shared command tests below; real customer handoff is covered above.
+Payments and persistence remain separate work. `BrewingPreview.tscn` keeps its separate
 finite development stock fixture.
 
 For the visible inventory review, open
 `scenes/development/InventoryPreview.tscn` and press **F6**. This scene injects
 the real `GameState.inventory` into physical portions and displays shared
 on-hand/available counts. Its kettle/cup destinations use the same ingredient
-commands as the normal Tong scene. Customer and snack handoffs remain #66 fixtures.
+commands as the normal Tong scene. Use `CustomerHandoffPreview` for production serving.
 **Reload** recreates the scene and vessels while preserving current stock and
 water. **Reset · new day** deliberately replenishes both from `DayConfig` and
 invalidates old portions. Neither operation implements persistence or day scheduling.
@@ -153,7 +170,7 @@ Heat, steeping, cooling and hanging physics continue throughout.
 The normal Tong scene and inventory review both accept teabags in boiling kettle
 water, and sugar/milk in a clean empty cup or an unserved tea cup. The review
 scene additionally permits ready pieces in its sample handoff. The normal scene
-has no customer handoff yet; unused snack portions can be returned without loss.
+now serves real waiting customers; cancelled snack portions still return without loss.
 
 Run `khata_inventory_test.gd` headless for shared display, reservations,
 exact-once export, interrupted pickup, target invalidation and lifecycle checks.
@@ -396,8 +413,9 @@ refilling supplies or cleaning cups. Repeated or rejected handoffs add no review
 The current review defaults use a 45°C cold threshold, 2°C/s cup cooling and a
 90-second ready-to-oversteep interval so cooling can be explored. These values,
 review wording and serving amounts remain adjustable tuning; customer recipe
-evaluation is not implemented here. Discard or reset an oversteeped batch; degraded-tea eligibility
-is still a separate design decision.
+evaluation is not implemented by this historical sample. The current production
+handoff accepts underbrewed and oversteeped tea with bad-review reasons; review
+that behavior in `CustomerHandoffPreview.tscn`.
 
 Ingredient stock and sample customers are explicit development fixtures. This scene does
 not implement production ingredient inventory, customer orders, payments, a day
@@ -460,5 +478,5 @@ data-derived presentation and tuning; the integration suite uses live queue
 orders, real mouse/notebook input, replacement/fulfillment/timeout/removal,
 restart/re-entry, viewport transforms and unchanged stock/water/cups/cash.
 Its accepted/rejected results are explicitly supplied fixtures, not tests of the
-future production handoff or payment rules. Actual scene review is still needed
+production handoff or future payment rules. Actual scene review is still needed
 before merge.

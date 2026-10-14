@@ -11,6 +11,7 @@ const POUR_HEIGHT := 65.0
 
 @export var tool_def: Resource = preload("res://data/balance/tool_level_1.tres")
 @export var config: BrewingConfig = preload("res://data/balance/brewing_level_1.tres")
+@export var water_stream_color := Color(0.447, 0.725, 0.82, 0.9)
 
 var state: BrewState = BrewState.EMPTY
 var volume_ml := 0.0
@@ -18,6 +19,8 @@ var temperature := 20.0
 var brewed_liquid_id: StringName = &""
 var _infused_counts: Dictionary[StringName, int] = {}
 var _mixed_amounts: Dictionary[StringName, float] = {}
+var _used_boiling_water := false
+var _batch_volume_ml := 0.0
 # Compatibility for earlier fixtures. Live brewing uses counted batch contents.
 var contains_tea: bool:
 	get:
@@ -28,9 +31,13 @@ var contains_tea: bool:
 			brewed_liquid_id = &""
 			steep_progress = 0.0
 			ready_heat_seconds = 0.0
+			_used_boiling_water = false
+			_batch_volume_ml = 0.0
 		elif _infused_counts.is_empty():
 			_infused_counts[&"black_tea"] = 1
 			brewed_liquid_id = &"black_tea"
+			_used_boiling_water = config != null and temperature >= config.boiling_temperature
+			_batch_volume_ml = volume_ml
 var steep_progress := 0.0
 # Retained field name; this is elapsed ready time regardless of heat.
 var ready_heat_seconds := 0.0
@@ -78,6 +85,7 @@ func add_water(amount_ml: float) -> float:
 		return 0.0
 	temperature = (temperature * volume_ml + config.ambient_temperature * accepted) / (volume_ml + accepted)
 	volume_ml += accepted
+	_batch_volume_ml = volume_ml
 	state = BrewState.WATER
 	_changed()
 	return accepted
@@ -132,6 +140,9 @@ func apply_ingredient(item_id: StringName, quantity: int, effect: StringName, ou
 		_mixed_amounts[item_id] = _mixed_amounts.get(item_id, 0.0) + float(quantity)
 	else:
 		var first_infusion := _infused_counts.is_empty()
+		if first_infusion:
+			_used_boiling_water = temperature >= config.boiling_temperature
+			_batch_volume_ml = volume_ml
 		_infused_counts[item_id] = _infused_counts.get(item_id, 0) + quantity
 		brewed_liquid_id = output_liquid_id
 		if first_infusion or restart_steeping:
@@ -170,11 +181,33 @@ func advance_brewing(delta: float) -> void:
 		if ready_heat_seconds + 0.000000001 >= config.oversteep_seconds:
 			ready_heat_seconds = config.oversteep_seconds
 			state = BrewState.OVERSTEEPED
-			stop_pour()
 	_changed()
 
+
+func get_pour_liquid_id() -> StringName:
+	return brewed_liquid_id if contains_tea else &"water"
+
+
+func get_brew_batch_snapshot() -> Dictionary:
+	var quality: StringName = &"water"
+	if contains_tea:
+		quality = &"ready" if state == BrewState.LIQUOR_READY else (&"oversteeped" if state == BrewState.OVERSTEEPED else &"underbrewed")
+	var original_volume := _batch_volume_ml if contains_tea else volume_ml
+	var mixed_counts: Dictionary[StringName, float] = {}
+	if volume_ml > 0.0:
+		for item_id in _mixed_amounts:
+			if _mixed_amounts[item_id] > 0.0:
+				mixed_counts[item_id] = _mixed_amounts[item_id] * original_volume / volume_ml
+	return {"state": quality, "infused_counts": _infused_counts.duplicate(),
+		"used_boiling_water": _used_boiling_water, "batch_volume": original_volume,
+		"mixed_counts": mixed_counts}
+
+
 func can_pour_into(cup: Cup) -> bool:
-	return is_instance_valid(cup) and cup.is_inside_tree() and not cup.is_queued_for_deletion() and state == BrewState.LIQUOR_READY and volume_ml > 0.0 and not brewed_liquid_id.is_empty() and cup.can_receive_liquid(brewed_liquid_id)
+	return (is_instance_valid(cup) and cup.is_inside_tree() and not cup.is_queued_for_deletion()
+		and state in [BrewState.WATER, BrewState.HEATING, BrewState.BOILING, BrewState.STEEPING, BrewState.LIQUOR_READY, BrewState.OVERSTEEPED]
+		and is_finite(volume_ml) and volume_ml > 0.0 and is_finite(temperature)
+		and not get_pour_liquid_id().is_empty() and cup.can_receive_liquid(get_pour_liquid_id()))
 
 func start_pour(cup: Cup) -> bool:
 	if is_pouring or not can_pour_into(cup):
@@ -209,7 +242,9 @@ func update_pour(delta: float) -> void:
 	var receiver := pour_target
 	var self_ref: WeakRef = weakref(self)
 	# Suppress cup notifications until both vessels contain the completed transfer.
-	var transferred := receiver.receive_liquid(brewed_liquid_id, requested, temperature, carried, false)
+	# Capture quality before an empty source clears its ingredients, and never
+	# re-read this kettle when the resulting cup is later handed to a customer.
+	var transferred := receiver.receive_liquid(get_pour_liquid_id(), requested, temperature, carried, false, get_brew_batch_snapshot())
 	for item_id in _mixed_amounts:
 		_mixed_amounts[item_id] = maxf(0.0, _mixed_amounts[item_id] - carried[item_id] * transferred / requested) if requested > 0.0 else _mixed_amounts[item_id]
 	volume_ml = maxf(0.0, volume_ml - transferred)
@@ -262,6 +297,8 @@ func _clear_ingredients() -> void:
 	brewed_liquid_id = &""
 	steep_progress = 0.0
 	ready_heat_seconds = 0.0
+	_used_boiling_water = false
+	_batch_volume_ml = 0.0
 
 func _on_target_discarded(_discarded_ml: float) -> void:
 	_pour_requires_release = true
@@ -342,9 +379,7 @@ func _restore_origin() -> void:
 
 func _process(delta: float) -> void:
 	update_held_pour(Input.is_action_pressed(InteractionController.INPUT_POUR))
-	var pour_delta := minf(delta, maxf(0.0, config.oversteep_seconds - ready_heat_seconds)) if state == BrewState.LIQUOR_READY else delta
-	update_pour(pour_delta)
-	advance_brewing(delta)
+	_advance_pour_and_brewing(delta)
 	var heated: bool = is_instance_valid(current_burner) and current_burner.get("heat_level") > 0 and not is_held and not is_pouring
 	if not heated:
 		temperature = maxf(config.ambient_temperature, temperature - config.cooling_rate * delta)
@@ -359,6 +394,34 @@ func _process(delta: float) -> void:
 	steam_anchor.queue_redraw()
 	queue_redraw()
 
+func _advance_pour_and_brewing(delta: float) -> void:
+	if not is_finite(delta) or delta <= 0.0:
+		return
+	# A long frame can transfer liquid on both sides of a quality transition.
+	# Split only at those boundaries: flow stays continuous, each elapsed slice
+	# advances the one brewing clock once, and the cup retains both histories.
+	var remaining := delta
+	var self_ref: WeakRef = weakref(self)
+	while remaining > 0.0:
+		var step := remaining
+		if is_pouring and contains_tea:
+			if state == BrewState.STEEPING:
+				step = minf(step, maxf(0.0, config.steep_seconds - steep_progress))
+			elif state == BrewState.LIQUOR_READY:
+				step = minf(step, maxf(0.0, config.oversteep_seconds - ready_heat_seconds))
+		if step <= 0.0:
+			# An externally restored timer may sit exactly on its next boundary.
+			step = minf(remaining, 0.000000001)
+			advance_brewing(step)
+			if self_ref.get_ref() == null: return
+			update_pour(step)
+		else:
+			update_pour(step)
+			if self_ref.get_ref() == null: return
+			advance_brewing(step)
+		if self_ref.get_ref() == null: return
+		remaining = maxf(0.0, remaining - step)
+
 func _draw_steam() -> void:
 	if volume_ml > 0.0 and temperature > 60.0:
 		var strength := clampf((temperature - 60.0) / 40.0, 0.0, 1.0)
@@ -372,7 +435,10 @@ func _draw() -> void:
 	if not is_node_ready():
 		return
 	if is_pouring and is_instance_valid(pour_target):
-		draw_line(spout.position, to_local(pour_target.global_position + Vector2(0, -12)), Color(.58,.29,.10,.9), 4.0, true)
+		draw_line(spout.position, to_local(pour_target.global_position + Vector2(0, -12)), get_pour_color(), 4.0, true)
+
+func get_pour_color() -> Color:
+	return water_stream_color if get_pour_liquid_id() == &"water" else Color(.58, .29, .10, .9)
 
 func _update_status() -> void:
 	if not is_node_ready():

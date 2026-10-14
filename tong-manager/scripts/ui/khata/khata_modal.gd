@@ -258,7 +258,9 @@ func configure_inventory(provider: PortionStockProvider) -> void:
 
 
 func configure_export_targets(targets: Array[DropZone]) -> void:
-	cancel_export()
+	# Queue arrivals/removals update the next pickup. A held portion keeps the
+	# controller's copied allowlist; unrelated target churn must not cancel it.
+	# Removed live nodes are still rejected by the controller at hover/release.
 	_inventory_revision += 1
 	_export_targets = targets.duplicate()
 

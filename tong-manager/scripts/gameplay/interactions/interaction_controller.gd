@@ -335,8 +335,9 @@ func _input(event: InputEvent) -> void:
 			# Let GUI hover tracking see motion; release still belongs to this drag.
 			# Otherwise gui_get_hovered_control retains the control from pickup.
 		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+			var viewport := get_viewport()
 			release_drop(event.position)
-			get_viewport().set_input_as_handled()
+			if is_instance_valid(viewport): viewport.set_input_as_handled()
 
 
 func _notification(what: int) -> void:
@@ -393,8 +394,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseMotion:
 		update_drag(event.position)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		var viewport := get_viewport()
 		release_drop(event.position)
-		get_viewport().set_input_as_handled()
+		if is_instance_valid(viewport): viewport.set_input_as_handled()
 
 
 func is_dragging() -> bool:
@@ -506,6 +508,12 @@ func cancel_drag() -> void:
 	if current_payload == null or _resolving_drag:
 		return
 	_resolving_drag = true
+	_cancel_drag_resolution()
+
+
+func _cancel_drag_resolution() -> void:
+	# Also used after a rejection callback while the same resolution guard is
+	# still held. Observers cannot replace a payload between feedback and rollback.
 	var canceled_payload := current_payload
 	if bool(current_payload.metadata.get("transient", false)):
 		_dispose_transient_drag()
@@ -528,19 +536,32 @@ func release_drop(viewport_position: Vector2) -> void:
 		return
 	update_drag(viewport_position)
 	if (not is_instance_valid(hovered_drop_zone) or not can_address_drop_zone(current_payload, hovered_drop_zone)
-		or not hovered_drop_zone.accepts(current_payload).is_valid):
+		or not hovered_drop_zone.is_relevant_to(current_payload)):
 		cancel_drag()
 		return
 
 	var dropped_payload := current_payload
 	var target_zone := hovered_drop_zone
+	var validation := target_zone.accepts(dropped_payload)
 	if not can_address_drop_zone(dropped_payload, target_zone):
 		cancel_drag()
+		return
+	if not validation.is_valid:
+		_resolving_drag = true
+		var self_ref: WeakRef = weakref(self)
+		target_zone.on_rejected_release(dropped_payload, validation)
+		# The callback may remove this controller/scene. Teardown already clears
+		# its gesture without restoring nodes into a disappearing hierarchy.
+		if self_ref.get_ref() != null and current_payload == dropped_payload and is_inside_tree():
+			_cancel_drag_resolution()
 		return
 	# Target/stock signals are synchronous. A command owns its gesture until all
 	# observers finish, so a listener cannot replace the payload mid-commit.
 	_resolving_drag = true
+	var owner_ref: WeakRef = weakref(self)
 	var applied := target_zone.try_apply_drop(dropped_payload)
+	if owner_ref.get_ref() == null or not is_inside_tree() or is_queued_for_deletion() or current_payload != dropped_payload:
+		return
 	if not applied:
 		_resolving_drag = false
 		cancel_drag()
@@ -548,8 +569,8 @@ func release_drop(viewport_position: Vector2) -> void:
 	_dispose_transient_drag()
 	_clear_drag_state()
 	cursor_service.reset()
-	drag_dropped.emit(dropped_payload, target_zone)
-	_finish_drag_resolution()
+	drag_dropped.emit(dropped_payload, target_zone if is_instance_valid(target_zone) else null)
+	if owner_ref.get_ref() != null and is_inside_tree(): _finish_drag_resolution()
 
 
 func _finish_drag_resolution() -> void:

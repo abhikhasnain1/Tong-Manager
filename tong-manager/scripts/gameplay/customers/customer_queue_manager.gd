@@ -10,6 +10,7 @@ signal queue_completed(summary: Dictionary)
 @export var customer_scene: PackedScene = preload("res://scenes/gameplay/customers/Customer.tscn")
 @export var actor_scale := Vector2(1.4, 1.4)
 @export var reduced_motion := false
+@export_range(0.0, 5.0, 0.05) var served_reaction_seconds := 0.9
 
 var _slots: Array[Marker2D] = []
 var _active_parent: Node2D
@@ -160,8 +161,9 @@ func _advance(delta: float, automatic: bool) -> void:
 		if entry.phase == &"waiting":
 			if entry.order.fulfilled:
 				entry.reason = &"fulfilled"
-				entry.phase = &"leaving"
-				actor.leave()
+				entry.phase = &"served_reaction"
+				entry.reaction_remaining = maxf(0.0, served_reaction_seconds) if is_finite(served_reaction_seconds) else 0.9
+				if entry.reaction_remaining <= 0.0: _begin_departure(entry)
 				continue
 			# Arrival can finish before this node processes the same frame. That
 			# frame's delta includes travel time, so begin charging next frame.
@@ -181,7 +183,7 @@ func _advance(delta: float, automatic: bool) -> void:
 					continue
 				customer_timed_out.emit(actor, _entry_snapshot(entry))
 				if _entry_current(key, actor, epoch) and _reaction_seconds <= 0.0: _begin_departure(entry)
-		elif entry.phase == &"timeout_reaction":
+		elif entry.phase in [&"timeout_reaction", &"served_reaction"]:
 			entry.reaction_remaining = maxf(0.0, entry.reaction_remaining - delta)
 			if entry.reaction_remaining <= 0.0: _begin_departure(entry)
 	if epoch == _generation and _running:
@@ -319,6 +321,7 @@ func _entry_snapshot(entry: Dictionary) -> Dictionary:
 	result.erase("arrival_started")
 	result.erase("waiting_frame")
 	result["fulfilled"] = entry.order.fulfilled
+	result["service_result"] = entry.order.get_accepted_result()
 	return result
 
 

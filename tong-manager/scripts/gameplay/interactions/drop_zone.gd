@@ -47,6 +47,12 @@ func try_apply_drop(payload: HeldItemPayload) -> bool:
 	return true
 
 
+func on_rejected_release(_payload: HeldItemPayload, _validation: DropValidation) -> void:
+	# A released, selected target may explain a rejection. Hover validation stays
+	# read-only, and the controller still rolls the original gesture back.
+	pass
+
+
 func set_highlight(valid: bool) -> void:
 	debug_preview.modulate = VALID_HIGHLIGHT if valid else INVALID_HIGHLIGHT
 	debug_preview.visible = true

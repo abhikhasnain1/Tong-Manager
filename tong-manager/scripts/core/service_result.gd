@@ -1,6 +1,6 @@
 class_name ServiceResult
 extends RefCounted
-## A recorded outcome supplied by a consumer, not a cup or payload evaluator.
+## One recorded outcome. Matching and quality evidence share one review outcome.
 
 var _data: Dictionary = {}
 
@@ -30,6 +30,31 @@ static func create(
 		"request_kind": request_kind, "accepted": accepted, "fulfilled": accepted,
 		"cold_at_handoff": cold_at_handoff, "unhappy": cold_review,
 		"bad_review": cold_review, "reason": reason,
+		"served_kind": (&"cup" if request_kind == &"tea" else &"ready_item") if accepted else &"",
+		"reasons": [&"cold_tea"] if cold_review else [], "served": {},
+	}
+	return result
+
+
+static func create_evaluated(handoff_id: StringName, order: OrderState, evaluation: Dictionary) -> ServiceResult:
+	if not OrderRequestDef.valid_identity(handoff_id) or order == null: return null
+	if not evaluation.get("can_handoff", false) or not evaluation.get("served") is Dictionary: return null
+	if (evaluation.get("order_id") != order.order_id or evaluation.get("customer_id") != order.customer_id
+		or evaluation.get("request_id") != order.request_id): return null
+	# Reassess the detached contents, preventing stale/edited flags from certifying
+	# a different or already completed order. Live ownership is the command's job.
+	var checked := ServiceEvaluation.evaluate(order, evaluation.served)
+	if not checked.can_handoff: return null
+	var reasons: Array = checked.reasons
+	var primary: StringName = reasons[0] if not reasons.is_empty() else (&"tea_served" if order.request_kind == &"tea" else &"ready_item_served")
+	var result := ServiceResult.new()
+	result._data = {
+		"handoff_id": handoff_id, "order_id": order.order_id, "customer_id": order.customer_id,
+		"request_kind": order.request_kind, "accepted": true, "fulfilled": true,
+		"cold_at_handoff": checked.cold_at_handoff, "unhappy": checked.bad_review,
+		"bad_review": checked.bad_review, "reason": primary,
+		"served_kind": checked.served_kind, "reasons": reasons.duplicate(),
+		"served": (checked.served as Dictionary).duplicate(true),
 	}
 	return result
 
