@@ -36,6 +36,7 @@
 [ext_resource type="Resource" path="res://data/customers/customer_b.tres" id="38_customer_b"]
 [ext_resource type="Script" path="res://scripts/gameplay/customers/customer_queue_manager.gd" id="39_customer_queue"]
 [ext_resource type="Script" path="res://scripts/ui/customer_order_overlay.gd" id="40_customer_orders"]
+[ext_resource type="Texture2D" path="res://assets/art/toolkit/wastebasket_cutout.png" id="41_wastebasket"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_khata"]
 size = Vector2(117, 360)
@@ -202,14 +203,14 @@ scale = Vector2(0.76, 0.68)
 tool_def = ExtResource("3_tools")
 
 [node name="BucketStation" type="Node2D" parent="WorldRoot/ToolLayer" unique_id=2061807017]
-position = Vector2(1865, 952)
+position = Vector2(1751, 1005)
 
 [node name="Sprite" type="Sprite2D" parent="WorldRoot/ToolLayer/BucketStation" unique_id=337521503]
-scale = Vector2(0.43, 0.43)
+scale = Vector2(0.22, 0.22)
 texture = ExtResource("13_bucket")
 
 [node name="InteractionAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/BucketStation" unique_id=1410089750 groups=["critical_interaction_anchor"]]
-position = Vector2(-50, -7)
+position = Vector2(0, -25)
 
 [node name="DragLayer" type="Node2D" parent="WorldRoot" unique_id=1052109653]
 z_index = 40
@@ -220,13 +221,19 @@ z_index = 35
 [node name="DiscardArea" type="Area2D" parent="WorldRoot/DropZoneRoot"]
 z_index = 80
 z_as_relative = false
-position = Vector2(1635, 925)
+position = Vector2(1596, 925)
 script = ExtResource("30_discard")
+
+[node name="Basket" type="Sprite2D" parent="WorldRoot/DropZoneRoot/DiscardArea"]
+scale = Vector2(0.13, 0.13)
+texture = ExtResource("41_wastebasket")
+region_enabled = true
+region_rect = Rect2(40, 75, 1175, 1115)
 
 [node name="WaterDrum" parent="WorldRoot/ToolLayer" instance=ExtResource("29_water")]
 z_index = 80
 z_as_relative = false
-position = Vector2(835, 875)
+position = Vector2(1748, 866)
 
 [node name="TablePlacementSurface" type="Node2D" parent="WorldRoot/DropZoneRoot"]
 script = ExtResource("31_surface")
@@ -247,7 +254,7 @@ position = Vector2(380, 875)
 position = Vector2(1210, 885)
 
 [node name="BucketDropZoneAnchor" type="Marker2D" parent="WorldRoot/DropZoneRoot" unique_id=1626772544 groups=["critical_interaction_anchor"]]
-position = Vector2(1745, 980)
+position = Vector2(1751, 980)
 
 [node name="CustomerHandoffLeftAnchor" type="Marker2D" parent="WorldRoot/DropZoneRoot" unique_id=1607035401 groups=["critical_interaction_anchor"]]
 position = Vector2(720, 625)
@@ -265,7 +272,7 @@ position = Vector2(176, 583)
 position = Vector2(1210, 735)
 
 [node name="BucketStatus" type="Marker2D" parent="WorldRoot/StatusBadgeAnchors" unique_id=1486285048]
-position = Vector2(1789, 854)
+position = Vector2(1751, 930)
 
 [node name="WorldEffects" type="Node2D" parent="WorldRoot" unique_id=1256984065]
 z_index = 50

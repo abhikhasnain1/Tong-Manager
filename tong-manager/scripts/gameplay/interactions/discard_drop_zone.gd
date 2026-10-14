@@ -6,6 +6,7 @@ var _highlighted := false
 var _valid := false
 var _feedback_seconds := 0.0
 var _caption: Label
+var _basket: Sprite2D
 
 func _init() -> void:
 	name = "DiscardArea"
@@ -17,8 +18,9 @@ func _init() -> void:
 	add_child(preview)
 
 func _ready() -> void:
+	_basket = get_node_or_null("Basket") as Sprite2D
 	_caption = Label.new()
-	_caption.position = Vector2(-105, 72)
+	_caption.position = Vector2(-105, 84)
 	_caption.size = Vector2(210, 55)
 	_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -65,10 +67,14 @@ func apply_drop(payload: HeldItemPayload) -> void:
 func set_highlight(valid: bool) -> void:
 	_highlighted = true
 	_valid = valid
+	if is_instance_valid(_basket):
+		_basket.modulate = Color(1.3, 1.3, 1.3) if valid else Color(1.0, 0.65, 0.65)
 	queue_redraw()
 
 func clear_highlight() -> void:
 	_highlighted = false
+	if is_instance_valid(_basket):
+		_basket.modulate = Color.WHITE
 	queue_redraw()
 
 func _process(delta: float) -> void:
@@ -78,6 +84,8 @@ func _process(delta: float) -> void:
 			_caption.text = "Discard contents\nDrop kettle or cup"
 
 func _draw() -> void:
+	if is_instance_valid(_basket):
+		return
 	var edge := Color("ca9b80")
 	if _highlighted:
 		edge = Color("edc28c") if _valid else Color("d87365")
