@@ -111,9 +111,12 @@ ID when retried. These guarantees apply within the retained authoritative
 `OrderState`; recreating an order with the same ID is not a persistence or
 cross-process deduplication mechanism.
 
-The next consumers remain separate: customer visuals/reactions (#63), queue
-and patience (#64), order bubbles (#65), actual tea/ready-item matching and
-handoff (#66), payments (#68) and day-end feedback (#73). The existing brewing
-service demo remains a fixture. Sugar-preference dialogue, final mismatch and
-oversteeped-tea policies are not implemented here. Bucket and dirty-cup return
-remain on hold.
+Customer visuals, queue/patience, order bubbles and real serving now consume
+these snapshots. Production serving uses `ServiceEvaluation` and
+`ServiceResult.create_evaluated(...)`: any structurally valid non-empty cup or
+ready snack fulfils the order, while mismatch and brew quality become recorded
+review reasons. See [Customer serving](customer-service.md). The accepted/rejected
+constructor above remains available to isolated component fixtures.
+
+Payments (#68), day-end feedback (#73), review aggregation and preference dialogue
+remain separate. Bucket and dirty-cup return remain on hold.

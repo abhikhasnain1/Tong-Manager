@@ -19,8 +19,9 @@ customer queue. See [customer-days.md](customer-days.md) for day authoring.
    leaves the uncovered stall available. Existing brewing and placement still
    work normally.
 
-These sample tokens never consume supplies, empty cups or pay money. Real
-customer handoff and order matching are a later integration. The one/two sample
+These sample tokens never consume supplies, empty cups or pay money. Use
+[Customer serving](customer-service.md) for real handoff and current matching
+behavior, where wrong deliveries are accepted with bad reviews. The one/two sample
 choice does not set the number of customers permitted in a day or queue.
 
 ## Editing the appearance
@@ -60,11 +61,11 @@ a production service endpoint. The normal stall's customer queue is independent
 of these fixtures. Its `CustomerOrderOverlay` now follows each active customer's
 `OrderAnchor` and presents the captured order's cup additions or ready-item icon.
 It replaces only the old neutral request cue; customer reactions and optional
-dialogue retain their existing behavior. A wrong-item reaction keeps the order
-readable, while fulfillment, timeout and departure remove the active request.
+dialogue retain their existing behavior. Historical rejected-result fixtures keep
+the order readable; real service, timeout and departure remove the active request.
 
 Review these live bindings in `CustomerQueuePreview.tscn`; the isolated
 `CustomerScenePreview` keeps its original sample cue. The bubble's
 `get_accessibility_summary()` exposes a readable description to code and tests;
-this does not add platform screen-reader integration. Real stock/cup handoff,
-order matching and payment remain separate features.
+this does not add platform screen-reader integration. Real stock/cup handoff and
+matching are reviewed in `CustomerHandoffPreview.tscn`; payment remains separate.

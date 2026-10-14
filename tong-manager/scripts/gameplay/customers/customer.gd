@@ -230,10 +230,10 @@ func apply_service_result(result: ServiceResult) -> bool:
 	_presented_ids[data.handoff_id] = true
 	if data.accepted:
 		_accepted = data.duplicate(true)
-		_emotion = &"cold" if data.bad_review else &"happy"
+		_emotion = (&"cold" if data.cold_at_handoff else &"unhappy") if data.bad_review else &"happy"
 		_review_reason = data.reason
 		if data.bad_review: _review_count += 1
-		_feedback_text = "Cold tea accepted · unhappy · bad review" if data.bad_review else "Order accepted · happy"
+		_feedback_text = ("Cold tea accepted · unhappy · bad review" if data.cold_at_handoff else "Order served · unhappy · bad review") if data.bad_review else "Order accepted · happy"
 	else:
 		_emotion = &"wrong"
 		_feedback_text = "Wrong item · still waiting · no review"
@@ -297,9 +297,10 @@ func get_serve_bounds() -> Rect2:
 	return result
 
 
-func set_drop_highlight(enabled: bool) -> void:
+func set_drop_highlight(enabled: bool, color := Color.TRANSPARENT) -> void:
 	_highlighted = enabled and is_serve_enabled()
 	if _material != null:
+		_material.set_shader_parameter("outline_color", color if color.a > 0.0 else _settings.outline_color)
 		_material.set_shader_parameter("outline_width", _settings.outline_width if _highlighted else 0.0)
 
 

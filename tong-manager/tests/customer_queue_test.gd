@@ -227,6 +227,8 @@ func timeout_and_authority() -> void:
 	check(actor.apply_service_result(accepted), "Existing cold accepted result seam is usable")
 	manager.advance(100.0)
 	check(counts.timeout == 1 and order.fulfilled and order.get_results().size() == 1, "Accepted order stops patience and cannot become a timeout")
+	check(manager.get_active_entries()[0].phase == &"served_reaction", "Accepted service holds its reaction before departure")
+	manager.advance(manager.served_reaction_seconds)
 	check(order.get_accepted_result().bad_review and manager.get_snapshot().history[0].reason == &"fulfilled", "Queue preserves cold service outcome without duplicating it")
 	check(start(day(1, 0.0, 1.0)), "Synchronous acceptance race run starts")
 	manager.advance(0.0)

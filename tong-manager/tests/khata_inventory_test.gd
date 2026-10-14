@@ -252,6 +252,47 @@ func check_interruptions(peeking: bool) -> void:
 			reading(peeking, reason)
 
 
+func check_target_refresh(peeking: bool) -> void:
+	await open_view(peeking)
+	allow_target()
+	var before := stock.remaining(&"banana")
+	var cancels_before := canceled
+	var drops_before := dropped
+	var payload := take(&"banana")
+	var future: Array[DropZone] = [target, forbidden]
+	modal.configure_export_targets(future)
+	check(controller.current_payload == payload and modal.exporting and canceled == cancels_before,
+		"An unrelated new customer target cannot cancel an existing pantry export")
+	check(controller.can_address_drop_zone(payload, target) and not controller.can_address_drop_zone(payload, forbidden),
+		"A held export keeps exactly its original target permission snapshot")
+	controller.release_drop(point(target))
+	await frames()
+	check(stock.remaining(&"banana") == before - 1 and dropped == drops_before + 1 and canceled == cancels_before,
+		"The original target commits once after future targets change")
+	reading(peeking, "Target added during export")
+	payload = take(&"banana")
+	check(controller.can_address_drop_zone(payload, forbidden), "The next pickup sees the newly configured target")
+	var no_targets: Array[DropZone] = []
+	modal.configure_export_targets(no_targets)
+	check(controller.current_payload == payload and controller.can_address_drop_zone(payload, forbidden),
+		"Refreshing future targets does not revoke an existing gesture's live target")
+	var destination := point(forbidden)
+	screen.remove_child(forbidden)
+	controller.release_drop(destination)
+	await frames()
+	check(stock.remaining(&"banana") == before - 1 and stock.available(&"banana") == before - 1,
+		"A physically detached current target still rejects without stock loss")
+	screen.add_child(forbidden)
+	reading(peeking, "Actual target removed during export")
+	payload = take(&"banana")
+	check(not controller.can_address_drop_zone(payload, target) and not controller.can_address_drop_zone(payload, forbidden),
+		"A later pickup observes an empty future target configuration")
+	controller.cancel_drag()
+	await frames()
+	reading(peeking, "Future targets cleared")
+	allow_target()
+
+
 func new_stock() -> InventoryState:
 	var result := InventoryState.new()
 	var quantities: Dictionary = {}
@@ -398,6 +439,9 @@ func run() -> void:
 	stock = root.get_node("GameState").inventory
 	for id: StringName in ITEMS: stock.set_quantity(id, 8)
 	screen = load("res://scenes/gameplay/tong/TongDayScreen.tscn").instantiate()
+	# This suite owns explicit contract targets. Live queue arrivals intentionally
+	# refresh production permissions and belong to the service integration suite.
+	screen.set("customer_queue_enabled", false)
 	root.add_child(screen)
 	await frames()
 	controller = screen.get_node("InteractionController")
@@ -418,6 +462,7 @@ func run() -> void:
 	check_display()
 	for peeking in [true, false]:
 		await check_exports(peeking)
+		await check_target_refresh(peeking)
 		await check_interruptions(peeking)
 	await check_shared_physical_source()
 	await check_reentry()

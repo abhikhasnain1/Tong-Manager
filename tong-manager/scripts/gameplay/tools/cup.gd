@@ -30,6 +30,7 @@ const ALLOWED_TRANSITIONS: Dictionary = {
 @export_group("Visuals")
 @export var clean_texture: Texture2D
 @export var dirty_texture: Texture2D
+@export var water_color := Color("72b9d1")
 
 @export_group("Runtime State")
 @export var state: CupState = CupState.CLEAN
@@ -44,7 +45,17 @@ var temperature := 20.0
 var controller: InteractionController
 var _hovered := false
 var _inherited_ingredient_amounts: Dictionary[StringName, float] = {}
+var _brew_batches: Array[Dictionary] = []
+var _brew_history_complete := true
+var brew_batches: Array[Dictionary]:
+	get: return _brew_batches.duplicate(true)
+	set(_value): pass
+var brew_history_complete: bool:
+	get: return _brew_history_complete
+	set(_value): pass
 var _pending_state_from := -1
+var _tea_contents_texture: Texture2D
+var _water_contents_texture: GradientTexture2D
 
 func can_receive_liquid(kind: StringName) -> bool:
 	return (
@@ -55,8 +66,10 @@ func can_receive_liquid(kind: StringName) -> bool:
 		and (liquid_type.is_empty() or liquid_type == kind)
 	)
 
-func receive_liquid(kind: StringName, amount_ml: float, liquid_temperature: float = 20.0, carried_amounts: Dictionary[StringName, float] = {}, notify := true) -> float:
+func receive_liquid(kind: StringName, amount_ml: float, liquid_temperature: float = 20.0, carried_amounts: Dictionary[StringName, float] = {}, notify := true, brew_batch: Dictionary = {}) -> float:
 	if not is_finite(amount_ml) or not is_finite(liquid_temperature) or amount_ml <= 0.0 or not can_receive_liquid(kind):
+		return 0.0
+	if not _valid_brew_batch(brew_batch):
 		return 0.0
 	for item_id in carried_amounts:
 		if item_id.is_empty() or not is_finite(carried_amounts[item_id]) or carried_amounts[item_id] < 0.0:
@@ -74,10 +87,65 @@ func receive_liquid(kind: StringName, amount_ml: float, liquid_temperature: floa
 	liquid_type = kind
 	contents_base_id = kind
 	_inherited_ingredient_amounts = next_amounts
+	if not brew_batch.is_empty() and not _brew_batches.has(brew_batch):
+		_brew_batches.append(brew_batch.duplicate(true))
+	elif brew_batch.is_empty() and kind != &"water":
+		# Older/custom liquid callers can omit history, but later known tea must
+		# never make that unrecorded contribution appear fully verified.
+		_brew_history_complete = false
 	state = CupState.FILLED
 	if notify:
 		notify_contents_changed()
 	return accepted
+
+
+func _valid_brew_batch(batch: Dictionary) -> bool:
+	if batch.is_empty(): return true
+	if (batch.get("state") not in [&"water", &"underbrewed", &"ready", &"oversteeped"]
+		or typeof(batch.get("used_boiling_water")) != TYPE_BOOL
+		or typeof(batch.get("infused_counts")) != TYPE_DICTIONARY):
+		return false
+	if batch.has("batch_volume") and (typeof(batch.batch_volume) not in [TYPE_INT, TYPE_FLOAT]
+		or not is_finite(float(batch.batch_volume)) or float(batch.batch_volume) <= 0.0):
+		return false
+	for item_id in batch.infused_counts:
+		if (typeof(item_id) not in [TYPE_STRING, TYPE_STRING_NAME] or String(item_id).is_empty()
+			or typeof(batch.infused_counts[item_id]) != TYPE_INT or batch.infused_counts[item_id] <= 0):
+			return false
+	var mixed: Variant = batch.get("mixed_counts", {})
+	if typeof(mixed) != TYPE_DICTIONARY: return false
+	for item_id in mixed:
+		if (typeof(item_id) not in [TYPE_STRING, TYPE_STRING_NAME] or String(item_id).is_empty()
+			or typeof(mixed[item_id]) not in [TYPE_INT, TYPE_FLOAT]
+			or not is_finite(float(mixed[item_id])) or float(mixed[item_id]) <= 0.0):
+			return false
+	return true
+
+
+func get_service_snapshot() -> Dictionary:
+	return {"kind": &"cup", "lifecycle": get_ingredient_stage(), "volume": volume_ml,
+		"capacity": capacity_ml, "liquid_id": liquid_type, "temperature": temperature,
+		"cold_threshold": config.cold_temperature if config != null else NAN,
+		"ingredient_amounts": get_ingredient_amounts(), "brew_batches": brew_batches,
+		"inherited_ingredient_amounts": get_inherited_ingredient_amounts(),
+		"brew_history_complete": _brew_history_complete}
+
+
+func commit_served(order_id: StringName) -> bool:
+	# The handoff command stages all authorities before publishing any signals.
+	if (not is_inside_tree() or is_queued_for_deletion() or not OrderRequestDef.valid_identity(order_id)
+		or state not in [CupState.CLEAN, CupState.IN_USE, CupState.FILLED]
+		or not assigned_order_id.is_empty() or not is_finite(volume_ml) or volume_ml < 0.0):
+		return false
+	var nonempty := volume_ml > 0.0
+	for amount: float in get_ingredient_amounts().values():
+		if not is_finite(amount) or amount < 0.0: return false
+		nonempty = nonempty or amount > 0.0
+	if not nonempty: return false
+	_remember_state_change()
+	assigned_order_id = order_id
+	state = CupState.SERVED
+	return true
 
 
 func _remember_state_change() -> void:
@@ -129,6 +197,8 @@ func discard_contents() -> float:
 	contents_base_id = &""
 	relish_item_ids.clear()
 	_inherited_ingredient_amounts.clear()
+	_brew_batches.clear()
+	_brew_history_complete = true
 	temperature = config.ambient_temperature
 	if state == CupState.FILLED:
 		state = CupState.IN_USE
@@ -149,6 +219,16 @@ func _ready() -> void:
 	assert(dirty_texture != null, "Cup requires a dirty texture.")
 	if volume_ml <= 0.0:
 		temperature = config.ambient_temperature
+	_tea_contents_texture = contents_overlay.texture
+	var gradient_texture := _tea_contents_texture as GradientTexture2D
+	if gradient_texture != null and gradient_texture.gradient != null:
+		# Each cup owns its water gradient; changing one cup must not recolor
+		# every instance of the shared authored tea surface.
+		_water_contents_texture = gradient_texture.duplicate() as GradientTexture2D
+		_water_contents_texture.gradient = gradient_texture.gradient.duplicate() as Gradient
+		var colors := gradient_texture.gradient.colors
+		for index in colors.size():
+			_water_contents_texture.gradient.set_color(index, Color(water_color, colors[index].a))
 	liquid_changed.connect(_update_volume_marker)
 	_update_volume_marker(volume_ml)
 	_apply_state_visuals()
@@ -359,6 +439,8 @@ func reset_clean() -> void:
 	temperature = config.ambient_temperature
 	relish_item_ids.clear()
 	_inherited_ingredient_amounts.clear()
+	_brew_batches.clear()
+	_brew_history_complete = true
 	assigned_order_id = &""
 	state = CupState.CLEAN
 	notify_contents_changed()
@@ -368,4 +450,5 @@ func _apply_state_visuals() -> void:
 	if not is_node_ready():
 		return
 	cup_sprite.texture = dirty_texture if state == CupState.DIRTY else clean_texture
+	contents_overlay.texture = _water_contents_texture if liquid_type == &"water" and _water_contents_texture != null else _tea_contents_texture
 	contents_overlay.visible = (state == CupState.FILLED or state == CupState.SERVED) and (volume_ml > 0.0 or not contents_base_id.is_empty())

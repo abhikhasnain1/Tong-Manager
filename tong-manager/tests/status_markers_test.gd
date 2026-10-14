@@ -174,6 +174,49 @@ func check_brewing_semantics() -> void:
 	check(by_kind(tokens(source), &"fill").get("liquid_id") == &"herbal_drink", "Configured infusion output is not hardcoded to black tea")
 
 
+func check_poured_quality() -> void:
+	var source := kettle()
+	var value := cup()
+	source.add_water(500.0)
+	source.apply_heat(100.0, 1.0)
+	source.apply_ingredient(&"black_tea", 1, &"infuse", &"black_tea")
+	check(source.start_pour(value), "Underbrewed marker fixture uses a real pour")
+	source.update_pour(.1)
+	source.stop_pour()
+	var early := by_kind(tokens(value), &"brew")
+	check(early.get("band") == &"underbrewed" and early.get("label") == "Underbrewed", "Poured early tea retains an exceptional quality cue")
+	check(not String(early.get("description", "")).contains("Steeping"), "Cup warning does not imply the cup continues brewing")
+	source.advance_brewing(source.config.steep_seconds)
+	check(by_kind(tokens(value), &"brew").get("band") == &"underbrewed", "Source reaching ready cannot improve already poured cup history")
+	source.start_pour(value)
+	source.update_pour(.1)
+	source.stop_pour()
+	check(by_kind(tokens(value), &"brew").get("band") == &"underbrewed", "Adding ready tea cannot hide an earlier underbrewed contribution")
+	source.advance_brewing(source.config.oversteep_seconds)
+	source.start_pour(value)
+	source.update_pour(.1)
+	source.stop_pour()
+	var mixed := tokens(value)
+	check(by_kind(mixed, &"brew").get("band") == &"oversteeped", "A mixed cup retains its worst quality warning")
+	check(String(by_kind(mixed, &"brew").get("description", "")).contains("underbrewed"), "Mixed quality description retains the earlier underbrewed history")
+	check(mixed.filter(func(token: Dictionary) -> bool: return token.kind == &"brew").size() == 1, "A mixed cup has only one exceptional quality marker")
+	check(value.can_receive_liquid(&"black_tea") and not presentation(mixed).contains("unservable"), "Quality cue remains informational and does not gate imperfect service")
+	source.discard_contents()
+	check(by_kind(tokens(value), &"brew").get("band") == &"oversteeped", "Warning survives source disposal because cup history owns it")
+	value.discard_contents()
+	check(by_kind(tokens(value), &"brew").is_empty(), "Discard clears obsolete cup-quality warnings")
+	value.receive_liquid(&"water", 15.0)
+	check(by_kind(tokens(value), &"brew").is_empty(), "Plain water adds no tea-quality warning")
+	value.reset_clean()
+	source.add_water(500.0)
+	source.apply_ingredient(&"black_tea", 1, &"infuse", &"black_tea")
+	source.advance_brewing(source.config.steep_seconds)
+	source.start_pour(value)
+	source.update_pour(.1)
+	source.stop_pour()
+	check(by_kind(tokens(value), &"brew").is_empty(), "Ordinary ready tea adds no redundant ready tick")
+
+
 func check_controls_ignore(node: Node) -> void:
 	if node is Control:
 		check(node.mouse_filter == Control.MOUSE_FILTER_IGNORE and node.focus_mode == Control.FOCUS_NONE,
@@ -470,6 +513,7 @@ func run() -> void:
 	catalog = root.get_node("Catalog")
 	check_content_semantics()
 	check_brewing_semantics()
+	check_poured_quality()
 	for node in owned:
 		if is_instance_valid(node): node.queue_free()
 	await frames()

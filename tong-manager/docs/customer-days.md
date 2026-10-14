@@ -6,7 +6,8 @@ still arriving or leaving. When a place is unavailable, the next visitor waits
 offscreen. The schedule keeps its order and spacing instead of dropping visits
 or spawning a crowd at once.
 
-The review panel offers two short authored days and the generated demo schedule.
+The review panel offers two short authored days, the generated demo schedule
+and a longer-patience serving review.
 The authored examples deliberately use short patience so you can see a whole
 sequence quickly. **Preview left/right departure** only demonstrates freeing a
 place; it does not serve the customer's order. **Restart this schedule** starts
@@ -105,10 +106,9 @@ current requests. Optional dialogue is not required to distinguish them.
 
 The cue reads that visit's saved `OrderState` request. Recipe edits affect newly
 created orders; an active visit keeps its captured request. Cues follow their
-customer, avoid fixed HUD/Peek controls and pass mouse input through. Wrong-item
-feedback keeps the unfulfilled request readable; fulfillment, timeout or departure
-removes the request. Feedback in automated review uses existing result fixtures,
-not a real handoff command.
+customer, avoid fixed HUD/Peek controls and pass mouse input through. Real service,
+including a wrong delivery, removes the fulfilled request and shows its reaction.
+Structural failures leave the request intact; timeout or departure removes it.
 
 For presentation tuning, select `HUDLayer/RootUI/CustomerOrderOverlay` in
 `TongDayScreen.tscn` to adjust screen margin and separation. The reusable
@@ -117,6 +117,7 @@ amount font size and optional font. The customer's presentation bubble position
 sets its `OrderAnchor` beside the head. Test both authored days and the notebook
 at the supported viewport sizes after changing placement or sizing.
 
-Real cup/portion handoff, payment and day-end progression remain separate
-integrations. The earlier `CustomerScenePreview` opts out of the live queue and
+Real cup/portion handoff is connected; see [Customer serving](customer-service.md).
+Payment and day-end progression remain separate integrations. The earlier
+`CustomerScenePreview` opts out of the live queue and
 retains its original single-cue sample presentation and motion controls.

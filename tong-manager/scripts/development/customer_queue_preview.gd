@@ -1,14 +1,16 @@
 extends Node
-## Review authored schedules in the live stall without changing shared supplies.
+## Review authored schedules and real serving in the live stall.
 
 const DAY_PATHS := [
 	"res://data/examples/customer_days/authored_day_1.tres",
 	"res://data/examples/customer_days/authored_day_2.tres",
 	"res://data/balance/demo_day_1.tres",
+	"res://data/examples/customer_days/service_review.tres",
 ]
-const DAY_LABELS := ["Authored day 1 · quick review", "Authored day 2 · quick review", "Generated demo · normal timing"]
+const DAY_LABELS := ["Authored day 1 · quick review", "Authored day 2 · quick review", "Generated demo · normal timing", "Serving review · longer patience"]
 
 @export var preview_seed := 64
+@export_range(0, 3) var initial_day := 0
 
 @onready var screen: Node2D = $TongDayScreen
 @onready var controller: InteractionController = $TongDayScreen/InteractionController
@@ -25,11 +27,13 @@ var selected_day := 0
 
 func _ready() -> void:
 	queue = screen.customer_queue
+	selected_day = clampi(initial_day, 0, DAY_PATHS.size() - 1)
 	_build_controls()
 	queue.customer_spawned.connect(_on_spawned)
 	queue.customer_timed_out.connect(_on_timed_out)
 	queue.customer_removed.connect(_on_removed)
 	queue.queue_completed.connect(_on_completed)
+	screen.customer_service.service_accepted.connect(_on_service_accepted)
 	restart_schedule()
 
 
@@ -67,6 +71,7 @@ func _build_controls() -> void:
 	day_picker = OptionButton.new()
 	day_picker.name = "DayPicker"
 	for title in DAY_LABELS: day_picker.add_item(title)
+	day_picker.select(selected_day)
 	day_picker.add_theme_font_size_override("font_size", 12)
 	day_picker.item_selected.connect(select_day)
 	rows.add_child(day_picker)
@@ -84,7 +89,12 @@ func _build_controls() -> void:
 	event_label = _label(rows, "", 12)
 	event_label.custom_minimum_size = Vector2(206, 48)
 	event_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_label(rows, "Icons show each customer's order.\nItem handoff is not connected yet.\nQuick days use shorter patience.\nOpen the Khata: time keeps moving.\nDeparture buttons only free a place.\nRestart preserves supplies and cups.", 11)
+	_label(rows, "Use: drop a cup or snack on a customer.\nWrong servings give a bad review.\nEmpty cups return to their place.\nOpen the Khata: time keeps moving.\nRestart preserves supplies and served cups.\nRerun the scene for a fresh cup supply.", 11)
+
+
+func _on_service_accepted(record: Dictionary) -> void:
+	var reasons: Array = record.result.get("reasons", [])
+	event_label.text = "Served · happy customer" if not record.result.bad_review else "Served · bad review: " + ", ".join(reasons)
 
 
 func _label(parent: Node, text: String, size: int) -> Label:

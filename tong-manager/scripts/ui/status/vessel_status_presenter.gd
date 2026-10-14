@@ -40,6 +40,8 @@ static func snapshot(vessel: Node, catalog: Node, config: StatusMarkerConfig) ->
 		result.append(thermal)
 	if is_kettle:
 		_append_kettle_state(result, vessel)
+	else:
+		_append_cup_state(result, vessel)
 	_append_ingredients(result, amounts, catalog)
 	if vessel is Cup and vessel.state in [Cup.CupState.DIRTY, Cup.CupState.SERVED]:
 		var band: StringName = &"dirty" if vessel.state == Cup.CupState.DIRTY else &"served"
@@ -59,6 +61,25 @@ static func _append_kettle_state(result: Array[Dictionary], kettle: Kettle) -> v
 		var brew := _token(&"brew", &"brew", labels[stage], labels[stage])
 		brew["band"] = stage
 		result.append(brew)
+
+
+static func _append_cup_state(result: Array[Dictionary], cup: Cup) -> void:
+	if cup.volume_ml <= 0.0 or cup.liquid_type == &"water":
+		return
+	var underbrewed := false
+	var oversteeped := false
+	for batch in cup.brew_batches:
+		underbrewed = underbrewed or batch.get("state") == &"underbrewed"
+		oversteeped = oversteeped or batch.get("state") == &"oversteeped"
+	if not underbrewed and not oversteeped:
+		return
+	# Cup quality is the frozen result of pouring; it does not keep steeping.
+	# One warning keeps mixed-history cups concise without hiding the worst state.
+	var label := "Oversteeped" if oversteeped else "Underbrewed"
+	var description := "Contains oversteeped and underbrewed tea" if oversteeped and underbrewed else "Contains " + label.to_lower() + " tea"
+	var brew := _token(&"brew", &"brew", label, description)
+	brew["band"] = &"oversteeped" if oversteeped else &"underbrewed"
+	result.append(brew)
 
 
 static func _append_ingredients(result: Array[Dictionary], amounts: Dictionary, catalog: Node) -> void:

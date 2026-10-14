@@ -94,7 +94,8 @@ func run() -> void:
 	ready_tea(kettle)
 	kettle.advance_brewing(kettle.config.oversteep_seconds)
 	check(kettle.state == Kettle.BrewState.OVERSTEEPED, "Elapsed ready time oversteeps")
-	check(not kettle.start_pour(cup), "Oversteeped batch rejects serving")
+	check(kettle.start_pour(cup), "Oversteeped batch remains pourable for imperfect service")
+	kettle.stop_pour()
 	ready_tea(kettle)
 	cup.reset_clean()
 	var pointer := kettle.get_global_transform_with_canvas().origin
