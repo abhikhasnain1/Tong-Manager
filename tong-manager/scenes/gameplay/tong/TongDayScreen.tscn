@@ -35,6 +35,7 @@
 [ext_resource type="Resource" path="res://data/customers/customer_a.tres" id="37_customer_a"]
 [ext_resource type="Resource" path="res://data/customers/customer_b.tres" id="38_customer_b"]
 [ext_resource type="Script" path="res://scripts/gameplay/customers/customer_queue_manager.gd" id="39_customer_queue"]
+[ext_resource type="Script" path="res://scripts/ui/customer_order_overlay.gd" id="40_customer_orders"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_khata"]
 size = Vector2(117, 360)
@@ -454,6 +455,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
+script = ExtResource("40_customer_orders")
 
 [node name="InteractionPromptLayer" type="Control" parent="HUDLayer/RootUI" unique_id=1051817855]
 layout_mode = 1

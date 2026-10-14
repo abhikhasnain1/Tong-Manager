@@ -434,3 +434,31 @@ godot --path tong-manager --script res://tests/customer_queue_preview_test.gd
 
 The existing `CustomerScenePreview` remains an isolated presentation fixture
 with its queue explicitly disabled.
+
+## Live customer order cues
+
+Use the same `CustomerQueuePreview.tscn` review scene. Across its two authored
+days, check plain tea, sugar tea, milk tea, milk-and-sugar tea, banana and biscuit
+orders. The round cues should use the same ingredient/item artwork as the pantry,
+stay near the correct head corner, and keep the requested spoon counts readable.
+They must avoid fixed HUD and visible Peek controls, follow resizing, and allow
+mouse input through. Optional dialogue is not needed to distinguish requests.
+Watch timeout and departure remove the request while showing the established
+reaction. Open Peek and Full: patience must continue, and Full must still block
+world actions. These review controls do not serve real items or change supplies.
+
+```text
+godot --headless --path tong-manager --script res://tests/customer_order_bubble_test.gd
+godot --headless --path tong-manager --script res://tests/customer_order_overlay_test.gd
+godot --path tong-manager --resolution 1920x1080 --script res://tests/customer_order_overlay_test.gd -- /absolute/capture/directory
+```
+
+Run the rendered overlay check serially at 1920×1080, 1600×900, 1366×768 and
+1280×800. On Windows, supply a writable absolute `--log-file` path when the
+default user-data log directory is unavailable. The component suite covers
+data-derived presentation and tuning; the integration suite uses live queue
+orders, real mouse/notebook input, replacement/fulfillment/timeout/removal,
+restart/re-entry, viewport transforms and unchanged stock/water/cups/cash.
+Its accepted/rejected results are explicitly supplied fixtures, not tests of the
+future production handoff or payment rules. Actual scene review is still needed
+before merge.

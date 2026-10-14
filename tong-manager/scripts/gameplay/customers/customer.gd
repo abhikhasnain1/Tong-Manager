@@ -59,6 +59,7 @@ var _turn_frame := -1
 var _travel_progress := 0.0
 var _generation := 0
 var _highlighted := false
+var _external_order_bubble := false
 var _pose_from := -1
 var _pose_to := -1
 var _pose_amount := 0.0
@@ -68,6 +69,7 @@ var _pose_amount := 0.0
 @onready var body_sprite: Sprite2D = $VisualRoot/BobRoot/BodySprite
 @onready var emotion_icon: CustomerFeedback = $VisualRoot/BobRoot/EmotionIcon
 @onready var bubble_anchor: Marker2D = $VisualRoot/BobRoot/BubbleAnchor
+@onready var order_anchor: Marker2D = $VisualRoot/BobRoot/OrderAnchor
 @onready var dialogue_panel: Panel = $VisualRoot/BobRoot/BubbleAnchor/Dialogue
 @onready var dialogue_label: Label = $VisualRoot/BobRoot/BubbleAnchor/Dialogue/Text
 @onready var serve_zone: Area2D = $ServeZone
@@ -203,6 +205,13 @@ func set_dialogue(value: String) -> void:
 func show_dialogue(enabled: bool) -> void:
 	dialogue_enabled = enabled
 	if _initialized: _refresh_dialogue()
+
+
+func set_external_order_bubble(enabled: bool) -> void:
+	# A live UI binding replaces only the neutral request cue, never emotions.
+	if _external_order_bubble == enabled: return
+	_external_order_bubble = enabled
+	if _initialized: _refresh_feedback()
 
 
 func apply_service_result(result: ServiceResult) -> bool:
@@ -456,6 +465,7 @@ func _apply_definition() -> void:
 	serve_shape.shape = shape
 	serve_shape.position = get_front_rect().get_center()
 	emotion_icon.position = _settings.bubble_position
+	order_anchor.position = _settings.bubble_position
 	bubble_anchor.position = _settings.dialogue_position
 
 
@@ -501,7 +511,7 @@ func _refresh_feedback() -> void:
 		ready_item = _order.request_kind == &"ready_item"
 		icon = request.get("icon") as Texture2D if ready_item else CUP_ICON
 	emotion_icon.configure(_settings.bubble_size, _emotion, icon, ready_item)
-	emotion_icon.visible = not _moving and (_order != null or not _emotion.is_empty())
+	emotion_icon.visible = not _moving and (not _emotion.is_empty() or (_order != null and not _external_order_bubble))
 	_refresh_dialogue()
 
 

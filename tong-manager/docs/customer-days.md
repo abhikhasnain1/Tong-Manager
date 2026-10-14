@@ -97,7 +97,26 @@ The `CustomerQueueManager` node controls actor scale and uses the reusable
 Customer scene's motion settings. Keep customer silhouettes and order cues
 clear of the counter, roof and hanging stock.
 
-The existing compact customer cue is reused. Detailed active-order bubbles,
-real cup/portion handoff, payment and day-end progression remain separate
-integrations. The earlier `CustomerScenePreview` opts out of the live queue so
-its sample orders and motion controls remain isolated.
+Each waiting visitor now has round order cues beside their head. A cup with a
+small tea identity icon means tea; sugar and milk icons show the requested cup
+additions and their abstract spoon counts. Banana and biscuit orders use the
+same artwork as the pantry. The two authored examples together include all six
+current requests. Optional dialogue is not required to distinguish them.
+
+The cue reads that visit's saved `OrderState` request. Recipe edits affect newly
+created orders; an active visit keeps its captured request. Cues follow their
+customer, avoid fixed HUD/Peek controls and pass mouse input through. Wrong-item
+feedback keeps the unfulfilled request readable; fulfillment, timeout or departure
+removes the request. Feedback in automated review uses existing result fixtures,
+not a real handoff command.
+
+For presentation tuning, select `HUDLayer/RootUI/CustomerOrderOverlay` in
+`TongDayScreen.tscn` to adjust screen margin and separation. The reusable
+`scenes/ui/CustomerOrderBubble.tscn` exposes bubble diameter, gap, columns,
+amount font size and optional font. The customer's presentation bubble position
+sets its `OrderAnchor` beside the head. Test both authored days and the notebook
+at the supported viewport sizes after changing placement or sizing.
+
+Real cup/portion handoff, payment and day-end progression remain separate
+integrations. The earlier `CustomerScenePreview` opts out of the live queue and
+retains its original single-cue sample presentation and motion controls.
