@@ -4,11 +4,22 @@ The rules in `data/balance/ingredient_policy.tres` are the shipped defaults. The
 
 ## Change a rule in the Inspector
 
-1. Duplicate the policy resource for an experiment. Make its nested rule resources unique before editing them, so another scene's policy is not changed accidentally.
-2. Open the policy in the Inspector and expand `Rules`. Each `IngredientRule` describes one item in one vessel. There must be at most one enabled rule for each item/vessel pair.
-3. Set the fields below. To allow an item in both kettle and cup, create one rule for each destination.
-4. Assign your policy to `Ingredient Policy` on the `TongDayScreen` node. All cup and kettle targets use it, including cups moved onto or off the tray and pantry exports.
-5. Run the scene and test valid, invalid and cancelled drops from a physical source and both notebook views. A bad configuration rejects drops with an explanation instead of consuming stock.
+A **policy** is a settings file containing a list called **Rules**. Each rule is a smaller set of settings for one ingredient in one vessel: for example, teabags in the kettle. Godot calls these settings objects *resources*.
+
+For an experiment, copy the whole settings file:
+
+1. In Godot's **FileSystem** panel, find `res://data/balance/ingredient_policy.tres`. Right-click it, choose **Duplicate**, and give the copy a different name, such as `ingredient_policy_duplicate.tres`. If you have already made this copy, use it.
+2. Double-click the copied file in **FileSystem** to show it in the **Inspector**. Check that you opened the copy, not `ingredient_policy.tres`.
+3. Expand **Rules**, then click the resource in entry **0** to show the teabag settings. Confirm that **Item Id** is `black_tea` and **Vessel Kind** is `kettle`. In the shipped policy, entry **1** is sugar in cups and entry **2** is milk in cups.
+4. As a first experiment, change **Max Portions** from **1** to **5**. Keep **Quantity** at **1**: that is how many units one drag carries. Click the **save icon at the top of the Inspector**, then choose **Save** to save the copied settings file.
+5. Open `scenes/gameplay/tong/TongDayScreen.tscn`. Select the root **TongDayScreen** node in the **Scene** tree. Drag your copied `.tres` file from **FileSystem** onto **Ingredient Policy** in the Inspector. Save the scene. This changes which settings this scene uses; editing a copy alone does not activate it.
+6. Press **F6** to run that scene. Select **Use**, fill and boil the kettle, and try adding several bags. The changed rule should permit five bags and reject the sixth, while still requiring boiling liquid for each addition. To return to the shipped defaults, assign the original `ingredient_policy.tres` to **Ingredient Policy** and save the scene again.
+
+**No extra "Make Unique" step is needed for this file-copy workflow.** The three rules are stored inside the policy file, so copying that file also copies their settings. Editing the copy does not edit the original file. Scenes assigned to the same policy file do share its settings.
+
+"Make Unique" is Godot's term for replacing a shared resource with a separate copy. It matters when you reuse an existing resource in the Inspector and want to edit it independently. Copying only the outer settings object there can leave its inner rule objects shared. That is a different operation from duplicating the complete policy file in **FileSystem**. If a future policy links to rules saved in separate `.tres` files, copy those rule files too and assign the copies; copying the policy file alone would keep those links.
+
+Use the field reference below for further changes. To allow an ingredient in both kettle and cup, give it one rule for each destination. Keep at most one enabled rule for each ingredient/vessel pair. Check successful, rejected and cancelled drops from a physical source and both pantry views. Invalid settings reject the drop with an explanation and preserve stock.
 
 The review sandbox at `scenes/development/IngredientRulesPreview.tscn` has four selectable examples. Open it and press **F6**. Switching examples deliberately empties vessels and resets the day supplies. The examples never change the shipped policy. The normal scene continues to use the current defaults.
 
