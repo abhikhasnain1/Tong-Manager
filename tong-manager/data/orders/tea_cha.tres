@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="OrderRequestDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/order_request_def.gd" id="1_request"]
+
+[resource]
+script = ExtResource("1_request")
+id = &"tea_cha"
+kind = "tea"
+recipe_id = &"cha"
+quantity = 1

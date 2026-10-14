@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="CustomerDef" format=3]
+
+[ext_resource type="Script" path="res://scripts/data/customer_def.gd" id="1_customer"]
+[ext_resource type="Script" path="res://scripts/data/order_request_def.gd" id="2_request"]
+[ext_resource type="Texture2D" path="res://assets/art/customers/customer_male_provisional.png" id="3_art"]
+[ext_resource type="Resource" path="res://data/orders/tea_cha_no_sugar.tres" id="4_order"]
+[ext_resource type="Resource" path="res://data/orders/tea_cha.tres" id="5_order"]
+[ext_resource type="Resource" path="res://data/orders/tea_dudh_cha_no_sugar.tres" id="6_order"]
+[ext_resource type="Resource" path="res://data/orders/tea_dudh_cha.tres" id="7_order"]
+[ext_resource type="Resource" path="res://data/orders/ready_banana.tres" id="8_order"]
+[ext_resource type="Resource" path="res://data/orders/ready_biscuits.tres" id="9_order"]
+
+[resource]
+script = ExtResource("1_customer")
+id = &"customer_a"
+display_name_key = "customer.a.name"
+sprite_texture = ExtResource("3_art")
+patience_seconds = 60.0
+order_requests = Array[ExtResource("2_request")]([ExtResource("4_order"), ExtResource("5_order"), ExtResource("6_order"), ExtResource("7_order"), ExtResource("8_order"), ExtResource("9_order")])
