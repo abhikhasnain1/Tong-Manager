@@ -1,5 +1,21 @@
 # Hanging sources, portions, placement and brewing verification
 
+## Customer scene
+
+Open `scenes/development/CustomerScenePreview.tscn` and press **F6**. The sample
+panel provides warm tea, cold tea, banana, biscuit and wrong-item drag tokens.
+Customer A requests tea and B a banana. Try dropping on the head, arms and body,
+then empty space, foreground stock and UI. Toggle optional dialogue, one/two
+customers and reduced motion; replay arrival and compare the back-facing exit.
+See [Customer scene and motion](../docs/customer-scene.md) for tuning and scope.
+
+The sample tokens do not consume inventory, alter cups or pay money. The
+production scene component has no queue or actual handoff command yet.
+Run `res://tests/customer_scene_test.gd` headlessly after importing, then
+`res://tests/customer_scene_preview_test.gd` with a rendered window at
+1920x1080, 1600x900, 1366x768 and 1280x800. Keep engine runs sequential and use
+a unique writable `--log-file` for each run.
+
 ## Customer and order data
 
 Open `scenes/development/CustomerOrdersPreview.tscn` and press **F6**. Select either
