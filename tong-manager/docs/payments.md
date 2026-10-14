@@ -1,6 +1,6 @@
 # Automatic payment
 
-Open `scenes/development/PaymentPreview.tscn` and press **F6**. It starts on **Payment · unhappy responses**, using `data/examples/customer_days/payment_response_review.tres`. In **Use**, drop a prepared cup, banana or biscuit onto a waiting customer. Accepted service pays the saved order price automatically; the cash HUD updates and two small coins travel toward it, each with a bright, short arcade pip. There is no collection button.
+Open `scenes/development/PaymentPreview.tscn` and press **F6**. It starts on **Payment · unhappy responses**, using `data/examples/customer_days/payment_response_review.tres`. In **Use**, drop a prepared cup, banana or biscuit onto a waiting customer. Accepted service pays the saved order price automatically; the cash HUD updates and two small coins travel toward it, each playing the selected coin sound. There is no collection button.
 
 Correct deliveries are accepted. Wrong items, cold tea, poor brews and short pours use that visit's designer-selected **Unhappy Response**:
 
@@ -44,7 +44,8 @@ Khata never pauses patience. On `TongDayScreen.tscn`'s **CustomerQueueManager**,
 - `DayConfig.starting_cash` supplies opening cash once per run. It does not count as sales income. Loading a different customer schedule does not replace the run's opening cash.
 - Recipe `price` and ready-item `sell_price` determine an order's quoted price when that order is created. Editing catalog prices later does not rewrite a waiting customer's quote.
 - Open `data/balance/payment_feedback.tres` to tune duration, arc, coin size, colors, amount text, reduced motion and sound. `TongDayScreen.payment_feedback_config` can use another resource.
-- **Coin Launch Stagger Seconds** (`coin_launch_stagger_seconds`, default 0.11) spaces the two launches. Each launch plays its own 0.12-second pip, including in reduced motion.
+- **Sound Stream** (`sound_stream`) selects the audio asset, defaulting to `assets/audio/sfx/coin_drop.mp3`. Replace it in the Inspector to change the effect; use a non-looping stream. The bundled file is the supplied `freesound_gamestudio-drop-coin-384921.mp3` copied without conversion or trimming.
+- **Coin Launch Stagger Seconds** (`coin_launch_stagger_seconds`, default 0.11) spaces the two launches. Each launch plays the selected sound independently, including in reduced motion.
 - **Sound Base Pitch** (`sound_base_pitch`, default 1.0), **Sound Pitch Step Semitones** (`sound_pitch_step_semitones`, default 2.0) and **Sound Pitch Cycle** (`sound_pitch_cycle`, default 4) give successive coins a short repeating pitch variation. Each overlapping coin has an independent sound voice; a later coin does not retune one already playing.
 - Sound respects its configured bus and Master mute; **Sound Enabled** can disable it independently. Motion and audio never own the payment itself. Refusals and duplicate receipts emit no reward sounds.
 

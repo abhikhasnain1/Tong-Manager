@@ -7,15 +7,12 @@ signal feedback_finished(source_id: StringName)
 signal sound_requested(source_id: StringName)
 signal coin_launched(source_id: StringName, coin_index: int, pitch: float)
 
-const SAMPLE_RATE := 22050
-const CHIME_SECONDS := 0.12
 const COIN_COUNT := 2
 
 var config: PaymentFeedbackConfig = preload("res://data/balance/payment_feedback.tres")
 var _entries: Array[Dictionary] = []
 var _seen: Dictionary = {}
 var _voices: Array[AudioStreamPlayer] = []
-var _chime: AudioStreamWAV
 var _pitch_serial := 0
 var _clear_revision := 0
 var _focused := true
@@ -119,9 +116,8 @@ func get_active_snapshots() -> Array[Dictionary]:
 	return snapshots
 
 
-func get_chime_stream() -> AudioStreamWAV:
-	if _chime == null: _chime = _make_chime()
-	return _chime
+func get_chime_stream() -> AudioStream:
+	return config.sound_stream
 
 
 func is_sound_playing() -> bool:
@@ -273,7 +269,6 @@ func _available_voice() -> AudioStreamPlayer:
 		if is_instance_valid(voice) and not voice.playing: return voice
 	var voice := AudioStreamPlayer.new()
 	voice.name = "PaymentChime" if _voices.is_empty() else "PaymentCoinVoice%d" % _voices.size()
-	voice.stream = get_chime_stream()
 	# Each overlapping coin owns its pitch; never retune a playing voice.
 	voice.max_polyphony = 1
 	add_child(voice)
@@ -283,6 +278,8 @@ func _available_voice() -> AudioStreamPlayer:
 
 func _play_chime(source_id: StringName, coin_index: int, pitch: float) -> void:
 	if not config.sound_enabled or not _focused or not is_visible_in_tree(): return
+	var stream := get_chime_stream()
+	if stream == null: return
 	var bus := config.sound_bus if AudioServer.get_bus_index(config.sound_bus) >= 0 else &"Master"
 	var current := AudioServer.get_bus_index(bus)
 	var checked: Array[int] = []
@@ -292,6 +289,7 @@ func _play_chime(source_id: StringName, coin_index: int, pitch: float) -> void:
 		if current == 0: break
 		current = AudioServer.get_bus_index(AudioServer.get_bus_send(current))
 	var voice := _available_voice()
+	voice.stream = stream
 	voice.bus = bus
 	voice.volume_db = _finite_clamped(config.sound_volume_db, -17.0, -60.0, 0.0)
 	voice.pitch_scale = pitch
@@ -299,31 +297,6 @@ func _play_chime(source_id: StringName, coin_index: int, pitch: float) -> void:
 	voice.set_meta("coin_index", coin_index)
 	voice.play()
 	sound_requested.emit(source_id)
-
-
-static func _make_chime() -> AudioStreamWAV:
-	var stream := AudioStreamWAV.new()
-	stream.format = AudioStreamWAV.FORMAT_16_BITS
-	stream.mix_rate = SAMPLE_RATE
-	stream.stereo = false
-	stream.loop_mode = AudioStreamWAV.LOOP_DISABLED
-	var count := roundi(CHIME_SECONDS * SAMPLE_RATE)
-	var data := PackedByteArray()
-	data.resize(count * 2)
-	for index in count:
-		var t := float(index) / SAMPLE_RATE
-		var attack := minf(1.0, t / 0.002)
-		var tail := clampf((CHIME_SECONDS - t) / 0.018, 0.0, 1.0)
-		# Original bright electronic pip: quick upward glint, then a clear high note.
-		# Harmonics stay related to one fundamental instead of a thick bell chord.
-		var glide_seconds := 0.012
-		var ramp := minf(t, glide_seconds)
-		var phase := TAU * (1500.0 * ramp + 500.0 * ramp * ramp / (2.0 * glide_seconds)
-			+ 2000.0 * maxf(0.0, t - glide_seconds))
-		var tone := sin(phase) + 0.18 * sin(phase * 2.0) + 0.07 * sin(phase * 3.0)
-		data.encode_s16(index * 2, roundi(clampf(tone * attack * tail * exp(-t * 23.0) * 0.42, -0.9, 0.9) * 32767.0))
-	stream.data = data
-	return stream
 
 
 static func _finite_clamped(value: float, fallback: float, minimum: float, maximum: float) -> float:

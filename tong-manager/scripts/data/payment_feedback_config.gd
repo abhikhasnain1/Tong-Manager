@@ -12,6 +12,7 @@ extends Resource
 
 @export_group("Sound")
 @export var sound_enabled := true
+@export var sound_stream: AudioStream = preload("res://assets/audio/sfx/coin_drop.mp3")
 @export_range(-60.0, 0.0, 1.0) var sound_volume_db := -17.0
 @export var sound_bus: StringName = &"Master"
 @export_range(0.5, 2.0, 0.05) var sound_base_pitch := 1.0

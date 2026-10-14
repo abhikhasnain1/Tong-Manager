@@ -9,8 +9,8 @@ banana customer leaves unpaid. Later visits demonstrate Accept and Retry/Reset.
 Serve wrong/cold cups or snacks, verify both refusal cup returns preserve filled
 contents/identity and previous placement, then try a correct remake. Refused
 untouched snacks release reservations without consuming stock. Only accepted
-fulfillment pays the saved quote and emits the coin cue with one bright, pitched
-pip per launch. Empty/cancelled/timeout attempts pay nothing. The labelled panel
+fulfillment pays the saved quote and emits the coin cue with one independently pitched
+coin sound per launch. Empty/cancelled/timeout attempts pay nothing. The labelled panel
 reads the same ledger as the HUD; full finance/day-end UI remains later.
 See [Automatic payment](../docs/payments.md) for Inspector steps and reset boundaries.
 

@@ -132,19 +132,33 @@ func check_geometry_and_motion() -> void:
 
 
 func check_sound() -> void:
-	var wav := feedback.get_chime_stream()
-	check(wav != null and wav.format == AudioStreamWAV.FORMAT_16_BITS and not wav.stereo and wav.mix_rate == 22050, "Chime is signed16-bit mono PCM at declared sample rate")
-	check(wav.loop_mode == AudioStreamWAV.LOOP_DISABLED and is_equal_approx(wav.get_length(), .12), "Original electronic coin pip is brief and never loops")
-	var samples := wav.data
-	var peak := 0
-	var total := 0.0
-	for index in range(0, samples.size(), 2):
-		var sample := samples.decode_s16(index)
-		peak = maxi(peak, absi(sample))
-		total += sample
-	check(peak > 1000 and peak < 24000, "Generated waveform has audible content and ample PCM headroom")
-	check(samples.decode_s16(0) == 0 and absi(samples.decode_s16(samples.size() - 2)) < 10, "Short attack and release avoid sample discontinuities")
-	check(absf(total / float(samples.size() / 2)) < 100.0, "Soft chime has no significant DC offset")
+	var stream: AudioStream = feedback.get_chime_stream()
+	check(stream is AudioStreamMP3 and stream.resource_path == "res://assets/audio/sfx/coin_drop.mp3",
+		"Default feedback loads the selected imported MP3 coin sound")
+	var mp3 := stream as AudioStreamMP3
+	check(mp3 != null and not mp3.loop and not mp3.data.is_empty(), "Imported MP3 contains audio data and never loops")
+	check(stream != null and is_finite(stream.get_length()) and stream.get_length() > 0.0,
+		"Imported sound reports a finite positive duration")
+	if stream != null:
+		var playback: AudioStreamPlayback = stream.instantiate_playback()
+		check(playback != null, "Imported MP3 creates a decoder playback")
+		if playback != null:
+			playback.start()
+			var peak := 0.0
+			var decoded_frames := 0
+			var finite_samples := true
+			var remaining := ceili(minf(stream.get_length() + .25, 30.0) * AudioServer.get_mix_rate())
+			while remaining > 0 and playback.is_playing():
+				var samples: PackedVector2Array = playback.mix_audio(1.0, mini(4096, remaining))
+				if samples.is_empty(): break
+				remaining -= samples.size()
+				decoded_frames += samples.size()
+				for sample in samples:
+					finite_samples = finite_samples and sample.is_finite()
+					peak = maxf(peak, maxf(absf(sample.x), absf(sample.y)))
+			check(decoded_frames > 0 and finite_samples and peak > .001,
+				"Selected MP3 decodes to finite non-silent PCM through the engine")
+			playback.stop()
 	var old_mute := AudioServer.is_bus_mute(0)
 	AudioServer.set_bus_mute(0, true)
 	var before := sounds.size()
@@ -156,10 +170,23 @@ func check_sound() -> void:
 	settings.sound_bus = &"missing_payment_bus"
 	settings.sound_volume_db = -23.0
 	feedback.configure(settings)
-	check(show(receipt()) and sounds.size() == before + 1, "Unmuted payment requests one procedural chime")
+	check(show(receipt()) and sounds.size() == before + 1, "Unmuted coin launch requests the selected sound once")
 	var player := feedback.get_node("PaymentChime") as AudioStreamPlayer
 	check(player.bus == &"Master" and player.volume_db == -23.0, "Missing configured bus safely falls back to Master with configured volume")
 	feedback.clear_feedback()
+	var replacement := stream.duplicate() as AudioStream
+	settings.sound_stream = replacement
+	feedback.configure(settings)
+	check(show(receipt()) and player.stream == replacement,
+		"Replacing the configured stream updates a reused idle voice")
+	feedback.clear_feedback()
+	settings.sound_stream = null
+	settings.emit_changed()
+	before = sounds.size()
+	check(show(receipt()) and feedback.get_active_count() == 1 and sounds.size() == before and not feedback.is_sound_playing(),
+		"Missing configured sound still animates the coin silently")
+	feedback.clear_feedback()
+	settings.sound_stream = stream
 	settings.sound_enabled = false
 	settings.emit_changed()
 	before = sounds.size()
