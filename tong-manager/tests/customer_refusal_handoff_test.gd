@@ -72,9 +72,11 @@ func retry_cup(patience: int) -> void:
 	fill(cup)
 	await take_cup(cup)
 	await release_at(actor)
-	await assert_payment(order, 100, false)
 	check(order.fulfilled and order.closed and order.get_results().size() == 3, "Correct remake completes that same order once after two refused attempts")
 	check(service.get_served_cup(order.order_id) == cup, "Only the accepted remake transfers the original cup into served custody")
+	no_payment("Accepted remake before cup return")
+	await return_drink(order, cup)
+	await assert_payment(order, 100, false)
 	check(not order.get_results()[0].accepted and order.get_results()[0].bad_review, "Later acceptance does not erase previous dissatisfied attempt facts")
 
 

@@ -60,6 +60,7 @@ var _travel_progress := 0.0
 var _generation := 0
 var _highlighted := false
 var _external_order_bubble := false
+var _cup_return_offered := false
 var _pose_from := -1
 var _pose_to := -1
 var _pose_amount := 0.0
@@ -316,6 +317,16 @@ func get_presentation_text() -> String:
 	return _feedback_text
 
 
+func show_cup_return(offered: bool) -> void:
+	_cup_return_offered = offered
+	if offered: _feedback_text = "Finished · collect the dirty cup"
+	if _initialized: _refresh_feedback()
+
+
+func get_cup_return_position(offset: Vector2) -> Vector2:
+	return bob_root.to_global(offset) if _initialized else global_position
+
+
 func get_presentation_snapshot() -> Dictionary:
 	return {
 		"state": _state, "customer_id": _definition_id, "order_id": _order.order_id if _order != null else &"",
@@ -325,7 +336,7 @@ func get_presentation_snapshot() -> Dictionary:
 		"depth_offset": visual_root.position if _initialized else Vector2.ZERO,
 		"depth_scale": visual_root.scale if _initialized else Vector2.ONE,
 		"bob_offset": bob_root.position if _initialized else Vector2.ZERO,
-		"text": _feedback_text, "highlighted": _highlighted,
+		"text": _feedback_text, "highlighted": _highlighted, "cup_return_offered": _cup_return_offered,
 	}
 
 
@@ -334,6 +345,7 @@ func _live() -> bool:
 
 
 func _clear_result_history() -> void:
+	_cup_return_offered = false
 	_presented_ids.clear()
 	_accepted.clear()
 	_emotion = &""
@@ -523,6 +535,7 @@ func _refresh_feedback() -> void:
 		icon = request.get("icon") as Texture2D if ready_item else CUP_ICON
 	emotion_icon.configure(_settings.bubble_size, _emotion, icon, ready_item)
 	emotion_icon.visible = not _moving and (not _emotion.is_empty() or (_order != null and not _external_order_bubble))
+	if _cup_return_offered: emotion_icon.visible = false
 	_refresh_dialogue()
 
 

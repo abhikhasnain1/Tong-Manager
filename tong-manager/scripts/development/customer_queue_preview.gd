@@ -7,12 +7,14 @@ const DAY_PATHS := [
 	"res://data/balance/demo_day_1.tres",
 	"res://data/examples/customer_days/service_review.tres",
 	"res://data/examples/customer_days/payment_response_review.tres",
+	"res://data/examples/customer_days/cup_reuse_review.tres",
 ]
-const DAY_LABELS := ["Authored day 1 · quick review", "Authored day 2 · quick review", "Generated demo · normal timing", "Serving review · longer patience", "Payment · unhappy responses"]
+const DAY_LABELS := ["Authored day 1 · quick review", "Authored day 2 · quick review", "Generated demo · normal timing", "Serving review · longer patience", "Payment · unhappy responses", "Cup reuse · eight drinks + snacks"]
 
 @export var preview_seed := 64
-@export_range(0, 4) var initial_day := 0
+@export_range(0, 5) var initial_day := 0
 @export var show_finance_review := false
+@export var show_cup_reuse_review := false
 
 @onready var screen: Node2D = $TongDayScreen
 @onready var controller: InteractionController = $TongDayScreen/InteractionController
@@ -69,7 +71,7 @@ func _build_controls() -> void:
 	var rows := VBoxContainer.new()
 	rows.add_theme_constant_override("separation", 6)
 	panel.add_child(rows)
-	_label(rows, "PAYMENT REVIEW" if show_finance_review else "CUSTOMER QUEUE REVIEW", 14)
+	_label(rows, "CUP REUSE REVIEW" if show_cup_reuse_review else ("PAYMENT REVIEW" if show_finance_review else "CUSTOMER QUEUE REVIEW"), 14)
 	_label(rows, "Two places at the counter.\nArrivals wait when both are occupied.", 12)
 	day_picker = OptionButton.new()
 	day_picker.name = "DayPicker"
@@ -92,12 +94,12 @@ func _build_controls() -> void:
 	event_label = _label(rows, "", 12)
 	event_label.custom_minimum_size = Vector2(206, 48)
 	event_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_label(rows, "Use: drop a cup or snack on a customer.\nWrong servings give a bad review.\nEmpty cups return to their place.\nOpen the Khata: time keeps moving.\nRestart preserves supplies and served cups.\nRerun the scene for a fresh cup supply.", 11)
+	_label(rows, "Use: serve a cup or snack.\nAfter drinking, collect the dirty cup.\nDrop it in the bucket; hold to wash.\nDrag the clean cup to table or tray.\nKhata stays open while time moves.\nRestart preserves supplies and cups.", 11)
 	if show_finance_review:
 		finance_label = _label(rows, "", 12)
 		finance_label.custom_minimum_size.x = 206
 		finance_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		_label(rows, "Accepted orders pay automatically.\nRefused cups return filled; no payment.\nCash/history survive same-run reloads.\nFinance page and day-end are later work.", 11)
+		_label(rows, "Drinks pay when the cup is returned.\nSnacks pay when accepted.\nRefused cups return filled; no payment.\nFull table? Customer keeps the cup.", 11)
 
 
 func _on_service_resolved(record: Dictionary) -> void:

@@ -4,7 +4,10 @@ extends Node
 
 signal payment_recorded(transaction: Dictionary, screen_id: int, origin: Vector2)
 
-var finance: FinanceState
+var finance: FinanceState:
+	get: return _finance
+	set(value): configure(value)
+var _finance: FinanceState
 var _pending: Array[Dictionary] = []
 var _queued_ids: Dictionary = {}
 var _scheduled := false
@@ -17,11 +20,16 @@ func _init() -> void:
 
 func configure(value: FinanceState) -> void:
 	if finance == value: return
-	finance = value
+	_finance = value
 	_binding += 1
 	_pending.clear()
 	_queued_ids.clear()
 	set_process(false)
+
+
+func get_binding_snapshot() -> Dictionary:
+	return {"owner_id": get_instance_id(), "ledger_id": finance.get_instance_id() if finance != null else 0,
+		"binding": _binding, "generation": finance.generation if finance != null else -1}
 
 
 func enqueue_accepted(service: CustomerService, receipt: Dictionary, origin: Vector2) -> bool:
@@ -29,7 +37,9 @@ func enqueue_accepted(service: CustomerService, receipt: Dictionary, origin: Vec
 		or not is_instance_valid(service) or not is_instance_valid(service.screen)): return false
 	# Accept only the service owner's already committed copy, never a caller's
 	# edited price/result or an arbitrary emission of its presentation signal.
-	if receipt not in service.get_records() or receipt.get("payment_generation", -1) != finance.generation: return false
+	if (receipt not in service.get_records() or not service.is_payment_due(receipt)
+		or receipt.get("payment_generation", -1) != finance.generation
+		or receipt.get("payment_binding", {}) != get_binding_snapshot()): return false
 	var result: Dictionary = receipt.get("result", {})
 	var request: Dictionary = receipt.get("request", {})
 	if (not result.get("accepted", false) or not result.get("fulfilled", false)

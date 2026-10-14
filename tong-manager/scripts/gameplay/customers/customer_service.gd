@@ -11,11 +11,13 @@ var screen: Node2D
 var controller: InteractionController
 var queue: CustomerQueueManager
 var payments: CustomerPayments
+var cup_returns: Node
 var _zones: Dictionary = {}
 var _records: Dictionary = {}
 var _order_handoffs: Dictionary = {}
 var _attempted_payloads: Dictionary = {}
 var _served_cups: Dictionary = {}
+var _returned_cup_receipts: Dictionary = {}
 var _holding: Node2D
 var _frame: Sprite2D
 var _frame_image: Image
@@ -85,6 +87,11 @@ func get_drop_targets() -> Array[DropZone]:
 
 
 func pick_customer_at(viewport_position: Vector2) -> Customer:
+	var front := pick_visible_customer_at(viewport_position)
+	return front if front != null and front.is_serve_enabled() else null
+
+
+func pick_visible_customer_at(viewport_position: Vector2) -> Customer:
 	if not _live(screen) or not _live(queue) or not viewport_position.is_finite(): return null
 	# Modal export has its own input policy in the controller. Geometry must not
 	# globally block it just because the full notebook is still open.
@@ -102,7 +109,7 @@ func pick_customer_at(viewport_position: Vector2) -> Customer:
 		if front == null or actor.z_index > front.z_index or (actor.z_index == front.z_index and actor.is_greater_than(front)):
 			front = actor
 	# Arriving/departing bodies still occlude a customer standing behind them.
-	return front if front != null and front.is_serve_enabled() else null
+	return front
 
 
 func validate(zone: CustomerServiceZone, payload: HeldItemPayload, reservation_claimed := false) -> DropValidation:
@@ -196,6 +203,7 @@ func _commit_authority(zone: CustomerServiceZone, payload: HeldItemPayload, hand
 		"customer_id": order.customer_id, "request": order.get_request(),
 		"price": order.get_request().price, "result": response,
 		"payment_generation": payments.finance.generation if is_instance_valid(payments) and payments.finance != null else -1,
+		"payment_binding": payments.get_binding_snapshot() if is_instance_valid(payments) else {},
 		"served_cup_id": cup.get_instance_id() if cup != null and response.accepted else 0,
 		"returned_cup_id": cup.get_instance_id() if cup != null and not response.accepted else 0}
 	_records[handoff_id] = {"record": record, "result": result, "customer": weakref(actor), "published": false}
@@ -203,12 +211,15 @@ func _commit_authority(zone: CustomerServiceZone, payload: HeldItemPayload, hand
 	if order.closed: _order_handoffs[order.order_id] = handoff_id
 	if cup != null and response.accepted:
 		_served_cups[order.order_id] = cup
+		queue.hold_for_cup_return(order.order_id)
 	# Queue the immutable receipt before callbacks can retire this scene. Its
 	# run-owned consumer settles money after the input transaction has finished.
-	if response.accepted and is_instance_valid(payments):
+	if response.accepted and cup == null and is_instance_valid(payments):
 		payments.enqueue_accepted(self, record, actor.bubble_anchor.get_global_transform_with_canvas().origin)
 	if cup != null:
-		if response.accepted: _retain_cup(cup)
+		if response.accepted:
+			_retain_cup(cup)
+			if _live(cup_returns): cup_returns.register_accepted_cup(record, actor, cup)
 		else: controller.restore_drag_origin()
 	return true
 
@@ -252,6 +263,34 @@ func get_records() -> Array[Dictionary]:
 func get_served_cup(order_id: StringName) -> Cup:
 	var cup: Variant = _served_cups.get(order_id)
 	return cup as Cup if _live(cup) else null
+
+
+func get_receipt_customer(handoff_id: StringName) -> Customer:
+	if not _records.has(handoff_id): return null
+	var actor: Variant = (_records[handoff_id].customer as WeakRef).get_ref()
+	return actor as Customer if _live(actor) else null
+
+
+func is_payment_due(receipt: Dictionary) -> bool:
+	var handoff_id: StringName = receipt.get("handoff_id", &"")
+	if not _records.has(handoff_id) or _records[handoff_id].record != receipt:
+		return false
+	if not receipt.get("result", {}).get("accepted", false): return false
+	return int(receipt.get("served_cup_id", 0)) == 0 or _returned_cup_receipts.has(handoff_id)
+
+
+func authorize_returned_cup(owner: Node, order_id: StringName, cup: Cup, origin: Vector2) -> bool:
+	if (not _live(owner) or owner != cup_returns or not _live(cup)
+		or _served_cups.get(order_id) != cup or not owner.is_return_completed(order_id, cup)):
+		return false
+	var handoff_id: StringName = _order_handoffs.get(order_id, &"")
+	if not _records.has(handoff_id) or _returned_cup_receipts.has(handoff_id): return false
+	_returned_cup_receipts[handoff_id] = true
+	_served_cups.erase(order_id)
+	# The destination already owns the exact cup. This queues immutable payment
+	# facts before observers can retire the serving scene; publication is deferred.
+	if is_instance_valid(payments): payments.enqueue_accepted(self, _records[handoff_id].record, origin)
+	return true
 
 
 func _offered(payload: HeldItemPayload) -> Dictionary:

@@ -62,6 +62,24 @@ func set_available_surfaces(values: Array[PlacementSurface]) -> void:
 	_available_surfaces = values.duplicate()
 
 
+func get_footprints() -> Array[PackedVector2Array]:
+	var result: Array[PackedVector2Array] = []
+	for polygon in _footprints:
+		result.append(polygon.duplicate())
+	return result
+
+
+func adopt_surface(target: PlacementSurface) -> bool:
+	# Cup recovery books the destination before releasing its custody source.
+	if not is_instance_valid(target) or not target.is_registered(item):
+		return false
+	surface = target
+	_home_parent = item.get_parent()
+	if is_instance_valid(controller):
+		controller.register_drop_zone(_zone)
+	return true
+
+
 func begin_drag(viewport_position: Vector2) -> bool:
 	if (not is_instance_valid(controller) or not is_instance_valid(surface)
 		or controller.current_mode != InteractionController.MODE_ORGANIZE

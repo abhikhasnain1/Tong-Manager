@@ -1,16 +1,16 @@
 # Automatic payment
 
-Open `scenes/development/PaymentPreview.tscn` and press **F6**. It starts on **Payment · unhappy responses**, using `data/examples/customer_days/payment_response_review.tres`. In **Use**, drop a prepared cup, banana or biscuit onto a waiting customer. Accepted service pays the saved order price automatically; the cash HUD updates and two small coins travel toward it, each playing the selected coin sound. There is no collection button.
+Open `scenes/development/PaymentPreview.tscn` and press **F6**. It starts on **Payment · unhappy responses**, using `data/examples/customer_days/payment_response_review.tres`. In **Use**, drop a prepared cup, banana or biscuit onto a waiting customer. Accepted snacks pay the saved order price immediately. Accepted cup servings pay when the dirty cup reaches table, tray or bucket after drinking; the cash HUD updates and two small coins travel toward it, each playing the selected coin sound. There is no collection button.
 
 Correct deliveries are accepted. Wrong items, cold tea, poor brews and short pours use that visit's designer-selected **Unhappy Response**:
 
 | Response | Customer and payment |
 | --- | --- |
-| Accept | Accepts unhappily, pays the normal saved quote and leaves. |
+| Accept | Accepts unhappily and pays the saved quote: snacks immediately, cups after dirty return. |
 | Refuse Leave | Returns the item and leaves without paying. |
 | Refuse Retry | Returns the item, keeps the same order and waits for a remake; no payment yet. |
 
-Both refusals return the same filled cup to its previous position, preserving contents, ingredient counts and brew history. They do not refund ingredients, empty or wash the cup. A refused untouched snack releases its reservation without consuming stock. This immediate refusal return is independent of the later dirty-cup return/washing system. Empty cups, cancelled drags and timeout without service also produce no payment or reward cue. Each real attempt retains its quality reasons; review aggregation is not implemented.
+Both refusals return the same filled cup to its previous position, preserving contents, ingredient counts and brew history. They do not refund ingredients, empty or wash the cup. A refused untouched snack releases its reservation without consuming stock. This immediate refusal return is independent of accepted drinks' dirty-cup return and washing. Empty cups, cancelled drags and timeout without service also produce no payment or reward cue. Each real attempt retains its quality reasons; review aggregation is not implemented.
 
 ## Try the response schedule
 
@@ -55,6 +55,6 @@ Khata never pauses patience. On `TongDayScreen.tscn`'s **CustomerQueueManager**,
 
 `record_income(source_id, amount, metadata, aliases)` and `record_expense(...)` accept positive whole-taka amounts and return true only for a new committed transaction. Reused or conflicting identities, invalid values, arithmetic overflow and unaffordable expenses are refused without changing history. Expenses are an API foundation; this slice adds no shop, rent, debt or other expense gameplay. Returned records are deep copies.
 
-`CustomerPayments` lives under GameState. Only payable accepted fulfillment queues a copied receipt, before callbacks can remove the customer or scene. Deferred settlement credits it once using both order and handoff identities. Refusal attempts stay in the same order's history but never queue payment. A corrected remake can fulfill and pay once; refusal-and-leave closes without fulfillment. Changing scenes cannot lose an accepted sale; an explicit run reset invalidates old queued receipts. An old receipt cannot pay again after reset. Payment cues belong to the live originating screen, so leaving the scene may suppress the cue but not the money.
+`CustomerPayments` lives under GameState. Only payable accepted fulfillment queues a copied receipt. Snacks become payable on acceptance; actual cup servings become payable after the same dirty cup reaches a valid return destination. The handoff captures the payment owner, ledger binding and generation before callbacks can remove the customer or scene. Deferred settlement credits it once using both order and handoff identities. Refusal attempts stay in the same order's history but never queue payment. A corrected remake can fulfill and pay once; refusal-and-leave closes without fulfillment. Once queued, changing scenes cannot lose a payable sale; an explicit run reset invalidates old queued receipts. An old receipt cannot pay after reset or replacement of its ledger, including switching away and back. Payment cues belong to the live originating screen, so leaving the scene may suppress the cue but not the money.
 
-Full day progression, save/load, review aggregation, return of previously served dirty cups, washing and bucket mechanics remain separate work.
+See [Cup reuse](cup-reuse.md) for drinking, dirty return, full-table waiting, washing and the scene-local persistence boundary. Full day progression, save/load and review aggregation remain separate work.

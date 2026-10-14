@@ -301,7 +301,8 @@ func _on_hover(entered: bool) -> void:
 	if _can_interact():
 		get_node("/root/CursorService").set_state(&"hover_actionable" if entered else &"default")
 		if entered:
-			controller.report_hint("Use · drag cup to serve or discard · Organize to rearrange")
+			controller.report_hint("Use · drag dirty cup to wash bucket · Organize to rearrange" if state == CupState.DIRTY
+				else "Use · drag cup to serve or discard · Organize to rearrange")
 
 
 func _refresh_hover(_mode: StringName) -> void:
@@ -429,6 +430,25 @@ func mark_served() -> bool:
 
 func mark_dirty() -> bool:
 	return set_state(CupState.DIRTY)
+
+
+func finish_consumption() -> bool:
+	# Consumption preserves cup/order identity. Washing alone clears its dirty
+	# lifecycle; this transition never refunds stock or records another serving.
+	if not is_inside_tree() or is_queued_for_deletion() or state != CupState.SERVED:
+		return false
+	_remember_state_change()
+	volume_ml = 0.0
+	liquid_type = &""
+	contents_base_id = &""
+	relish_item_ids.clear()
+	_inherited_ingredient_amounts.clear()
+	_brew_batches.clear()
+	_brew_history_complete = true
+	temperature = config.ambient_temperature
+	state = CupState.DIRTY
+	notify_contents_changed()
+	return true
 
 
 func reset_clean() -> void:

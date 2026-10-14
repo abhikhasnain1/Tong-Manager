@@ -37,6 +37,7 @@
 [ext_resource type="Script" path="res://scripts/gameplay/customers/customer_queue_manager.gd" id="39_customer_queue"]
 [ext_resource type="Script" path="res://scripts/ui/customer_order_overlay.gd" id="40_customer_orders"]
 [ext_resource type="Texture2D" path="res://assets/art/toolkit/wastebasket_cutout.png" id="41_wastebasket"]
+[ext_resource type="PackedScene" path="res://scenes/gameplay/tools/BucketStation.tscn" id="42_bucket_station"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_khata"]
 size = Vector2(117, 360)
@@ -202,15 +203,8 @@ position = Vector2(1258.9999, 898)
 scale = Vector2(0.76, 0.68)
 tool_def = ExtResource("3_tools")
 
-[node name="BucketStation" type="Node2D" parent="WorldRoot/ToolLayer" unique_id=2061807017]
+[node name="BucketStation" parent="WorldRoot/ToolLayer" unique_id=2061807017 instance=ExtResource("42_bucket_station")]
 position = Vector2(1751, 1005)
-
-[node name="Sprite" type="Sprite2D" parent="WorldRoot/ToolLayer/BucketStation" unique_id=337521503]
-scale = Vector2(0.22, 0.22)
-texture = ExtResource("13_bucket")
-
-[node name="InteractionAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/BucketStation" unique_id=1410089750 groups=["critical_interaction_anchor"]]
-position = Vector2(0, -25)
 
 [node name="DragLayer" type="Node2D" parent="WorldRoot" unique_id=1052109653]
 z_index = 40

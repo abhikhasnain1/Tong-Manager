@@ -12,6 +12,7 @@ const CROP_SAFE_RECT := Rect2(96.0, 0.0, 1728.0, 1080.0)
 @export var customer_queue_auto_start := true
 @export var customer_queue_seed := 0
 @export var payment_feedback_config: PaymentFeedbackConfig = preload("res://data/balance/payment_feedback.tres")
+@export var cup_return_config: CupReturnConfig = preload("res://data/balance/cup_returns.tres")
 
 @onready var world_root: Node2D = %WorldRoot
 @onready var composition_guides: Node2D = %CompositionGuides
@@ -28,6 +29,9 @@ var customer_order_overlay: CustomerOrderOverlay
 var customer_service: CustomerService
 var customer_payments: CustomerPayments
 var payment_feedback: PaymentFeedback
+var cup_transfers: CupTransfer
+var bucket: BucketStation
+var cup_returns: CustomerCupReturns
 
 
 func _ready() -> void:
@@ -40,6 +44,13 @@ func _ready() -> void:
 	cursor_service.bind_hover_target($WorldRoot/ToolLayer/KhataStation/KhataHotspot)
 	_fit_authored_world()
 	_configure_table_placement()
+	cup_transfers = CupTransfer.new()
+	cup_transfers.name = "CupTransfers"
+	add_child(cup_transfers)
+	cup_transfers.configure(self, interaction)
+	bucket = $WorldRoot/ToolLayer/BucketStation as BucketStation
+	bucket.configure(self, interaction, cup_transfers)
+	_register_station_bases()
 	_configure_portion_sources()
 	_configure_hanging_sources()
 	_configure_portion_target($WorldRoot/ToolLayer/KettleStation)
@@ -62,6 +73,11 @@ func _ready() -> void:
 		customer_service.targets_changed.connect(_sync_inventory_targets)
 		customer_service.configure(self, interaction, customer_queue)
 		_configure_payments(game_state, hud)
+		cup_returns = CustomerCupReturns.new()
+		cup_returns.name = "CustomerCupReturns"
+		cup_returns.config = cup_return_config
+		add_child(cup_returns)
+		cup_returns.configure(self, interaction, customer_queue, customer_service, cup_transfers)
 		_sync_inventory_targets()
 	customer_order_overlay = $HUDLayer/RootUI/CustomerOrderOverlay
 	if customer_queue_enabled:
@@ -279,16 +295,41 @@ func _configure_table_placement() -> void:
 				"Invalid initial table placement: %s" % handle.get_parent().name)
 			if handle.item != tray:
 				handle.set_available_surfaces([table_surface, tray.interior_surface])
-	for cup in get_cups():
-		var configured := configure_cup(cup)
-		assert(configured, "Invalid initial cup placement: %s" % cup.name)
+	for node in get_tree().get_nodes_in_group(&"cups"):
+		if node is Cup and is_ancestor_of(node):
+			var configured := configure_cup(node)
+			assert(configured, "Invalid initial cup placement: %s" % node.name)
+
+
+func get_placement_surfaces() -> Array[PlacementSurface]:
+	var tray := $WorldRoot/ToolLayer/TrayStation as TrayStation
+	return [table_surface, tray.interior_surface]
+
+
+func _register_station_bases() -> void:
+	# Occupied object bases reserve space just like movable table objects.
+	# The remaining clear tabletop retains its continuous placement region.
+	var definitions := [
+		[bucket, Vector2(0, 45), Vector2(57, 17)],
+		[$WorldRoot/ToolLayer/WaterDrum, Vector2(0, 61), Vector2(36, 8)],
+		[$WorldRoot/DropZoneRoot/DiscardArea, Vector2(0, 61), Vector2(45, 12)],
+	]
+	for definition in definitions:
+		var polygon := PackedVector2Array()
+		for index in 24:
+			var angle := TAU * index / 24.0
+			polygon.append(definition[1] + Vector2(cos(angle), sin(angle)) * definition[2])
+		var registered := table_surface.register_item(definition[0], [polygon])
+		assert(registered, "Station base must fit clear tabletop")
 
 
 func get_cups() -> Array[Cup]:
 	var result: Array[Cup] = []
 	for node in get_tree().get_nodes_in_group(&"cups"):
-		if node is Cup and is_ancestor_of(node) and not node.is_queued_for_deletion() and node.state != Cup.CupState.SERVED:
-			result.append(node)
+		if node is Cup and is_ancestor_of(node) and not node.is_queued_for_deletion():
+			var handle := node.get_node_or_null("PlacementHandle") as TablePlaceable
+			if handle != null and is_instance_valid(handle.surface) and handle.surface.is_registered(node):
+				result.append(node)
 	return result
 
 

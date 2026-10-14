@@ -32,7 +32,7 @@ func _ready() -> void:
 	queue_redraw()
 
 func is_relevant_to(payload: HeldItemPayload) -> bool:
-	return payload != null and is_instance_valid(payload.world_node) and (payload.world_node is Kettle or payload.world_node is Cup)
+	return payload != null and payload.source != &"cup_transfer" and is_instance_valid(payload.world_node) and (payload.world_node is Kettle or payload.world_node is Cup)
 
 func accepts(payload: HeldItemPayload) -> DropValidation:
 	if (not is_inside_tree() or is_queued_for_deletion() or not is_relevant_to(payload)

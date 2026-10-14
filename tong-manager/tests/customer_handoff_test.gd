@@ -189,10 +189,10 @@ func warm_and_empty() -> void:
 	check(not zone.try_apply_drop(old_payload) and received.size() == 1, "Replayed handoff cannot fulfil or notify twice")
 	await capture("02-happy-reaction")
 	queue.advance(0.0)
-	check(queue.get_active_entries()[0].phase == &"served_reaction" and actor.emotion_icon.visible, "Happy reaction stays visible before walking away")
+	check(queue.get_active_entries()[0].phase == &"cup_return" and actor.emotion_icon.visible, "Happy reaction remains visible during the drinking phase")
 	queue.advance(queue.served_reaction_seconds)
-	check(service.get_served_cup(order.order_id) == cup and queue.get_active_customers().is_empty(), "Customer departure preserves the served cup")
-	check(queue.get_snapshot().history[0].service_result == order.get_accepted_result(), "Departure history retains the exact review outcome")
+	check(service.get_served_cup(order.order_id) == cup and queue.get_active_customers().has(actor), "Accepted drink retains both cup custody and customer slot until return")
+	check(queue.get_active_entries()[0].service_result == order.get_accepted_result(), "Pending return retains the exact review outcome")
 	start_order(&"ready_banana")
 	check(service.get_served_cup(order.order_id) == cup and service.get_records().size() == 1, "Restarting customers neither loses nor returns a served cup")
 
