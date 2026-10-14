@@ -1,0 +1,38 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/customers/customer.gd" id="1_customer"]
+[ext_resource type="Script" path="res://scripts/gameplay/customers/customer_feedback.gd" id="2_feedback"]
+[ext_resource type="Script" path="res://scripts/data/customer_presentation.gd" id="3_settings"]
+
+[node name="Customer" type="Node2D"]
+script = ExtResource("1_customer")
+
+[node name="VisualRoot" type="Node2D" parent="."]
+
+[node name="BobRoot" type="Node2D" parent="VisualRoot"]
+
+[node name="BodySprite" type="Sprite2D" parent="VisualRoot/BobRoot"]
+
+[node name="EmotionIcon" type="Node2D" parent="VisualRoot/BobRoot"]
+script = ExtResource("2_feedback")
+
+[node name="BubbleAnchor" type="Marker2D" parent="VisualRoot/BobRoot"]
+
+[node name="Dialogue" type="Panel" parent="VisualRoot/BobRoot/BubbleAnchor"]
+mouse_filter = 2
+
+[node name="Text" type="Label" parent="VisualRoot/BobRoot/BubbleAnchor/Dialogue"]
+layout_mode = 0
+mouse_filter = 2
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="ServeZone" type="Area2D" parent="."]
+collision_layer = 8
+collision_mask = 0
+input_pickable = false
+monitoring = false
+monitorable = false
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ServeZone"]
+disabled = true

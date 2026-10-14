@@ -7,8 +7,6 @@
 [ext_resource type="Texture2D" uid="uid://jydoq0xn4pqr" path="res://assets/art/backgrounds/tong_backdrop.png" id="5_backdrop"]
 [ext_resource type="Texture2D" uid="uid://cdngbjd2l8w4q" path="res://assets/art/backgrounds/tong_frame_back.png" id="6_frame_back"]
 [ext_resource type="Texture2D" uid="uid://dykjvd34a6300" path="res://assets/art/backgrounds/tong_frame_front.png" id="7_frame_front"]
-[ext_resource type="Texture2D" uid="uid://di6xtpc42d3lp" path="res://assets/art/customers/customer_female_provisional.png" id="8_female"]
-[ext_resource type="Texture2D" uid="uid://e3ndmlh0j3cw" path="res://assets/art/customers/customer_male_provisional.png" id="9_male"]
 [ext_resource type="Texture2D" uid="uid://nfxyjvf8sp4v" path="res://assets/art/toolkit/bucket_clean_provisional.png" id="13_bucket"]
 [ext_resource type="Texture2D" uid="uid://1y2dfab013y" path="res://assets/art/toolkit/radio_front_provisional.png" id="14_radio"]
 [ext_resource type="Texture2D" uid="uid://bsrrhf3c6lkxy" path="res://assets/art/icons/banana_ready_provisional.png" id="15_banana"]
@@ -33,6 +31,9 @@
 [ext_resource type="PackedScene" path="res://scenes/ui/khata/KhataModal.tscn" id="33_khata_modal"]
 [ext_resource type="PackedScene" path="res://scenes/ui/khata/KhataPeek.tscn" id="34_khata_peek"]
 [ext_resource type="Script" path="res://scripts/ui/status/object_status_badge_layer.gd" id="35_status_badges"]
+[ext_resource type="PackedScene" path="res://scenes/gameplay/customers/Customer.tscn" id="36_customer"]
+[ext_resource type="Resource" path="res://data/customers/customer_a.tres" id="37_customer_a"]
+[ext_resource type="Resource" path="res://data/customers/customer_b.tres" id="38_customer_b"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_khata"]
 size = Vector2(117, 360)
@@ -82,15 +83,17 @@ position = Vector2(960, 500)
 [node name="CustomerSlotRight" type="Marker2D" parent="WorldRoot/CustomerLayer/CustomerQueueSlots" unique_id=946684411 groups=["critical_interaction_anchor"]]
 position = Vector2(1310, 510)
 
-[node name="CustomerFemaleProvisional" type="Sprite2D" parent="WorldRoot/CustomerLayer" unique_id=1466086278]
-position = Vector2(720, 445)
-scale = Vector2(0.65, 0.65)
-texture = ExtResource("8_female")
+[node name="CustomerA" parent="WorldRoot/CustomerLayer" instance=ExtResource("36_customer")]
+position = Vector2(760, 740)
+scale = Vector2(1.4, 1.4)
+customer_def = ExtResource("37_customer_a")
+auto_arrive = true
 
-[node name="CustomerMaleProvisional" type="Sprite2D" parent="WorldRoot/CustomerLayer" unique_id=130806523]
-position = Vector2(1280, 445)
-scale = Vector2(0.62, 0.62)
-texture = ExtResource("9_male")
+[node name="CustomerB" parent="WorldRoot/CustomerLayer" instance=ExtResource("36_customer")]
+position = Vector2(1160, 740)
+scale = Vector2(1.4, 1.4)
+customer_def = ExtResource("38_customer_b")
+auto_arrive = true
 
 [node name="FrameFront" type="Sprite2D" parent="WorldRoot" unique_id=306335680]
 z_index = 20
@@ -115,12 +118,12 @@ position = Vector2(50, 0)
 y_sort_enabled = true
 
 [node name="Banana" type="Sprite2D" parent="WorldRoot/ToolLayer/ReadyItemRail" unique_id=1489529758]
-position = Vector2(436.72, 289.77002)
-scale = Vector2(0.62, 0.62)
+position = Vector2(390, 370)
+scale = Vector2(0.85, 0.85)
 texture = ExtResource("15_banana")
 
 [node name="BananaAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/ReadyItemRail" unique_id=1463137956 groups=["critical_interaction_anchor"]]
-position = Vector2(436.72, 289.77002)
+position = Vector2(390, 370)
 
 [node name="TeaBox" type="Sprite2D" parent="WorldRoot/ToolLayer/ReadyItemRail" unique_id=755056709]
 position = Vector2(1517.456, 752.096)
@@ -158,12 +161,12 @@ texture = ExtResource("17_milk")
 position = Vector2(1701.01, 770.26)
 
 [node name="Biscuits" type="Sprite2D" parent="WorldRoot/ToolLayer/ReadyItemRail" unique_id=1441415103]
-position = Vector2(1527.2272, 208.15034)
-scale = Vector2(0.33279985, 0.33279985)
+position = Vector2(1670, 370)
+scale = Vector2(0.4, 0.4)
 texture = ExtResource("16_biscuits")
 
 [node name="BiscuitsAnchor" type="Marker2D" parent="WorldRoot/ToolLayer/ReadyItemRail" unique_id=618752368 groups=["critical_interaction_anchor"]]
-position = Vector2(1527.2272, 208.15034)
+position = Vector2(1670, 370)
 
 [node name="KhataStation" type="Node2D" parent="WorldRoot/ToolLayer" unique_id=1872704980]
 editor_description = "Approved M1 composition revision 2 placement. Keep the sprite, collision shape, and interaction anchor aligned when editing."
