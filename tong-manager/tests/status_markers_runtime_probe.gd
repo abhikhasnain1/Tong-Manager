@@ -186,6 +186,91 @@ func check_overlap_hover() -> void:
 	await frames()
 
 
+func check_kettle_hover_and_pointer() -> void:
+	var kettle: Kettle = view.kettle as Kettle
+	var grip: Marker2D = kettle.get_node("GripAnchor") as Marker2D
+	var away: Vector2 = Vector2(12, root.get_visible_rect().size.y - 12)
+	controller.set_mode(InteractionController.MODE_NEUTRAL)
+	await move_pointer(away)
+	await create_timer(layer.config.hover_return_seconds + 0.15).timeout
+	var badge: ObjectStatusBadge = layer.get_badge_for(kettle)
+	check(badge != null, "The live kettle has its own marker group")
+	if badge == null: return
+	var resting: Vector2 = badge.position
+	var token_rects: Array[Rect2] = badge.get_token_rects()
+	var dimensions: Vector2 = badge.get_badge_size()
+	var hover_point: Vector2 = point(grip)
+	check(not controller.is_pointer_over_ui_at(hover_point), "The real kettle grip is reachable outside UI")
+	await move_pointer(hover_point)
+	check(kettle.is_status_hovered(), "Real kettle grip hover activates the kettle marker group")
+	await create_timer(layer.config.hover_rise_seconds * 0.25).timeout
+	check(badge.position.y < resting.y and badge.position.y > resting.y - layer.config.hover_lift,
+		"Kettle hover rises partway before completing its animation")
+	check(badge.get_token_rects() == token_rects and badge.get_badge_size() == dimensions,
+		"Kettle icons retain their relative arrangement during the rise")
+	await create_timer(layer.config.hover_rise_seconds).timeout
+	check(badge.position.is_equal_approx(resting - Vector2(0, layer.config.hover_lift)),
+		"Sustained kettle hover lifts the whole group by the configured amount")
+	check(badge.get_token_rects() == token_rects,
+		"Kettle hover has no independent icon jitter at full lift")
+	await capture("kettle-hover-raised")
+
+	var overlay: Control = Control.new()
+	overlay.position = hover_point - Vector2(45, 35)
+	overlay.size = Vector2(90, 70)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	screen.get_node("HUDLayer/RootUI").add_child(overlay)
+	await frames()
+	check(controller.is_pointer_over_ui_at(hover_point) and not kettle.is_status_hovered(),
+		"UI appearing beneath the stationary kettle pointer suppresses world hover")
+	await create_timer(layer.config.hover_return_seconds + 0.15).timeout
+	check(badge.position.is_equal_approx(resting),
+		"Covered kettle markers return to their resting position")
+	check(badge.get_token_rects() == token_rects,
+		"The kettle group retains its internal layout during the return")
+	overlay.queue_free()
+	await frames()
+	await move_pointer(away)
+	await create_timer(layer.config.hover_return_seconds + 0.15).timeout
+	check(not kettle.is_status_hovered() and badge.position.is_equal_approx(resting),
+		"Removing UI and leaving the kettle restores its unhovered presentation")
+
+	controller.set_mode(InteractionController.MODE_INTERACT)
+	var origin: Transform2D = kettle.global_transform
+	var origin_anchor: Vector2 = layer.get_anchor_position(kettle)
+	var pickup_point: Vector2 = point(grip)
+	await mouse(pickup_point, true)
+	check(controller.is_dragging() and controller.current_payload.world_node == kettle and kettle.is_held,
+		"The real grip still picks up the kettle beneath its floating markers")
+	if controller.is_dragging() and controller.current_payload.world_node == kettle:
+		await move_pointer(pickup_point + Vector2(100, -25), true)
+		check(layer.get_badge_for(kettle) == badge,
+			"Held kettle reparenting preserves the same marker group")
+		check(not layer.get_anchor_position(kettle).is_equal_approx(origin_anchor),
+			"The held kettle moves its actual status anchor")
+		check(badge.get_token_rects() == token_rects,
+			"Held kettle markers keep their icon arrangement")
+		var spout_point: Vector2 = point(kettle.get_node("Spout") as Marker2D)
+		for vessel: Node in layer.get_vessels():
+			var visible_badge: ObjectStatusBadge = layer.get_badge_for(vessel)
+			if visible_badge == null or not visible_badge.visible: continue
+			var marker_rect: Rect2 = Rect2(visible_badge.get_global_transform_with_canvas().origin, visible_badge.get_badge_size())
+			check(not marker_rect.has_point(spout_point),
+				"Floating marker groups leave the held kettle's pouring spout visible")
+		await capture("kettle-drag-follow")
+		await escape()
+		await mouse(point(grip), false)
+		check(not controller.is_dragging() and not kettle.is_held and kettle.global_transform.is_equal_approx(origin),
+			"Escape restores the actual kettle transform and held state")
+		check(layer.get_badge_for(kettle) == badge and layer.get_anchor_position(kettle).is_equal_approx(origin_anchor),
+			"Kettle cancellation restores the same marker identity and anchor")
+	controller.set_mode(InteractionController.MODE_NEUTRAL)
+	await move_pointer(away)
+	await create_timer(layer.config.hover_return_seconds + 0.15).timeout
+	check(badge.position.is_equal_approx(resting) and badge.get_token_rects() == token_rects,
+		"After kettle pickup and cancellation its marker group settles without rearranging")
+
+
 func run() -> void:
 	if DisplayServer.get_name() == "headless":
 		push_error("Status marker runtime probe requires a rendered window; use status_markers_test.gd headless.")
@@ -216,6 +301,7 @@ func run() -> void:
 	check(selected != null, "At least one visible cup can receive actual input")
 	if selected != null:
 		await check_hover_and_pointer(selected)
+	await check_kettle_hover_and_pointer()
 	await check_overlap_hover()
 	var tray := screen.get_node("WorldRoot/ToolLayer/TrayStation") as TrayStation
 	var initial := tray.transform
