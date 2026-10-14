@@ -7,6 +7,10 @@ const CROP_SAFE_RECT := Rect2(96.0, 0.0, 1728.0, 1080.0)
 @export var day_config: Resource
 @export var ingredient_policy: IngredientPolicy = preload("res://data/balance/ingredient_policy.tres")
 @export var source_layout: PortionSourceLayout = preload("res://data/balance/portion_sources_level_1.tres")
+@export_group("Customers")
+@export var customer_queue_enabled := true
+@export var customer_queue_auto_start := true
+@export var customer_queue_seed := 0
 
 @onready var world_root: Node2D = %WorldRoot
 @onready var composition_guides: Node2D = %CompositionGuides
@@ -18,6 +22,7 @@ var _portion_provider: PortionStockProvider
 var khata_modal: KhataModal
 var _extra_portion_targets: Array[DropZone] = []
 var _export_targets: Array[DropZone] = []
+var customer_queue: CustomerQueueManager
 
 
 func _ready() -> void:
@@ -42,6 +47,37 @@ func _ready() -> void:
 	$HUDLayer/RootUI/StatusBadges.bind_scope(self)
 	$WorldRoot/ToolLayer/KhataStation/KhataHotspot.input_event.connect(_on_khata_input)
 	_verify_layout_contract()
+	_configure_customer_queue()
+
+
+func _configure_customer_queue() -> void:
+	customer_queue = $CustomerQueueManager as CustomerQueueManager
+	if not customer_queue_enabled:
+		customer_queue.set_process(false)
+		return
+	# Presentation review scenes explicitly opt out and retain their fixed samples.
+	for sample_name in ["CustomerA", "CustomerB"]:
+		var sample := get_node_or_null("WorldRoot/CustomerLayer/" + sample_name) as Customer
+		if sample != null:
+			sample.hide()
+			sample.queue_free()
+	var slots: Array[Marker2D] = []
+	for child in $WorldRoot/CustomerLayer/CustomerQueueSlots.get_children():
+		if child is Marker2D: slots.append(child as Marker2D)
+	if not customer_queue.configure(slots, $WorldRoot/CustomerLayer/ActiveCustomers, get_node("/root/Catalog")):
+		push_error("Customer queue could not bind the stall layout")
+		return
+	if customer_queue_auto_start:
+		start_customer_queue(day_config, customer_queue_seed)
+
+
+func start_customer_queue(config: Resource = null, seed_value: int = 0) -> bool:
+	if not customer_queue_enabled or not is_instance_valid(customer_queue): return false
+	# Starting a schedule is independent of inventory/day-state initialization.
+	var started := customer_queue.start(day_config if config == null else config, seed_value)
+	if not started:
+		push_warning("Customer schedule did not start: " + "; ".join(customer_queue.get_snapshot().errors))
+	return started
 
 
 func _on_khata_input(_viewport: Node, event: InputEvent, _shape_index: int) -> void:

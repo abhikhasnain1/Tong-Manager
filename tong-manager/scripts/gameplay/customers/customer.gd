@@ -166,6 +166,17 @@ func leave() -> void:
 	_start_motion(true)
 
 
+func prepare_timeout_departure() -> bool:
+	if not _live() or not is_visible_in_tree() or _moving or _state not in [State.WAITING, State.ORDERING] or (_order != null and _order.fulfilled):
+		return false
+	_emotion = &"unhappy"
+	_feedback_text = "Waited too long"
+	_refresh_feedback()
+	var epoch := _generation
+	_set_state(State.LEAVING)
+	return _live() and epoch == _generation and _state == State.LEAVING
+
+
 func reset_presentation() -> void:
 	_cancel_motion()
 	if not _initialized: return

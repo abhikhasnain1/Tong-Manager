@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="DayConfig" format=3]
+[ext_resource type="Script" path="res://scripts/data/day_config.gd" id="1_day"]
+[ext_resource type="Resource" path="res://data/customer_schedules/authored_day_2.tres" id="2_schedule"]
+[resource]
+script = ExtResource("1_day")
+start_hour = 6
+interaction_minutes = 10
+customer_count_min = 4
+customer_count_max = 5
+customer_schedule = ExtResource("2_schedule")
+starting_cash = 100
+daily_water_ml = 3000.0
+starting_inventory = {&"banana": 4, &"biscuits": 6, &"black_tea": 12, &"condensed_milk": 8, &"sugar": 12}

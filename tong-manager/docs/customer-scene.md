@@ -2,7 +2,8 @@
 
 Open `scenes/development/CustomerScenePreview.tscn` and press **F6** to review
 the customer scene in the stall. This is a presentation review with sample
-orders. The normal stall uses the same reusable Customer instances.
+orders. The normal stall spawns the same reusable Customer scene through its
+customer queue. See [customer-days.md](customer-days.md) for day authoring.
 
 1. Watch the customers walk up. Use **Turn and leave** to see their quick turn
    followed by the back-facing walk. Both complete in the same amount of time.
@@ -25,8 +26,10 @@ choice does not set the number of customers permitted in a day or queue.
 ## Editing the appearance
 
 `scenes/gameplay/customers/Customer.tscn` is a reusable lower-center-anchored
-`Node2D`. Instances in `TongDayScreen` replace the former static portraits.
-Move or scale the instances to adjust the composition. Foreground hanging
+`Node2D`. The queue in `TongDayScreen` creates instances at its customer markers.
+Move the markers or adjust the queue's actor scale to change the composition.
+The isolated presentation preview retains its fixed CustomerA/B samples.
+Foreground hanging
 positions are authored on the Banana and Biscuits sprites in that scene;
 their existing pinned bodies still own sway and portion extraction.
 
@@ -53,5 +56,6 @@ an unhappy/bad-review cue; a rejection remains waiting.
 `CustomerScenePreview` registers a separate sample-only DropZone adapter with
 the existing interaction controller. It accepts only tokens created by that
 preview. Physical cups, pantry exports and hanging portions cannot use it as
-a production service endpoint. Spawning/queue management, active-order bubble
-integration, real stock/cup handoff and payment remain separate features.
+a production service endpoint. The normal stall's customer queue is independent
+of these fixtures. Detailed active-order bubble integration, real stock/cup
+handoff and payment remain separate features.

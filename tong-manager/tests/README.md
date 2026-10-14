@@ -406,3 +406,31 @@ active action, and never take keyboard focus from Space-to-pour. Bucket work sta
 separate. Brewing mechanics were accepted in PR #106; artwork and presentation
 remain provisional. Ingredient and hanging interactions were accepted in PRs #110
 and #111; shared-inventory review uses the separate scene described above.
+
+## Customer queue and authored days
+
+Open `scenes/development/CustomerQueuePreview.tscn` and press **F6**. The first
+authored example starts with an empty counter, then sends visitors at staggered
+times. Two places are available. Watch patience expire: disappointment appears
+before the turn and departure, and a queued visitor cannot take the occupied
+place until departure has finished. After the configured total, arrivals stop.
+
+Select the second authored day to review a different sequence, or the generated
+demo to use its normal 3-second first delay, 15-second spacing and 4–5 daily
+total. `docs/customer-days.md` explains the editable resources and how to make
+another day. The quick examples have shorter patience for review.
+
+Open Khata Peek and Full while customers wait. Arrivals and patience must keep
+moving. Full still blocks stall input. Restarting/changing the review schedule
+must preserve water, stock, cups, brewing and placement. The departure buttons
+are labelled review controls, not real item handoff or payment.
+
+Automated checks:
+
+```text
+godot --headless --path tong-manager --script res://tests/customer_queue_test.gd
+godot --path tong-manager --script res://tests/customer_queue_preview_test.gd
+```
+
+The existing `CustomerScenePreview` remains an isolated presentation fixture
+with its queue explicitly disabled.

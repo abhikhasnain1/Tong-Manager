@@ -7,3 +7,4 @@
 script = ExtResource("1")
 
 [node name="TongDayScreen" parent="." instance=ExtResource("2")]
+customer_queue_enabled = false
