@@ -6,3 +6,5 @@
 script = ExtResource("1")
 capacity = 6
 wash_seconds = 2.4
+first_output_fraction = 0.2
+output_travel_seconds = 0.35

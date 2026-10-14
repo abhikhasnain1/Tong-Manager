@@ -5,6 +5,7 @@ signal changed(snapshot: Dictionary)
 signal cup_cleaned(cup: Cup)
 
 @export var config: BucketConfig = preload("res://data/balance/bucket_config.tres")
+const OUTPUT_RETRY_SECONDS := 0.4
 
 var owner_screen: Node2D
 var controller: InteractionController
@@ -21,6 +22,10 @@ var _feedback_text := ""
 var _feedback_seconds := 0.0
 var _foam_time := 0.0
 var _revision := 0
+var _batch: Array[Dictionary] = []
+var _batch_elapsed := 0.0
+var _batch_duration := 0.0
+var _output_retry := 0.0
 
 @onready var holder: Node2D = $Cups
 @onready var body: Area2D = $Body
@@ -47,7 +52,6 @@ func _ready() -> void:
 	body.input_event.connect(_on_body_input)
 	body.mouse_entered.connect(_on_hover.bind(true))
 	body.mouse_exited.connect(_on_hover.bind(false))
-	clean_pickup.input_event.connect(_on_pickup_input)
 	progress_visual.draw.connect(_draw_progress)
 	visibility_changed.connect(_on_visibility_changed)
 	get_viewport().size_changed.connect(cancel_action)
@@ -125,10 +129,12 @@ func try_receive(payload: HeldItemPayload) -> bool:
 func _book_received(cup: Cup) -> void:
 	# The transfer owner calls this during its atomic commit. Book ownership
 	# without signals; source retirement happens before try_receive publishes.
-	_entries.append({"cup": weakref(cup), "elapsed": 0.0})
+	_entries.append({"cup": weakref(cup)})
 	_revision += 1
 
 func begin_clean_pickup(point: Vector2) -> bool:
+	# Optional programmatic recovery seam; normal bucket input only washes.
+	# Clean output is automatic and never requires this gesture.
 	if (_resolving or not _available() or not is_visible_in_tree() or not point.is_finite()
 		or controller.current_mode != InteractionController.MODE_INTERACT
 		or not controller.can_start_world_action()):
@@ -162,9 +168,11 @@ func begin_wash() -> bool:
 		or controller.current_mode != InteractionController.MODE_INTERACT
 		or not controller.can_start_world_action() or not controller.lock_action(self)):
 		return false
+	if _batch_remaining() == 0:
+		_capture_batch()
 	_washing = true
 	_feedback_text = ""
-	controller.report_hint("Hold to wash · release pauses · drag a clean cup out when ready")
+	controller.report_hint("Hold to wash the batch · release pauses · clean cups return automatically")
 	_refresh_visuals()
 	return _washing and _wash_allowed()
 
@@ -182,22 +190,23 @@ func advance_washing(delta: float) -> void:
 		cancel_action()
 		return
 	_resolving = true
-	var remaining := delta
 	var self_ref: WeakRef = weakref(self)
-	while remaining > 0.0 and _washing and _wash_allowed():
-		var cup := _first_cup(Cup.CupState.DIRTY)
-		if cup == null:
-			cancel_action()
+	var destination_time := minf(_batch_elapsed + delta, _batch_duration)
+	for member in _batch:
+		if not _washing or not _wash_allowed():
 			break
-		var entry := _entry_for(cup)
-		var used := minf(remaining, maxf(0.0, config.wash_seconds - float(entry.elapsed)))
-		entry.elapsed = float(entry.elapsed) + used
-		remaining -= used
-		if float(entry.elapsed) + 0.000001 < config.wash_seconds:
+		if member.done:
+			continue
+		var cup: Variant = (member.cup as WeakRef).get_ref()
+		if not has_cup(cup) or cup.state != Cup.CupState.DIRTY:
+			member.done = true
+			continue
+		if float(member.deadline) > destination_time + 0.000001:
 			break
-		entry.elapsed = 0.0
+		_batch_elapsed = maxf(_batch_elapsed, float(member.deadline))
+		member.done = true
 		# Cup commits its clean state before publishing its own content signals.
-		# Reentrant input cannot begin another transfer while this step resolves.
+		# Mark the captured deadline first so callbacks cannot clean it twice.
 		cup.reset_clean()
 		if self_ref.get_ref() == null:
 			return
@@ -205,26 +214,85 @@ func advance_washing(delta: float) -> void:
 			cup_cleaned.emit(cup)
 		if self_ref.get_ref() == null:
 			return
+		_try_clean_output(cup)
+		if self_ref.get_ref() == null:
+			return
 	if self_ref.get_ref() == null:
 		return
+	if _washing and _wash_allowed():
+		_batch_elapsed = maxf(_batch_elapsed, destination_time)
 	_resolving = false
-	if _first_cup(Cup.CupState.DIRTY) == null:
+	if _batch_remaining() == 0:
+		# Later arrivals belong to the next deliberate hold, never leftover delta.
 		cancel_action()
 	_refresh_visuals()
+	if _available():
+		changed.emit(get_snapshot())
+
+func _capture_batch() -> void:
+	_batch.clear()
+	_batch_elapsed = 0.0
+	_batch_duration = config.wash_seconds
+	var dirty: Array[Cup] = []
+	for cup in get_cups():
+		if cup.state == Cup.CupState.DIRTY:
+			dirty.append(cup)
+	for index in dirty.size():
+		var fraction := 1.0 if dirty.size() == 1 else lerpf(config.first_output_fraction, 1.0, float(index) / float(dirty.size() - 1))
+		_batch.append({"cup": weakref(dirty[index]), "deadline": _batch_duration * fraction, "done": false})
+
+func _batch_remaining() -> int:
+	var remaining := 0
+	for member in _batch:
+		var cup: Variant = (member.cup as WeakRef).get_ref()
+		if not member.done and has_cup(cup) and cup.state == Cup.CupState.DIRTY:
+			remaining += 1
+	return remaining
+
+func _try_clean_output(cup: Variant) -> bool:
+	if (not _available() or not is_visible_in_tree() or not has_cup(cup)
+		or cup.state != Cup.CupState.CLEAN or transfers.is_transferring(cup)
+		or config == null or not config.is_valid()):
+		return false
+	var self_ref: WeakRef = weakref(self)
+	var origin := get_global_transform_with_canvas() * Vector2(0, -25)
+	var placed := transfers.try_place_on_free_surface(cup, true, origin, config.output_travel_seconds)
+	if self_ref.get_ref() != null and placed:
+		# Placement has already booked the physical destination. Retire custody
+		# before observers see the count; the short flight has no gameplay authority.
+		_release_clean_cup(cup)
+	return placed
+
+func _retry_clean_outputs() -> void:
+	if _resolving or not _available() or not is_visible_in_tree():
+		return
+	_resolving = true
+	var self_ref: WeakRef = weakref(self)
+	var waiting: Array[WeakRef] = []
+	for cup in get_cups():
+		waiting.append(weakref(cup))
+	for reference in waiting:
+		var cup: Variant = reference.get_ref()
+		if has_cup(cup) and cup.state == Cup.CupState.CLEAN:
+			_try_clean_output(cup)
+		if self_ref.get_ref() == null:
+			return
+		if not _available():
+			break
+	_resolving = false
 
 func get_snapshot() -> Dictionary:
 	var dirty := 0
 	var clean := 0
-	var progress := 0.0
+	var progress := clampf(_batch_elapsed / _batch_duration, 0.0, 1.0) if _batch_duration > 0.0 else 0.0
 	for cup in get_cups():
 		if cup.state == Cup.CupState.DIRTY:
 			dirty += 1
-			if dirty == 1 and config != null and config.is_valid():
-				progress = clampf(float(_entry_for(cup).elapsed) / config.wash_seconds, 0.0, 1.0)
 		elif cup.state == Cup.CupState.CLEAN:
 			clean += 1
 	return {"total": get_cups().size(), "dirty": dirty, "clean": clean,
-		"capacity": config.capacity if config != null else 0, "washing": _washing, "progress": progress}
+		"capacity": config.capacity if config != null else 0, "washing": _washing, "progress": progress,
+		"batch_total": _batch.size(), "batch_remaining": _batch_remaining(), "batch_elapsed": _batch_elapsed}
 
 func contains_pointer(point: Vector2) -> bool:
 	if (not is_node_ready() or not is_visible_in_tree() or not point.is_finite()
@@ -241,7 +309,7 @@ func report_rejection(reason: String) -> void:
 	_feedback_text = "Bucket full" if reason == "bucket.full" else "Dirty cups only"
 	_feedback_seconds = 2.5
 	if _live(controller):
-		controller.report_hint("Bucket full · wash and take out a clean cup" if reason == "bucket.full" else "Only dirty cups go into the wash bucket")
+		controller.report_hint("Bucket full · wash dirty cups or clear table or tray space" if reason == "bucket.full" else "Only dirty cups go into the wash bucket")
 	_refresh_visuals()
 
 func _input(event: InputEvent) -> void:
@@ -256,21 +324,13 @@ func _input(event: InputEvent) -> void:
 func _on_body_input(_viewport: Node, event: InputEvent, _shape: int) -> void:
 	if not event is InputEventMouseButton or event.button_index != MOUSE_BUTTON_LEFT or not event.pressed:
 		return
-	var handled := begin_clean_pickup(event.position) if _over_clean_pickup(event.position) else begin_wash()
-	if handled:
+	if begin_wash():
 		get_viewport().set_input_as_handled()
-
-func _on_pickup_input(_viewport: Node, event: InputEvent, _shape: int) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed and begin_clean_pickup(event.position):
-		get_viewport().set_input_as_handled()
-
-func _over_clean_pickup(point: Vector2) -> bool:
-	return clean_pickup.visible and (clean_pickup.get_global_transform_with_canvas().affine_inverse() * point).length() <= 22.0
 
 func _on_hover(entered: bool) -> void:
 	_hovered = entered
 	if entered and _available() and controller.can_start_world_action() and controller.current_mode == InteractionController.MODE_INTERACT:
-		controller.report_hint("Hold bucket to wash · drag the small clean cup to the table or tray")
+		controller.report_hint("Hold bucket to wash all dirty cups · clean cups return to tray, then table")
 	_refresh_visuals()
 
 func _on_mode_changed(_mode: StringName) -> void:
@@ -292,6 +352,10 @@ func _process(delta: float) -> void:
 	if _washing and (not _wash_allowed() or controller.is_pointer_over_ui_at(get_viewport().get_mouse_position())):
 		cancel_action()
 	advance_washing(delta)
+	_output_retry -= delta
+	if _output_retry <= 0.0:
+		_output_retry = OUTPUT_RETRY_SECONDS
+		_retry_clean_outputs()
 	if _washing:
 		_foam_time += delta
 	if _feedback_seconds > 0.0:
@@ -345,14 +409,13 @@ func _refresh_visuals() -> void:
 		return
 	var snapshot := get_snapshot()
 	counts_label.text = "%d dirty · %d clean" % [snapshot.dirty, snapshot.clean]
-	clean_pickup.visible = snapshot.clean > 0
-	clean_pickup.input_pickable = snapshot.clean > 0
-	clean_label.text = "Drag clean"
-	hint_label.text = _feedback_text if not _feedback_text.is_empty() else ("Washing…" if _washing else ("Hold to wash" if snapshot.dirty > 0 else "Drop dirty cups"))
+	clean_pickup.hide()
+	clean_pickup.input_pickable = false
+	hint_label.text = _feedback_text if not _feedback_text.is_empty() else ("Washing batch…" if _washing else ("Hold to wash all" if snapshot.dirty > 0 else ("Waiting for space" if snapshot.clean > 0 else "Drop dirty cups")))
 	sprite.modulate = Color(1.2, 1.2, 1.2) if _hovered or _washing else Color.WHITE
 	if _highlighted:
 		sprite.modulate = Color(1.2, 1.35, 1.2) if _highlight_valid else Color(1.15, 0.7, 0.7)
-	progress_visual.visible = snapshot.dirty > 0
+	progress_visual.visible = snapshot.batch_remaining > 0
 	progress_visual.queue_redraw()
 
 func _draw_progress() -> void:

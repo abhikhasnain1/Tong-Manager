@@ -65,12 +65,10 @@ func drop_bucket() -> bool:
 func pickup_clean() -> bool:
 	var point := bucket.clean_pickup.get_global_transform_with_canvas().origin
 	await move_pointer(point)
-	var result := false
-	if DisplayServer.get_name() == "headless": result = bucket.begin_clean_pickup(point)
-	else:
-		await mouse(point, true)
-		result = controller.is_dragging() and transfers.is_transferring(controller.current_drag_node as Cup)
-	check(result, "Manual bucket pickup starts through the real transfer owner")
+	# No player pickup control remains: this compatibility API isolates source
+	# cancellation/deletion recovery while normal washing uses automatic output.
+	var result := bucket.begin_clean_pickup(point)
+	check(result, "Compatibility pickup starts through the real transfer owner")
 	return result
 
 
@@ -127,7 +125,7 @@ func begin_return(order_id: StringName) -> bool:
 	return result
 
 
-func wash_complete(cup: Cup) -> void:
+func wash_complete(cup: Cup, expect_queued := false) -> void:
 	await move_pointer(bucket_point())
 	if DisplayServer.get_name() == "headless": check(bucket.begin_wash(), "Real bucket obtains held washing ownership")
 	else:
@@ -135,16 +133,44 @@ func wash_complete(cup: Cup) -> void:
 		check(bucket.get_snapshot().washing and controller.action_owner == bucket, "Actual mouse hold acquires bucket washing ownership")
 	bucket.advance_washing(bucket.config.wash_seconds)
 	check(cup.state == Cup.CupState.CLEAN and cup.assigned_order_id.is_empty(), "Wash makes the original cup clean and clears its old assignment")
-	check(bucket.has_cup(cup) and not cup.visible and bucket.get_snapshot().clean == 1,
-		"Clean cup remains in bucket custody until manual pickup")
+	if expect_queued:
+		check(bucket.has_cup(cup) and not cup.visible and bucket.get_snapshot().clean == 1,
+			"Unavailable surfaces keep the clean cup queued in bucket custody")
+	else:
+		check(not bucket.has_cup(cup) and cup.get_node("PlacementHandle").surface.is_registered(cup),
+			"Washing automatically reserves a free destination before releasing bucket custody")
+		check_flight_guards(cup)
+		await settle_output(cup)
+		check(cup.is_visible_in_tree() and cup.input_pickable, "Automatic output reveals the same playable cup after its cosmetic flight")
 	check(not bucket.get_snapshot().washing and not controller.has_active_action(), "Finishing the only cup releases held washing ownership")
+	if DisplayServer.get_name() != "headless": await mouse(bucket_point(), false)
+
+
+func settle_output(cup: Cup) -> void:
+	var deadline := Time.get_ticks_msec() + 2500
+	while is_instance_valid(cup) and transfers.is_animating(cup) and Time.get_ticks_msec() < deadline:
+		await frames()
+	check(is_instance_valid(cup) and not transfers.is_animating(cup), "Automatic clean-cup flight finishes without retaining interaction ownership")
+
+
+func check_flight_guards(cup: Cup) -> void:
+	check(transfers.is_animating(cup) and cup.returning_to_surface and not cup.visible and not cup.input_pickable,
+		"Cosmetic flight hides and disables the reserved physical cup until arrival")
+	check(not cup.can_receive_liquid(&"water") and cup.receive_liquid(&"water", 1.0) == 0.0
+		and not cup.apply_ingredient(&"sugar", 1, &"mix") and not cup.commit_served(&"during_flight"),
+		"Flying cup refuses pouring, ingredient application and service without mutating its empty contents")
+	check(not cup.begin_interaction_drag(cup.get_global_transform_with_canvas().origin), "Use cannot lift a cup while its automatic return is in flight")
+	controller.set_mode(InteractionController.MODE_ORGANIZE)
+	check(not cup.get_node("PlacementHandle").begin_drag(cup.get_global_transform_with_canvas().origin),
+		"Organize cannot move the cup out of its reserved destination during flight")
+	controller.set_mode(InteractionController.MODE_INTERACT)
+	check(not controller.is_dragging() and not cup.has_contents(), "Rejected flight interactions create no gesture or contents")
 
 
 func seven_reuse_cycles() -> void:
 	await fixture()
 	var cup: Cup = screen.get_cups()[0]
 	var cup_id := cup.get_instance_id()
-	var tray_origin := cup.global_position
 	var stock_before := stock.quantities.duplicate(true)
 	var water_before: float = root.get_node("GameState").water_supply.remaining_ml
 	var expected_income := 0
@@ -163,16 +189,12 @@ func seven_reuse_cycles() -> void:
 		check(service.get_served_cup(order_id) == null and queue.get_active_customers().is_empty(),
 			"Committed bucket return retires customer custody and permits departure")
 		await wash_complete(cup)
-		if not await pickup_clean(): return
-		if index == 0: await capture("02-clean-cup-picked-up")
-		var desired := tray_origin if index % 2 == 0 else table_cup_origin()
-		var surface := tray.interior_surface if index % 2 == 0 else table
-		if not await drop_surface(desired, surface): return
+		check(cup.get_node("PlacementHandle").surface == tray.interior_surface,
+			"Automatic clean output prefers the available tray over free tabletop")
 		if index == 0: await capture("03-clean-cup-on-tray")
-		if index == 1: await capture("04-clean-cup-on-table")
 		check(cup.get_instance_id() == cup_id and cup.state == Cup.CupState.CLEAN and screen.get_cups().has(cup),
 			"Cycle %d returns the same clean physical cup to playable surfaces" % (index + 1))
-		check(bucket.get_snapshot().total == 0, "Manual pickup frees one bucket place only after placement")
+		check(bucket.get_snapshot().total == 0, "Automatic reserved output frees exactly one bucket place")
 		check(stock.quantities == stock_before and is_equal_approx(root.get_node("GameState").water_supply.remaining_ml, water_before),
 			"Return and wash never alter ingredient stock or brewing water")
 	check(service.get_records().size() == 7 and finance.transaction_log.size() == 7,
@@ -228,7 +250,9 @@ func wash_interruptions_and_cancellation() -> void:
 	bucket.advance_washing(10.0)
 	check(not bucket.begin_wash() and is_equal_approx(bucket.get_snapshot().progress, progress), "Focus loss retains progress and prevents background restart")
 	bucket.notification(Node.NOTIFICATION_WM_WINDOW_FOCUS_IN)
-	await wash_complete(cup)
+	var table_block := block_surface(table)
+	var tray_block := block_surface(tray.interior_surface)
+	await wash_complete(cup, true)
 	if not await pickup_clean(): return
 	controller.cancel_drag()
 	check(bucket.has_cup(cup) and cup.get_parent() == bucket.holder and not cup.visible,
@@ -238,7 +262,9 @@ func wash_interruptions_and_cancellation() -> void:
 	check(bucket.has_cup(cup) and cup.state == Cup.CupState.CLEAN and not cup.visible,
 		"Invalid clean destination preserves the reusable cup and capacity")
 	if not await pickup_clean(): return
+	table_block.free()
 	await drop_surface(table_cup_origin(), table)
+	tray_block.free()
 	check(finance.get_snapshot() == paid_snapshot, "Wash, repeated pickup and cancellation never replay the return payment")
 
 
@@ -299,6 +325,214 @@ func block_surface(surface: PlacementSurface) -> Polygon2D:
 	return blocker
 
 
+func deposit_dirty_fixture(cup: Cup) -> void:
+	fill(cup)
+	check(cup.mark_served() and cup.finish_consumption(), "Batch fixture uses the real consumed-to-dirty transition")
+	await take_cup(cup)
+	check(await drop_bucket(), "Batch fixture deposits the original cup through the actual bucket target")
+
+
+func begin_wash_input() -> void:
+	await move_pointer(bucket_point())
+	if DisplayServer.get_name() == "headless": check(bucket.begin_wash(), "Use begins the captured bucket batch")
+	else:
+		await mouse(bucket_point(), true)
+		check(bucket.get_snapshot().washing and controller.action_owner == bucket, "Mouse hold begins the captured bucket batch")
+
+
+func three_cup_batch() -> void:
+	await fixture()
+	var cups: Array[Cup] = screen.get_cups().slice(0, 3)
+	var ids: Array[int] = []
+	for cup in cups:
+		ids.append(cup.get_instance_id())
+		await deposit_dirty_fixture(cup)
+	await begin_wash_input()
+	var duration: float = bucket.config.wash_seconds
+	check(bucket.get_snapshot().batch_total == 3, "One hold captures all three dirty cup identities")
+	bucket.advance_washing(duration * 0.2 - 0.001)
+	check(cups[0].state == Cup.CupState.DIRTY and bucket.get_snapshot().dirty == 3, "No multi-cup output appears before the first 20-percent threshold")
+	bucket.advance_washing(0.001)
+	check(cups[0].state == Cup.CupState.CLEAN and cups[1].state == Cup.CupState.DIRTY,
+		"The first cup completes at 20 percent of one shared batch duration")
+	check(cups[0].get_node("PlacementHandle").surface == tray.interior_surface
+		and tray.interior_surface.is_registered(cups[0]), "First automatic output reserves the available tray immediately")
+	await capture("02-first-batch-output")
+	await settle_output(cups[0])
+	var progress: float = bucket.get_snapshot().progress
+	var release := InputEventMouseButton.new()
+	release.button_index = MOUSE_BUTTON_LEFT
+	release.pressed = false
+	if DisplayServer.get_name() == "headless": bucket._input(release)
+	else: await mouse(bucket_point(), false)
+	bucket.advance_washing(duration * 5.0)
+	check(is_equal_approx(bucket.get_snapshot().progress, progress) and cups[1].state == Cup.CupState.DIRTY,
+		"Releasing pauses the shared batch clock without advancing later cups")
+	await begin_wash_input()
+	bucket.advance_washing(duration * 0.4)
+	check(cups[1].state == Cup.CupState.CLEAN and cups[2].state == Cup.CupState.DIRTY,
+		"Middle output is staggered within the same captured batch")
+	await settle_output(cups[1])
+	bucket.advance_washing(duration * 0.4 - 0.001)
+	check(cups[2].state == Cup.CupState.DIRTY, "Last output waits until the full batch duration")
+	bucket.advance_washing(0.001)
+	await settle_output(cups[2])
+	for index in cups.size():
+		check(cups[index].get_instance_id() == ids[index] and cups[index].state == Cup.CupState.CLEAN
+			and cups[index].get_node("PlacementHandle").surface == tray.interior_surface,
+			"One batch duration cleans and automatically returns each original cup to the preferred tray")
+	check(bucket.get_snapshot().total == 0 and not controller.has_active_action(), "Completed batch releases hold and all successfully returned bucket capacity")
+	if DisplayServer.get_name() != "headless": await mouse(bucket_point(), false)
+
+
+func clean_output_waits_for_space() -> void:
+	await fixture()
+	var cups: Array[Cup] = screen.get_cups().slice(0, 3)
+	var original_stock := stock.quantities
+	var original_finance := finance.get_snapshot()
+	var original_water: float = root.get_node("GameState").water_supply.remaining_ml
+	for cup in cups: await deposit_dirty_fixture(cup)
+	var table_block := block_surface(table)
+	var tray_block := block_surface(tray.interior_surface)
+	await begin_wash_input()
+	bucket.advance_washing(bucket.config.wash_seconds)
+	check(bucket.get_snapshot().total == 3 and bucket.get_snapshot().clean == 3 and not bucket.get_snapshot().washing,
+		"Full surfaces retain every completed clean cup and its bucket capacity after one batch")
+	bucket._process(1.0)
+	check(bucket.get_snapshot().clean == 3, "Automatic blocked-output retries neither lose cups nor require another wash")
+	tray_block.free()
+	bucket._process(1.0)
+	for cup in cups:
+		await settle_output(cup)
+		check(cup.state == Cup.CupState.CLEAN and tray.interior_surface.is_registered(cup),
+			"Freeing tray space automatically drains each queued clean output without another hold")
+	check(bucket.get_snapshot().total == 0 and not controller.has_active_action(), "Queued outputs release capacity only after valid destinations are reserved")
+	check(stock.quantities == original_stock and finance.get_snapshot() == original_finance
+		and root.get_node("GameState").water_supply.remaining_ml == original_water,
+		"Batch washing and delayed output change no stock, brewing water, or payment history")
+	table_block.free()
+	# When the tray has no free position, clean output falls back to clear table.
+	tray_block = block_surface(tray.interior_surface)
+	await deposit_dirty_fixture(cups[0])
+	await wash_complete(cups[0])
+	check(table.is_registered(cups[0]) and cups[0].get_node("PlacementHandle").surface == table,
+		"Automatic washing output falls back to the table only when the tray cannot accept the cup")
+	await capture("04-clean-cup-on-table")
+	tray_block.free()
+
+
+func output_flight_reentry() -> void:
+	await fixture()
+	var cup: Cup = screen.get_cups()[0]
+	var identity := cup.get_instance_id()
+	await deposit_dirty_fixture(cup)
+	await begin_wash_input()
+	bucket.advance_washing(bucket.config.wash_seconds)
+	check_flight_guards(cup)
+	check(tray.interior_surface.is_registered(cup), "Interrupted flight already owns its final tray reservation")
+	root.remove_child(screen)
+	await frames()
+	root.add_child(screen)
+	await frames(4)
+	check(cup.get_instance_id() == identity and not transfers.is_animating(cup) and not cup.returning_to_surface,
+		"Retained-screen reentry finalizes cosmetic travel without replacing the cup")
+	check(cup.is_visible_in_tree() and cup.input_pickable and tray.interior_surface.is_registered(cup),
+		"Interrupted output resumes as the same visible playable cup at its committed destination")
+	check(bucket.get_snapshot().total == 0 and finance.transaction_log.is_empty(), "Flight cleanup neither restores bucket capacity nor invents a payment")
+
+
+func flight_callback_detach(at_start := false) -> void:
+	await fixture()
+	var cups: Array[Cup] = screen.get_cups().slice(0, 1 if at_start else 2)
+	for cup in cups: await deposit_dirty_fixture(cup)
+	var detached := [false]
+	var observer := func():
+		if not detached[0] and screen.is_inside_tree() and cups[0].visible != at_start:
+			detached[0] = true
+			root.remove_child(screen)
+	if at_start:
+		cups[0].visibility_changed.connect(observer)
+		# Normal bucket cups are already hidden; a synchronous clean observer
+		# can reveal one before output starts. Exercise hide reentry explicitly.
+		bucket.cup_cleaned.connect(func(value: Cup): value.show(), CONNECT_ONE_SHOT)
+	await begin_wash_input()
+	bucket.advance_washing(bucket.config.wash_seconds)
+	if not at_start:
+		check(transfers.is_animating(cups[0]) and transfers.is_animating(cups[1]), "Two completed batch cups can travel concurrently to distinct reserved destinations")
+		cups[0].visibility_changed.connect(observer)
+		transfers._advance_flights(bucket.config.output_travel_seconds)
+	check(detached[0] and not screen.is_inside_tree(), "Flight visibility observer synchronously detaches the retained screen")
+	cups[0].visibility_changed.disconnect(observer)
+	if not screen.is_inside_tree(): root.add_child(screen)
+	await frames(4)
+	for cup in cups:
+		check(not transfers.is_animating(cup) and not cup.returning_to_surface and cup.visible and cup.input_pickable,
+			"Callback detachment finalizes every started flight without a stale input guard")
+		check(tray.interior_surface.is_registered(cup) and cup.state == Cup.CupState.CLEAN,
+			"Callback detachment preserves each original clean cup and reserved destination")
+	check(screen.world_root.find_children("ReturningCleanCup*", "Sprite2D", true, false).is_empty(), "Interrupted flights leave no cosmetic cup ghosts after reentry")
+
+
+func flight_motion_and_zero_duration() -> void:
+	await fixture()
+	var cup: Cup = screen.get_cups()[0]
+	await deposit_dirty_fixture(cup)
+	await begin_wash_input()
+	bucket.advance_washing(bucket.config.wash_seconds)
+	var local_destination := cup.position
+	tray.position += Vector2(5.0, 2.0)
+	screen.world_root.scale *= 0.9
+	transfers._advance_flights(bucket.config.output_travel_seconds * 0.5)
+	var ghosts: Array[Node] = screen.world_root.find_children("ReturningCleanCup*", "Sprite2D", true, false)
+	check(ghosts.size() == 1 and transfers.is_animating(cup), "Moving tray and resized world retain one travelling cosmetic cup")
+	if ghosts.size() == 1:
+		var ghost := ghosts[0] as Sprite2D
+		check(ghost.global_position.is_finite(), "Resized moving-destination flight remains finite")
+	await capture("07-midflight-batch")
+	transfers._advance_flights(bucket.config.output_travel_seconds)
+	check(not transfers.is_animating(cup) and cup.position.is_equal_approx(local_destination)
+		and tray.interior_surface.is_registered(cup) and cup.is_visible_in_tree(),
+		"Flight ends at the same tray-local reservation after layout movement")
+	await fixture()
+	cup = screen.get_cups()[0]
+	bucket.config.output_travel_seconds = 0.0
+	await deposit_dirty_fixture(cup)
+	await begin_wash_input()
+	bucket.advance_washing(bucket.config.wash_seconds)
+	check(not transfers.is_animating(cup) and not cup.returning_to_surface and cup.visible and cup.input_pickable,
+		"Zero-duration output immediately reveals a playable cup with no transient guard")
+	check(tray.interior_surface.is_registered(cup) and not bucket.has_cup(cup), "Zero-duration output preserves destination-before-source custody")
+
+
+func flight_callback_frees_screen(at_start := false) -> void:
+	await fixture()
+	transfers.set_process(false)
+	var cups: Array[Cup] = screen.get_cups().slice(0, 1 if at_start else 2)
+	var destroyed := [false]
+	var before_finance := finance.get_snapshot()
+	var observer := func():
+		if not destroyed[0] and is_instance_valid(screen) and cups[0].visible != at_start:
+			destroyed[0] = true
+			screen.free()
+	# Isolate the committed destination/flight boundary from a bucket's own
+	# synchronous washing stack. Source custody is already retired here.
+	for cup in cups:
+		var handle := cup.get_node("PlacementHandle") as TablePlaceable
+		handle.surface.unregister_item(cup)
+	if at_start: cups[0].visibility_changed.connect(observer)
+	for cup in cups:
+		check(transfers.try_place_on_free_surface(cup, true, bucket_point(), 0.35),
+			"Flight reserves its destination even when a visibility observer destroys the scene")
+	if not at_start:
+		cups[0].visibility_changed.connect(observer)
+		transfers._process(0.35)
+	check(destroyed[0] and not is_instance_valid(screen) and not is_instance_valid(transfers),
+		"Immediate destruction at flight visibility boundary returns safely from active callbacks")
+	await frames()
+	check(finance.get_snapshot() == before_finance,
+		"Destroying presentation during output neither invents nor replays a payment")
+
+
 func full_surfaces_then_recover() -> void:
 	await fixture()
 	var actor := start_order(&"tea_cha_no_sugar")
@@ -348,7 +582,9 @@ func active_pickup_reentry() -> void:
 		"Re-entry restores unpaid customer-source custody without a phantom return")
 	if not await begin_return(order_id): return
 	if not await drop_bucket(): return
-	await wash_complete(cup)
+	var table_block := block_surface(table)
+	var tray_block := block_surface(tray.interior_surface)
+	await wash_complete(cup, true)
 	if not await pickup_clean(): return
 	var income_before := finance.get_snapshot()
 	root.remove_child(screen)
@@ -360,7 +596,9 @@ func active_pickup_reentry() -> void:
 		"Clean pickup re-entry restores the original cup to retrievable bucket custody")
 	check(finance.get_snapshot() == income_before, "Clean pickup re-entry does not pay again")
 	if not await pickup_clean(): return
+	table_block.free()
 	await drop_surface(table_cup_origin(), table)
+	tray_block.free()
 	check(cup.get_instance_id() == cup_id and screen.get_cups().has(cup), "After both interruptions the same cup is playable again")
 
 
@@ -372,8 +610,12 @@ func removed_bucket_during_pickup(immediate_cancel := false) -> void:
 	var order_id := await consume(actor, cup)
 	if not await begin_return(order_id): return
 	if not await drop_bucket(): return
-	await wash_complete(cup)
+	var table_block := block_surface(table)
+	var tray_block := block_surface(tray.interior_surface)
+	await wash_complete(cup, true)
 	if not await pickup_clean(): return
+	table_block.free()
+	tray_block.free()
 	var income_before := finance.get_snapshot()
 	bucket.queue_free()
 	if not immediate_cancel: await frames()
@@ -469,6 +711,14 @@ func run() -> void:
 	await wash_interruptions_and_cancellation()
 	await placement_modes()
 	await manual_return_to_both_surfaces()
+	await three_cup_batch()
+	await clean_output_waits_for_space()
+	await output_flight_reentry()
+	await flight_callback_detach()
+	await flight_callback_detach(true)
+	await flight_motion_and_zero_duration()
+	await flight_callback_frees_screen()
+	await flight_callback_frees_screen(true)
 	await full_surfaces_then_recover()
 	await active_pickup_reentry()
 	await removed_bucket_during_pickup()

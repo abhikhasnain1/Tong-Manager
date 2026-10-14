@@ -10,6 +10,7 @@ var _committing := false
 var _recovery: Node2D
 var _orphans: Array[Cup] = []
 var _retry := 0.0
+var _flights: Dictionary = {}
 
 
 func _enter_tree() -> void:
@@ -26,7 +27,11 @@ func _recover_interrupted() -> void:
 
 
 func _process(delta: float) -> void:
+	var self_ref: WeakRef = weakref(self)
 	_recover_interrupted()
+	if self_ref.get_ref() == null or not is_inside_tree(): return
+	_advance_flights(delta)
+	if self_ref.get_ref() == null or not is_inside_tree(): return
 	_retry -= delta
 	if _retry > 0.0 or not _live(screen): return
 	_retry = 0.4
@@ -204,22 +209,41 @@ func _place(cup: Cup, target: PlacementSurface) -> bool:
 	controller.reparent_preserving_transform(cup, target.get_placement_parent())
 	handle.adopt_surface(target)
 	cup.process_mode = Node.PROCESS_MODE_INHERIT
-	cup.input_pickable = true
-	cup.show()
+	cup.input_pickable = not cup.returning_to_surface
+	if not cup.returning_to_surface: cup.show()
 	screen.configure_cup(cup)
 	return true
 
 
-func try_place_on_free_surface(cup: Cup) -> bool:
+func try_place_on_free_surface(cup: Cup, prefer_tray := false, animate_from := Vector2.INF, travel_seconds := 0.35) -> bool:
 	if (not _live(cup) or not _live(screen) or not _live(controller) or _committing
-		or is_transferring(cup) or controller.current_drag_node == cup): return false
+		or is_transferring(cup) or is_animating(cup) or controller.current_drag_node == cup): return false
 	var handle := cup.get_node_or_null("PlacementHandle") as TablePlaceable
 	if handle == null or handle.get_footprints().is_empty(): return false
 	if _live(handle.surface) and handle.surface.is_registered(cup): return false
+	_committing = true
+	var animate := animate_from.is_finite() and is_finite(travel_seconds) and travel_seconds > 0.0
+	# Gate gameplay before destination configuration can publish any callbacks.
+	cup.returning_to_surface = animate
+	var self_ref: WeakRef = weakref(self)
+	var placed := _find_free_position(cup, handle, prefer_tray)
+	if self_ref.get_ref() == null: return placed
+	if placed and animate:
+		_start_flight(cup, animate_from, travel_seconds)
+	else:
+		cup.returning_to_surface = false
+	if self_ref.get_ref() == null: return placed
+	_committing = false
+	return placed
+
+
+func _find_free_position(cup: Cup, handle: TablePlaceable, prefer_tray: bool) -> bool:
 	var original := cup.global_transform
+	var surfaces: Array[PlacementSurface] = screen.get_placement_surfaces().duplicate()
+	if prefer_tray: surfaces.reverse()
 	# Search in actual free polygons. This is a return-position search only;
 	# manual placement remains continuous and never snaps to these samples.
-	for target: PlacementSurface in screen.get_placement_surfaces():
+	for target: PlacementSurface in surfaces:
 		if not _live(target) or not _live(target.get_placement_parent()): continue
 		for candidate in target.get_vacated_positions():
 			if _try_position(cup, handle, target, candidate): return true
@@ -247,6 +271,75 @@ func try_place_on_free_surface(cup: Cup) -> bool:
 					y += step
 	cup.global_transform = original
 	return false
+
+
+func is_animating(cup: Cup) -> bool:
+	return is_instance_valid(cup) and _flights.has(cup.get_instance_id())
+
+
+func _start_flight(cup: Cup, viewport_origin: Vector2, duration: float) -> void:
+	var world := screen.get_node_or_null("WorldRoot") as Node2D
+	var original := cup.get_node_or_null("Sprite2D") as Sprite2D
+	if world == null or original == null:
+		cup.returning_to_surface = false
+		cup.input_pickable = true
+		cup.show()
+		return
+	var ghost := Sprite2D.new()
+	ghost.name = "ReturningCleanCup"
+	ghost.texture = original.texture
+	ghost.centered = original.centered
+	ghost.offset = original.offset
+	ghost.z_index = 50
+	world.add_child(ghost)
+	ghost.global_transform = original.global_transform
+	var start := world.get_global_transform_with_canvas().affine_inverse() * viewport_origin
+	ghost.position = start
+	_flights[cup.get_instance_id()] = {"cup": weakref(cup), "ghost": ghost,
+		"start": start, "elapsed": 0.0, "duration": duration}
+	cup.input_pickable = false
+	cup.hide()
+
+
+func _advance_flights(delta: float) -> void:
+	if not is_finite(delta) or delta <= 0.0: return
+	var self_ref: WeakRef = weakref(self)
+	for identity in _flights.keys():
+		var flight: Dictionary = _flights.get(identity, {})
+		if flight.is_empty(): continue
+		var cup := (flight.cup as WeakRef).get_ref() as Cup
+		var ghost: Variant = flight.ghost
+		if not _live(cup) or not _live(ghost):
+			_finish_flight(identity)
+			if self_ref.get_ref() == null or not is_inside_tree(): return
+			continue
+		flight.elapsed = minf(float(flight.elapsed) + delta, float(flight.duration))
+		var fraction: float = flight.elapsed / flight.duration
+		var eased := fraction * fraction * (3.0 - 2.0 * fraction)
+		var world := ghost.get_parent() as Node2D
+		# Follow the reserved destination if its tray or the viewport moves.
+		var destination := world.to_local(cup.cup_sprite.global_position)
+		ghost.position = (flight.start as Vector2).lerp(destination, eased) + Vector2(0, -sin(PI * fraction) * 18.0)
+		if fraction >= 1.0:
+			_finish_flight(identity)
+			if self_ref.get_ref() == null or not is_inside_tree(): return
+
+
+func _finish_flight(identity: int) -> void:
+	var flight: Dictionary = _flights.get(identity, {})
+	if flight.is_empty(): return
+	_flights.erase(identity)
+	var cup := (flight.cup as WeakRef).get_ref() as Cup
+	if is_instance_valid(cup) and not cup.is_queued_for_deletion():
+		cup.returning_to_surface = false
+		cup.input_pickable = true
+		cup.show()
+	if is_instance_valid(flight.ghost): flight.ghost.queue_free()
+
+
+func _exit_tree() -> void:
+	# Cosmetic travel never leaves a retained cup hidden after scene detach.
+	for identity in _flights.keys(): _finish_flight(identity)
 
 
 func _try_position(cup: Cup, handle: TablePlaceable, target: PlacementSurface, base: Vector2) -> bool:

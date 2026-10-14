@@ -25,6 +25,18 @@ func deliver(cup: Cup, bucket: BucketStation, controller: InteractionController)
 	controller.release_drop(bucket.get_global_transform_with_canvas().origin)
 	return payload
 
+func block_surface(surface: PlacementSurface) -> Polygon2D:
+	var exclusions := surface.get_node_or_null("Exclusions") as Node2D
+	if exclusions == null:
+		exclusions = Node2D.new()
+		exclusions.name = "Exclusions"
+		surface.add_child(exclusions)
+	var blocker := Polygon2D.new()
+	blocker.polygon = surface.usable_polygon.duplicate()
+	exclusions.add_child(blocker)
+	blocker.hide()
+	return blocker
+
 func run() -> void:
 	var screen: Node2D = load("res://scenes/gameplay/tong/TongDayScreen.tscn").instantiate()
 	screen.customer_queue_auto_start = false
@@ -33,12 +45,14 @@ func run() -> void:
 	var bucket: BucketStation = screen.get_node("WorldRoot/ToolLayer/BucketStation")
 	var controller: InteractionController = screen.get_node("InteractionController")
 	var tray: TrayStation = screen.get_node("WorldRoot/ToolLayer/TrayStation")
+	var table: PlacementSurface = screen.table_surface
 	var cups: Array[Cup] = tray.get_cups()
 	var water_before: float = root.get_node("GameState").water_supply.remaining_ml
 	var stock_before: Dictionary = root.get_node("GameState").inventory.quantities
 	bucket.set_process(false)
 	bucket.config = bucket.config.duplicate() as BucketConfig
-	check(bucket.config.capacity == 6 and is_equal_approx(bucket.config.wash_seconds, 2.4), "Editable review defaults are six places and 2.4 seconds")
+	check(bucket.config.capacity == 6 and is_equal_approx(bucket.config.wash_seconds, 2.4)
+		and is_equal_approx(bucket.config.first_output_fraction, 0.2), "Editable defaults are six places, one 2.4-second batch and first output at 20 percent")
 	bucket.config.capacity = 2
 	bucket.cup_cleaned.connect(func(cup: Cup): cleaned_ids.append(cup.get_instance_id()))
 	check(bucket.get_snapshot().total == 0 and not bucket.begin_wash(), "Empty neutral bucket cannot wash")
@@ -65,10 +79,13 @@ func run() -> void:
 	check(bucket.get_snapshot().total == 2 and not bucket.has_cup(third), "Configured capacity rejects a third dirty cup")
 	check(third.get_parent() == third_parent and third.transform == third_origin and third.state == Cup.CupState.DIRTY, "Full bucket restores dirty cup without mutation")
 	check(controller.current_hint.contains("full"), "Full release reports actionable feedback")
+	var table_block := block_surface(table)
+	var tray_block := block_surface(tray.interior_surface)
 	check(bucket.begin_wash() and controller.action_owner == bucket, "Holding bucket acquires action ownership")
-	bucket.advance_washing(0.6)
+	check(bucket.get_snapshot().batch_total == 2 and bucket.get_snapshot().batch_remaining == 2, "Hold captures the existing dirty cup identities")
+	bucket.advance_washing(0.24)
 	var partial: float = bucket.get_snapshot().progress
-	check(is_equal_approx(partial, 0.25) and first.state == Cup.CupState.DIRTY, "Partial wash retains cup and tracks progress")
+	check(is_equal_approx(partial, 0.1) and first.state == Cup.CupState.DIRTY, "Shared batch progress advances before the first output threshold")
 	var release := InputEventMouseButton.new()
 	release.button_index = MOUSE_BUTTON_LEFT
 	release.pressed = false
@@ -113,8 +130,11 @@ func run() -> void:
 	first.state_changed.disconnect(interrupt_clean)
 	check(first.state == Cup.CupState.CLEAN and second.state == Cup.CupState.DIRTY, "Reentrant release at clean transition stops excess delta from washing the next cup")
 	check(not reentrant_pickup and cleaned_ids == [first_id], "Completion resolves once and refuses nested pickup")
+	check(is_equal_approx(bucket.get_snapshot().batch_elapsed, bucket.config.wash_seconds * bucket.config.first_output_fraction),
+		"Reentrant release stops the shared clock at the first completed threshold")
 	check(first.volume_ml == 0.0 and not first.has_contents() and first.assigned_order_id.is_empty(), "Washing clears old contents/history for reusable clean cup")
-	check(bucket.get_snapshot().total == 2 and bucket.get_snapshot().clean == 1, "Clean output still consumes capacity")
+	check(bucket.get_snapshot().total == 2 and bucket.get_snapshot().clean == 1, "Blocked clean output still consumes capacity")
+	check(not bucket.clean_pickup.visible and not bucket.clean_pickup.input_pickable, "Automatic output replaces the old player-facing pickup control")
 	deliver(third, bucket, controller)
 	check(not bucket.has_cup(third), "Clean output cannot silently make capacity available")
 	var pickup: Vector2 = bucket.clean_pickup.get_global_transform_with_canvas().origin
@@ -138,6 +158,7 @@ func run() -> void:
 	controller.release_drop(Vector2(-1000, -1000))
 	check(bucket.has_cup(first) and first.get_parent() == bucket.holder and not first.visible, "Invalid destination returns clean cup with no capacity loss")
 	check(bucket.begin_clean_pickup(pickup), "Clean pickup starts for free table placement")
+	table_block.free()
 	var desired: Vector2 = screen.get_node("WorldRoot").get_global_transform_with_canvas() * Vector2(860, 900)
 	var placement_pointer: Vector2 = pickup + desired - first.get_global_transform_with_canvas().origin
 	controller.update_drag(placement_pointer)
@@ -145,11 +166,21 @@ func run() -> void:
 	check(not bucket.has_cup(first) and first.is_visible_in_tree() and first.input_pickable, "Clean pickup commits to clear table only on valid release")
 	check(first.get_node("PlacementHandle").surface.is_registered(first) and first.state == Cup.CupState.CLEAN, "Placed clean cup has one live free-placement reservation")
 	check(bucket.get_snapshot().total == 1, "Successful clean retrieval frees exactly one bucket place")
+	table_block = block_surface(table)
 	deliver(third, bucket, controller)
 	check(bucket.has_cup(third) and bucket.get_snapshot().dirty == 2, "Freed capacity accepts next dirty cup")
-	check(bucket.begin_wash(), "Sequential wash starts for remaining two")
+	check(bucket.begin_wash(), "Paused captured batch resumes without including the later arrival")
 	bucket.advance_washing(bucket.config.wash_seconds * 2.0)
-	check(bucket.get_snapshot().clean == 2 and bucket.get_snapshot().dirty == 0 and not bucket.get_snapshot().washing, "One continuous hold washes cups sequentially with elapsed carry")
+	check(second.state == Cup.CupState.CLEAN and third.state == Cup.CupState.DIRTY and not bucket.get_snapshot().washing,
+		"Captured batch completes within its one duration and ignores excess delta for later arrivals")
+	check(bucket.get_snapshot().batch_total == 2 and bucket.get_snapshot().batch_remaining == 0,
+		"Later dirty arrivals do not rewrite the completed batch membership")
+	check(bucket.begin_wash() and bucket.get_snapshot().batch_total == 1, "New hold captures the later dirty cup as a single-cup batch")
+	bucket.advance_washing(bucket.config.wash_seconds - 0.001)
+	check(third.state == Cup.CupState.DIRTY, "A single-cup batch waits for 100 percent of its shared duration")
+	bucket.advance_washing(0.001)
+	check(bucket.get_snapshot().clean == 2 and bucket.get_snapshot().dirty == 0 and not bucket.get_snapshot().washing,
+		"Single-cup completion leaves blocked clean outputs queued without another wash")
 	check(cleaned_ids.size() == 3 and cleaned_ids.count(second.get_instance_id()) == 1 and cleaned_ids.count(third.get_instance_id()) == 1, "Every physical cup is cleaned exactly once")
 	check(root.get_node("GameState").water_supply.remaining_ml == water_before and root.get_node("GameState").inventory.quantities == stock_before, "All washes and pickups leave brewing water and ingredient stock unchanged")
 	var stale: WeakRef = weakref(third)
@@ -161,6 +192,8 @@ func run() -> void:
 	bucket._process(0.0)
 	check(not bucket.has_cup(second) and bucket.get_snapshot().total == 0,
 		"A cup moved out of custody without an active transfer cannot retain stale bucket capacity")
+	table_block.free()
+	tray_block.free()
 	bucket.hide()
 	check(not bucket.begin_clean_pickup(pickup) and not bucket.begin_wash(), "Hidden bucket cannot offer washing or clean pickup")
 	bucket.show()

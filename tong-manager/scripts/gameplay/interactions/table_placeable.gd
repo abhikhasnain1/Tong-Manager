@@ -81,6 +81,7 @@ func adopt_surface(target: PlacementSurface) -> bool:
 
 
 func begin_drag(viewport_position: Vector2) -> bool:
+	if item is Cup and (item as Cup).returning_to_surface: return false
 	if (not is_instance_valid(controller) or not is_instance_valid(surface)
 		or controller.current_mode != InteractionController.MODE_ORGANIZE
 		or not controller.can_start_world_action()

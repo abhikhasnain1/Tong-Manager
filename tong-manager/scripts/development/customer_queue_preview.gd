@@ -94,7 +94,7 @@ func _build_controls() -> void:
 	event_label = _label(rows, "", 12)
 	event_label.custom_minimum_size = Vector2(206, 48)
 	event_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_label(rows, "Use: serve a cup or snack.\nAfter drinking, collect the dirty cup.\nDrop it in the bucket; hold to wash.\nDrag the clean cup to table or tray.\nKhata stays open while time moves.\nRestart preserves supplies and cups.", 11)
+	_label(rows, "Use: serve a cup or snack.\nCollect dirty cups into the bucket.\nHold to wash the group; release pauses.\nClean cups return to tray, then table.\nNo space? Clean cups wait and retry.\nRestart preserves supplies and cups.", 11)
 	if show_finance_review:
 		finance_label = _label(rows, "", 12)
 		finance_label.custom_minimum_size.x = 206

@@ -143,4 +143,4 @@ ledger; see [Automatic payment](payments.md). The isolated order-data preview
 still never changes cash. Day-end feedback (#73), the Khata Finance page (#74),
 review aggregation and preference dialogue remain separate. Accepted cup servings
 now pay after dirty return; snacks pay on acceptance. See [Cup reuse](cup-reuse.md)
-for collection, washing and manual pickup.
+for collection, batch washing and progressive automatic return to tray/table space.
