@@ -48,7 +48,11 @@ position = Vector2(-118, -29)
 [node name="GripAnchor" type="Marker2D" parent="."]
 position = Vector2(20, -154)
 
+[node name="StatusBadgeAnchor" type="Marker2D" parent="."]
+position = Vector2(20, -185)
+
 [node name="Status" type="Label" parent="."]
+visible = false
 offset_left = -80.0
 offset_top = -198.0
 offset_right = 215.0
@@ -57,6 +61,5 @@ mouse_filter = 2
 theme_override_colors/font_outline_color = Color(0.08, 0.08, 0.1, 1)
 theme_override_constants/outline_size = 5
 theme_override_font_sizes/font_size = 18
-text = "Empty · 0 ml"
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]

@@ -32,6 +32,7 @@
 [ext_resource type="Script" path="res://scripts/gameplay/interactions/table_placeable.gd" id="32_placeable"]
 [ext_resource type="PackedScene" path="res://scenes/ui/khata/KhataModal.tscn" id="33_khata_modal"]
 [ext_resource type="PackedScene" path="res://scenes/ui/khata/KhataPeek.tscn" id="34_khata_peek"]
+[ext_resource type="Script" path="res://scripts/ui/status/object_status_badge_layer.gd" id="35_status_badges"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_khata"]
 size = Vector2(117, 360)
@@ -295,6 +296,16 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("21_hud")
+
+[node name="StatusBadges" type="Control" parent="HUDLayer/RootUI"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("35_status_badges")
 
 [node name="TopHud" type="HBoxContainer" parent="HUDLayer/RootUI" unique_id=711186271]
 layout_mode = 0

@@ -240,11 +240,23 @@ func _configure_in_screen() -> void:
 			return
 		ancestor = ancestor.get_parent()
 
-func _update_volume_marker(amount: float) -> void:
+func is_status_hovered() -> bool:
+	if not _hovered:
+		return false
+	if not is_instance_valid(controller):
+		return true
+	if controller.is_world_input_blocked() or controller.is_pointer_over_ui_at(get_viewport().get_mouse_position()):
+		return false
+	var handle := get_node_or_null("PlacementHandle") as TablePlaceable
+	return handle != null and handle._is_frontmost_at(get_viewport().get_mouse_position())
+
+
+func _update_volume_marker(_amount: float) -> void:
 	if not is_node_ready():
 		return
-	volume_marker.visible = amount > 0.0
-	volume_marker.text = "%dml %d°C" % [roundi(amount), roundi(temperature)]
+	# Live presentation belongs to the screen-space status layer.
+	volume_marker.hide()
+	volume_marker.text = ""
 
 
 func set_state(next_state: CupState) -> bool:

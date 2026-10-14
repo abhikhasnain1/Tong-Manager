@@ -377,10 +377,12 @@ func _draw() -> void:
 func _update_status() -> void:
 	if not is_node_ready():
 		return
-	var state_text: String = ["Empty", "Water", "Heating", "Boiling", "Steeping", "Ready", "Oversteeped"][state]
-	status.text = tr(state_text) + " · %d ml" % roundi(volume_ml)
-	if volume_ml > 0.0:
-		status.text += " · %d°C" % roundi(temperature)
+	status.hide()
+	status.text = ""
+
+func is_status_hovered() -> bool:
+	return _hovered and (not is_instance_valid(controller)
+		or (not controller.is_world_input_blocked() and not controller.is_pointer_over_ui_at(get_viewport().get_mouse_position())))
 
 func _changed() -> void:
 	_update_status()
