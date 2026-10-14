@@ -11,6 +11,7 @@ signal queue_completed(summary: Dictionary)
 @export var actor_scale := Vector2(1.4, 1.4)
 @export var reduced_motion := false
 @export_range(0.0, 5.0, 0.05) var served_reaction_seconds := 0.9
+@export_range(0.0, 5.0, 0.05) var refused_reaction_seconds := 0.25
 
 var _slots: Array[Marker2D] = []
 var _active_parent: Node2D
@@ -159,10 +160,13 @@ func _advance(delta: float, automatic: bool) -> void:
 		var actor: Customer = entry.actor
 		if actor.state == Customer.State.LEAVING and entry.phase != &"timeout_reaction": entry.phase = &"leaving"
 		if entry.phase == &"waiting":
-			if entry.order.fulfilled:
-				entry.reason = &"fulfilled"
-				entry.phase = &"served_reaction"
-				entry.reaction_remaining = maxf(0.0, served_reaction_seconds) if is_finite(served_reaction_seconds) else 0.9
+			_consume_recorded_responses(entry, automatic)
+			if entry.order.closed:
+				var accepted: bool = entry.order.fulfilled
+				entry.reason = &"fulfilled" if accepted else &"refused"
+				entry.phase = &"served_reaction" if accepted else &"refused_reaction"
+				var duration := served_reaction_seconds if accepted else refused_reaction_seconds
+				entry.reaction_remaining = maxf(0.0, duration) if is_finite(duration) else (0.9 if accepted else 0.25)
 				if entry.reaction_remaining <= 0.0: _begin_departure(entry)
 				continue
 			# Arrival can finish before this node processes the same frame. That
@@ -177,19 +181,30 @@ func _advance(delta: float, automatic: bool) -> void:
 					if _entry_current(key, actor, epoch): _remove_entry(key, &"removed", epoch)
 					continue
 				if not _entry_current(key, actor, epoch): continue
-				if entry.order.fulfilled:
-					entry.reason = &"fulfilled"
+				if entry.order.closed:
+					entry.reason = &"fulfilled" if entry.order.fulfilled else &"refused"
 					_begin_departure(entry)
 					continue
 				customer_timed_out.emit(actor, _entry_snapshot(entry))
 				if _entry_current(key, actor, epoch) and _reaction_seconds <= 0.0: _begin_departure(entry)
-		elif entry.phase in [&"timeout_reaction", &"served_reaction"]:
+		elif entry.phase in [&"timeout_reaction", &"served_reaction", &"refused_reaction"]:
 			entry.reaction_remaining = maxf(0.0, entry.reaction_remaining - delta)
 			if entry.reaction_remaining <= 0.0: _begin_departure(entry)
 	if epoch == _generation and _running:
 		_spawn_due(epoch)
 		if epoch == _generation: _check_completed()
 	_advancing = false
+
+
+func _consume_recorded_responses(entry: Dictionary, automatic: bool) -> void:
+	# Consume authoritative attempts, not optional presentation callbacks. A
+	# replayed refusal cannot repeatedly reset the same visit's patience.
+	for result: Dictionary in entry.order.get_results():
+		if entry.handled_responses.has(result.handoff_id): continue
+		entry.handled_responses[result.handoff_id] = true
+		if result.get("response") == &"refuse_retry" and result.get("remake_patience") == &"reset":
+			entry.patience_remaining = entry.patience_seconds
+			if automatic: entry.waiting_frame = Engine.get_process_frames()
 
 
 func get_snapshot() -> Dictionary:
@@ -232,7 +247,7 @@ func _spawn_due(epoch: int) -> void:
 		_errors.append("Customer scene changed to an incompatible root")
 		stop()
 		return
-	var order := OrderState.create(source.order_id, source.customer_id, source.request, _elapsed)
+	var order := OrderState.create(source.order_id, source.customer_id, source.request, _elapsed, source.service_policy)
 	if order == null:
 		actor.free()
 		_errors.append("Compiled order is invalid")
@@ -241,7 +256,7 @@ func _spawn_due(epoch: int) -> void:
 	var entry := source.duplicate(true)
 	entry.merge({"actor": actor, "order": order, "slot_index": slot_index, "phase": &"arriving",
 		"spawned_at": _elapsed, "patience_remaining": source.patience_seconds,
-		"reaction_remaining": 0.0, "arrival_started": false, "waiting_frame": -1, "reason": &""})
+		"reaction_remaining": 0.0, "arrival_started": false, "waiting_frame": -1, "reason": &"", "handled_responses": {}})
 	_active[entry.visit_id] = entry
 	_next += 1
 	_last_spawn = _elapsed
@@ -271,7 +286,7 @@ func _on_actor_state(state: Customer.State, key: StringName, actor: Variant, epo
 	var entry: Dictionary = _active[key]
 	if state == Customer.State.LEAVING:
 		if entry.phase != &"timeout_reaction": entry.phase = &"leaving"
-	elif entry.arrival_started and entry.phase == &"arriving" and state in [Customer.State.WAITING, Customer.State.ORDERING, Customer.State.SERVED]:
+	elif entry.arrival_started and entry.phase == &"arriving" and state in [Customer.State.WAITING, Customer.State.ORDERING, Customer.State.SERVED, Customer.State.REFUSED]:
 		entry.phase = &"waiting"
 		entry.waiting_frame = Engine.get_process_frames()
 
@@ -320,8 +335,12 @@ func _entry_snapshot(entry: Dictionary) -> Dictionary:
 	result.erase("profile")
 	result.erase("arrival_started")
 	result.erase("waiting_frame")
+	result.erase("handled_responses")
 	result["fulfilled"] = entry.order.fulfilled
+	result["closed"] = entry.order.closed
 	result["service_result"] = entry.order.get_accepted_result()
+	result["terminal_result"] = entry.order.get_terminal_result()
+	result["service_attempts"] = entry.order.get_results()
 	return result
 
 
@@ -378,4 +397,6 @@ static func _profile_from_snapshot(data: Dictionary) -> CustomerDef:
 	profile.sprite_texture = data.sprite_texture
 	profile.patience_seconds = data.patience_seconds
 	profile.dialogue_profile = data.dialogue_profile
+	profile.unhappy_response = data.unhappy_response
+	profile.remake_patience = data.remake_patience
 	return profile

@@ -1,7 +1,7 @@
 class_name ServiceEvaluation
 extends RefCounted
-## Pure handoff assessment. Recipe/quality differences become review evidence,
-## never a reason to retain a physically valid offered drink or ready piece.
+## Pure handoff assessment. Recipe/quality differences become factual evidence;
+## the order's saved customer policy separately decides acceptance or refusal.
 
 const AMOUNT_EPSILON := 0.000001
 const BREW_STATES: Array[StringName] = [&"water", &"underbrewed", &"ready", &"oversteeped"]
@@ -19,8 +19,8 @@ static func evaluate(order: OrderState, offered: Dictionary) -> Dictionary:
 	result.customer_id = order.customer_id
 	result.request_id = order.request_id
 	result.requested_kind = order.request_kind
-	if order.fulfilled:
-		result.failure_reason = &"order_fulfilled"
+	if order.closed:
+		result.failure_reason = &"order_fulfilled" if order.fulfilled else &"order_closed"
 		return result
 	var normalized := _normalize_offer(offered)
 	result.failure_reason = normalized.failure_reason

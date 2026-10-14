@@ -7,3 +7,5 @@ extends Resource
 @export var customer: CustomerDef
 @export var request: OrderRequestDef
 @export_range(0.0, 600.0, 0.1, "or_greater") var patience_override := 0.0
+@export_enum("Inherit:-1", "Accept:0", "Refuse and leave:1", "Refuse and retry:2") var unhappy_response_override := -1
+@export_enum("Inherit:-1", "Continue:0", "Reset:1") var remake_patience_override := -1

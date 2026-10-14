@@ -11,6 +11,7 @@ const CROP_SAFE_RECT := Rect2(96.0, 0.0, 1728.0, 1080.0)
 @export var customer_queue_enabled := true
 @export var customer_queue_auto_start := true
 @export var customer_queue_seed := 0
+@export var payment_feedback_config: PaymentFeedbackConfig = preload("res://data/balance/payment_feedback.tres")
 
 @onready var world_root: Node2D = %WorldRoot
 @onready var composition_guides: Node2D = %CompositionGuides
@@ -25,6 +26,8 @@ var _export_targets: Array[DropZone] = []
 var customer_queue: CustomerQueueManager
 var customer_order_overlay: CustomerOrderOverlay
 var customer_service: CustomerService
+var customer_payments: CustomerPayments
+var payment_feedback: PaymentFeedback
 
 
 func _ready() -> void:
@@ -43,6 +46,8 @@ func _ready() -> void:
 	khata_modal = $HUDLayer/RootUI/ModalStack/KhataModal
 	khata_modal.configure(interaction)
 	var game_state := get_node("/root/GameState")
+	if game_state.ensure_finance(day_config):
+		hud.bind_finance(game_state.finance)
 	if game_state.ensure_inventory(day_config):
 		set_portion_provider(game_state.inventory)
 	_sync_inventory_targets()
@@ -56,10 +61,36 @@ func _ready() -> void:
 		add_child(customer_service)
 		customer_service.targets_changed.connect(_sync_inventory_targets)
 		customer_service.configure(self, interaction, customer_queue)
+		_configure_payments(game_state, hud)
 		_sync_inventory_targets()
 	customer_order_overlay = $HUDLayer/RootUI/CustomerOrderOverlay
 	if customer_queue_enabled:
 		customer_order_overlay.bind_queue(customer_queue, get_node("/root/Catalog"))
+
+
+func _configure_payments(game_state: Node, hud: TongHud) -> void:
+	if not game_state.finance.initialized: return
+	customer_payments = game_state.get_node_or_null("CustomerPayments") as CustomerPayments
+	if customer_payments == null:
+		customer_payments = CustomerPayments.new()
+		customer_payments.name = "CustomerPayments"
+		game_state.add_child(customer_payments)
+	customer_payments.configure(game_state.finance)
+	customer_service.payments = customer_payments
+	payment_feedback = PaymentFeedback.new()
+	payment_feedback.name = "PaymentFeedback"
+	hud.add_child(payment_feedback)
+	payment_feedback.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	payment_feedback.configure(payment_feedback_config)
+	customer_payments.payment_recorded.connect(_on_payment_recorded)
+
+
+func _on_payment_recorded(transaction: Dictionary, screen_id: int, origin: Vector2) -> void:
+	if (screen_id != get_instance_id() or not is_inside_tree() or is_queued_for_deletion()
+		or not is_instance_valid(payment_feedback) or not is_visible_in_tree()): return
+	var hud := $HUDLayer/RootUI as TongHud
+	var destination := hud.cash_label.get_global_transform_with_canvas() * Vector2(hud.cash_label.size.x * 0.5, hud.cash_label.size.y + 18.0)
+	payment_feedback.show_payment(transaction, origin, destination)
 
 
 func _configure_customer_queue() -> void:

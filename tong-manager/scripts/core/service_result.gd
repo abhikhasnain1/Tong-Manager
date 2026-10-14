@@ -28,6 +28,7 @@ static func create(
 	result._data = {
 		"handoff_id": handoff_id, "order_id": order_id, "customer_id": customer_id,
 		"request_kind": request_kind, "accepted": accepted, "fulfilled": accepted,
+		"response": &"accept" if accepted else &"refuse_retry", "remake_patience": &"continue",
 		"cold_at_handoff": cold_at_handoff, "unhappy": cold_review,
 		"bad_review": cold_review, "reason": reason,
 		"served_kind": (&"cup" if request_kind == &"tea" else &"ready_item") if accepted else &"",
@@ -46,11 +47,15 @@ static func create_evaluated(handoff_id: StringName, order: OrderState, evaluati
 	var checked := ServiceEvaluation.evaluate(order, evaluation.served)
 	if not checked.can_handoff: return null
 	var reasons: Array = checked.reasons
+	var policy := order.get_service_policy()
+	var response: StringName = policy.unhappy_response if checked.bad_review else &"accept"
+	var accepted := response == &"accept"
 	var primary: StringName = reasons[0] if not reasons.is_empty() else (&"tea_served" if order.request_kind == &"tea" else &"ready_item_served")
 	var result := ServiceResult.new()
 	result._data = {
 		"handoff_id": handoff_id, "order_id": order.order_id, "customer_id": order.customer_id,
-		"request_kind": order.request_kind, "accepted": true, "fulfilled": true,
+		"request_kind": order.request_kind, "accepted": accepted, "fulfilled": accepted,
+		"response": response, "remake_patience": policy.remake_patience,
 		"cold_at_handoff": checked.cold_at_handoff, "unhappy": checked.bad_review,
 		"bad_review": checked.bad_review, "reason": primary,
 		"served_kind": checked.served_kind, "reasons": reasons.duplicate(),

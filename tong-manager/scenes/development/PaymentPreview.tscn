@@ -1,0 +1,12 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/development/customer_queue_preview.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/gameplay/tong/TongDayScreen.tscn" id="2"]
+
+[node name="PaymentPreview" type="Node"]
+script = ExtResource("1")
+initial_day = 4
+show_finance_review = true
+
+[node name="TongDayScreen" parent="." instance=ExtResource("2")]
+customer_queue_auto_start = false

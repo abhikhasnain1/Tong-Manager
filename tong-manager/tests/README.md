@@ -1,11 +1,43 @@
 # Hanging sources, portions, placement and brewing verification
 
+## Automatic payment
+
+Open `scenes/development/PaymentPreview.tscn` and press **F6**. It starts on
+**Payment · unhappy responses** (`payment_response_review.tres`, picker index 4).
+The first left tea customer retries with remaining patience; the second right
+banana customer leaves unpaid. Later visits demonstrate Accept and Retry/Reset.
+Serve wrong/cold cups or snacks, verify both refusal cup returns preserve filled
+contents/identity and previous placement, then try a correct remake. Refused
+untouched snacks release reservations without consuming stock. Only accepted
+fulfillment pays the saved quote and emits the coin cue with one independently pitched
+coin sound per launch. Empty/cancelled/timeout attempts pay nothing. The labelled panel
+reads the same ledger as the HUD; full finance/day-end UI remains later.
+See [Automatic payment](../docs/payments.md) for Inspector steps and reset boundaries.
+
+Run `customer_response_test.gd`, `customer_refusal_handoff_test.gd`,
+`finance_state_test.gd`, `payment_feedback_test.gd` and
+`customer_payment_test.gd` headlessly after import. The response suite checks
+profile/arrival inheritance, copied policy, terminal versus retry history and
+CONTINUE/RESET patience. Refusal integration checks real cup/snack gestures,
+unchanged return/stock, both pantry views, repeated attempts, customer removal
+and remake timeout without payment. Run `customer_refusal_handoff_test.gd` and
+`customer_payment_test.gd` natively at
+1920x1080, 1600x900, 1366x768 and 1280x800, with a capture directory after `--`.
+The payment integration suite retains Accept-profile cases and checks correct/bad
+accepted servings, captured quotes, pantry views, rejected/cancelled service, duplicate
+receipts, scene retirement/recreation, explicit reset and ledger replacement.
+The feedback suite checks per-coin launch/sound cadence, independently pitched
+overlapping voices, mute, reduced motion and cancellation. Run its native checks
+at 1280x800 and 1920x1080. Native processes run serially so pointer input remains
+deterministic. These instructions do not claim a new test run or user acceptance.
+
 ## Real customer handoff
 
 Open `scenes/development/CustomerHandoffPreview.tscn` and press **F6**.
 This uses real cups, stock reservations and the production queue, with longer
-patience for trying all six orders. Wrong orders and poor brews are accepted
-with bad-review reasons. See [Customer serving](../docs/customer-service.md)
+patience for trying all six orders. Its default shared profiles use Accept, so
+wrong orders and poor brews are accepted with bad-review reasons in this example.
+Use PaymentPreview for the alternate response policies. See [Customer serving](../docs/customer-service.md)
 for the review steps, tuning and the scene-reload boundary.
 
 Run `service_evaluation_test.gd`, `brewing_provenance_test.gd`,
@@ -14,8 +46,9 @@ Run `customer_handoff_test.gd` with a rendered window at 1920x1080, 1600x900,
 1366x768 and 1280x800, passing a capture directory after `--`. It uses actual
 mouse pickup/release for cups, hanging snacks and both pantry views, and checks
 conservation, accepted mistakes, retained cups, stale targets and callback races.
-Run rendered processes sequentially. Money and cup return are not implemented
-by this slice.
+Run rendered processes sequentially. Automatic payment has its own checks above;
+immediate refusal return is covered above, while delayed dirty-cup return/washing
+remains separate.
 
 ## Customer scene
 
@@ -108,7 +141,8 @@ the separate measured-water authority, including invalid and reentrant resets.
 
 These are stock and adapter checks. Ingredient destinations and doses are
 covered by the shared command tests below; real customer handoff is covered above.
-Payments and persistence remain separate work. `BrewingPreview.tscn` keeps its separate
+Payment integration has its own checks above; persistence remains separate work.
+`BrewingPreview.tscn` keeps its separate
 finite development stock fixture.
 
 For the visible inventory review, open
@@ -478,5 +512,5 @@ data-derived presentation and tuning; the integration suite uses live queue
 orders, real mouse/notebook input, replacement/fulfillment/timeout/removal,
 restart/re-entry, viewport transforms and unchanged stock/water/cups/cash.
 Its accepted/rejected results are explicitly supplied fixtures, not tests of the
-production handoff or future payment rules. Actual scene review is still needed
+production handoff or connected payment rules. Actual scene review is still needed
 before merge.

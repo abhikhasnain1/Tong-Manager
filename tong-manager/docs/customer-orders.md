@@ -36,14 +36,27 @@ In the FileSystem dock, open `data/customers/customer_a.tres` or
   while translations are absent.
 - **Sprite Texture**: optional existing portrait artwork.
 - **Patience Seconds**: a positive duration; 60 seconds is a review default,
-  not a final balance decision. A later queue system will advance this timer.
+  not a final balance decision. The live queue starts it after arrival.
 - **Dialogue Profile**: optional reference for a future dialogue consumer.
 - **Order Requests**: the requests this customer is allowed to make.
+- **Unhappy Response**: `ACCEPT`, `REFUSE_LEAVE` or `REFUSE_RETRY`. A correct
+  delivery always accepts. For a bad-quality/wrong delivery these choices mean
+  pay normally, leave unpaid, or wait for a remake unpaid, respectively.
+- **Remake Patience**: `CONTINUE` keeps time remaining; `RESET` restores the
+  visit's full allowance after a new retry refusal. Defaults are Accept and Continue.
 
 To restrict a customer to tea, remove the banana/biscuit entries from that
 customer's **Order Requests** array. Removing an array entry does not delete
 the shared request file or remove it from another customer. Keep at least one
 valid request. Save and rerun F6 to see the edited profile.
+
+To override only one authored visit, open its DayConfig and expand **Customer
+Schedule → Arrivals → entry**. Set **Unhappy Response Override** and/or
+**Remake Patience Override**; **Inherit (-1)** uses the profile. **Patience
+Override** separately changes the allowance in seconds (zero inherits). These
+settings are copied for the visit, not randomly selected. Stop and rerun after
+saved resource edits. Khata never pauses patience. See [Customer days](customer-days.md)
+and [Automatic payment](payments.md) for the live review and examples.
 
 ## Author an order request
 
@@ -84,17 +97,17 @@ consumer support before they can become playable rules.
 
 `Catalog.create_order(order_id, customer_id, request_id, created_time)` validates
 the selected customer's pool and returns an `OrderState`, or `null` on invalid
-input. The future queue owner must supply unique order IDs and retain the
+input. The queue owner supplies unique order IDs and retains the
 authoritative state. Catalog is a definition registry, not an active-order
 registry or random order selector.
 
-The order copies request identity, ingredient requirements, price and serving
-metadata when created. Later definition edits affect new orders; they do not
+The order copies request identity, ingredient requirements, price, serving
+metadata and the resolved response/patience policy when created. Later definition edits affect new orders; they do not
 rewrite existing ones. Returned dictionaries and nested arrays are copies.
 Textures remain shared artwork resources. The derived `order_recipe_ids`
 property is for tea-only readers; `order_requests` is the editable authority.
 
-`ServiceResult.create(...)` records an already-evaluated accepted/rejected
+The isolated-fixture `ServiceResult.create(...)` records an already-evaluated accepted/rejected
 decision and the tea's cold condition at handoff. It does **not** inspect a cup
 or decide whether ingredients match. Accepted cold tea is fulfilled and records
 `unhappy`, `bad_review` and `cold_tea`. Rejection records a reason without
@@ -103,20 +116,30 @@ do not inherit the cold-tea consequence. No numerical rating or price penalty
 is implied.
 
 `OrderState.record_result(result)` requires matching customer/order/kind
-identity and a new handoff ID. It records a rejected attempt without fulfilling
-the order, allowing a later corrected attempt with a fresh handoff ID. Duplicate
-or conflicting IDs are ignored. Once accepted, all further results are ignored;
-accepted history cannot be overwritten. The same handoff must reuse its stable
-ID when retried. These guarantees apply within the retained authoritative
+identity and a new handoff ID. Refuse Retry records an attempt without fulfilling
+or closing the order; a new delivery gets a fresh handoff ID under that same
+order. Refuse Leave closes the order without fulfillment; acceptance closes and
+fulfills it. `get_results()` preserves all attempt facts, while
+`get_terminal_result()` distinguishes accepted completion from leaving unpaid.
+Duplicate/conflicting IDs and further results after closure are ignored. Retrying
+the same command must reuse its stable ID rather than invent another attempt.
+These guarantees apply within the retained authoritative
 `OrderState`; recreating an order with the same ID is not a persistence or
 cross-process deduplication mechanism.
 
 Customer visuals, queue/patience, order bubbles and real serving now consume
 these snapshots. Production serving uses `ServiceEvaluation` and
 `ServiceResult.create_evaluated(...)`: any structurally valid non-empty cup or
-ready snack fulfils the order, while mismatch and brew quality become recorded
-review reasons. See [Customer serving](customer-service.md). The accepted/rejected
+ready snack can be offered. Mismatch and brew quality become recorded reasons;
+the captured unhappy response selects Accept, Refuse Leave or Refuse Retry.
+Refusal retains bad-review facts for that attempt without deciding an aggregate
+score or grouped review. Both refusals return the original filled cup unchanged;
+an untouched snack releases its reserved unit without consumption. Payment only
+follows accepted fulfillment. See [Customer serving](customer-service.md). The accepted/rejected
 constructor above remains available to isolated component fixtures.
 
-Payments (#68), day-end feedback (#73), review aggregation and preference dialogue
-remain separate. Bucket and dirty-cup return remain on hold.
+Automatic payment consumes the committed service receipt through the shared run
+ledger; see [Automatic payment](payments.md). The isolated order-data preview
+still never changes cash. Day-end feedback (#73), the Khata Finance page (#74),
+review aggregation and preference dialogue remain separate. Bucket and dirty-cup
+return remain on hold.

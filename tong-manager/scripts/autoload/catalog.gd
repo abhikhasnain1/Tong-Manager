@@ -106,7 +106,7 @@ func create_order(order_id: StringName, customer_id: StringName, request_id: Str
 	if customer == null or customer.id != customer_id or not customer.validate(self).is_empty(): return null
 	var request := customer.get_request(request_id)
 	if request == null: return null
-	return OrderState.create(order_id, customer_id, request.snapshot(self), created_time)
+	return OrderState.create(order_id, customer_id, request.snapshot(self), created_time, customer.get_service_policy())
 
 
 func get_tool_def(id: StringName) -> Resource:
