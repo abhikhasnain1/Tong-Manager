@@ -39,6 +39,24 @@ func get_item(id: StringName) -> Resource:
 	return _get_resource(items, id, "item")
 
 
+func get_portion_item(id: StringName) -> ItemDef:
+	var item := items.get(id) as ItemDef
+	return item if item != null and item.supports_portions() else null
+
+
+func get_pantry_items() -> Array[ItemDef]:
+	var entries: Array[ItemDef] = []
+	for id: StringName in items:
+		var item := get_portion_item(id)
+		if item != null and item.pantry_enabled:
+			entries.append(item)
+	entries.sort_custom(func(first: ItemDef, second: ItemDef) -> bool:
+		if first.pantry_order != second.pantry_order:
+			return first.pantry_order < second.pantry_order
+		return String(first.id) < String(second.id))
+	return entries
+
+
 func get_recipe(id: StringName) -> Resource:
 	return _get_resource(recipes, id, "recipe")
 

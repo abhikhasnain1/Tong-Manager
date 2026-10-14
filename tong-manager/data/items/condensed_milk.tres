@@ -2,9 +2,18 @@
 
 [ext_resource type="Script" uid="uid://davlrsy31k3cs" path="res://scripts/data/item_def.gd" id="1_item_def"]
 
+[ext_resource type="Texture2D" path="res://assets/art/icons/condensed_milk_can_ready_provisional.png" id="2_icon"]
+
 [resource]
+
 script = ExtResource("1_item_def")
 id = &"condensed_milk"
+pantry_enabled = true
+pantry_order = 20
+portion_label = "Milk"
+portion_visual = "auto"
+portion_color = Color(0.960784, 0.882353, 0.658824, 1)
+icon = ExtResource("2_icon")
 display_name_key = "item.condensed_milk.name"
 category = &"cup_relish"
 unit = &"spoonful"

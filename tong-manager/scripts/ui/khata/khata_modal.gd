@@ -7,7 +7,6 @@ signal page_selected(index: int)
 
 const ShellPage := preload("res://scripts/ui/khata/khata_shell_page.gd")
 const InventoryPage := preload("res://scripts/ui/khata/khata_inventory_page.gd")
-const PORTION_UNITS := {&"black_tea": &"teabag", &"sugar": &"spoonful", &"condensed_milk": &"spoonful", &"banana": &"piece", &"biscuits": &"piece"}
 const PAGE_NAMES := ["InventoryPage", "RecipesPage", "FinancePage", "QuestsPage"]
 const TAB_NAMES := ["InventoryTab", "RecipesTab", "FinanceTab", "QuestsTab"]
 
@@ -273,7 +272,10 @@ func _can_extract_inventory() -> bool:
 
 
 func begin_inventory_export(item_id: StringName, point: Vector2) -> bool:
-	if not _can_extract_inventory() or not point.is_finite() or not PORTION_UNITS.has(item_id) or inventory == null:
+	if not _can_extract_inventory() or not point.is_finite() or inventory == null or not is_instance_valid(inventory_page):
+		return false
+	var item := get_node("/root/Catalog").get_portion_item(item_id) as ItemDef
+	if item == null or not item.pantry_enabled or not inventory_page.item_rect(item_id).has_area():
 		return false
 	var source := get_node_or_null("ExportSource") as Node2D
 	if not is_instance_valid(source) or not source.is_inside_tree() or source.is_queued_for_deletion():
@@ -284,7 +286,7 @@ func begin_inventory_export(item_id: StringName, point: Vector2) -> bool:
 	var provider := inventory
 	var revision := _inventory_revision
 	var started_in_full := _active
-	var portion := IngredientPortion.new(item_id, PORTION_UNITS[item_id], source, provider)
+	var portion := IngredientPortion.new(item_id, item.unit, source, provider)
 	var self_ref: WeakRef = weakref(self)
 	_reserving_inventory = true
 	portion.token = provider.reserve(item_id, portion.unit, 1, portion.source_id)
@@ -294,7 +296,8 @@ func begin_inventory_export(item_id: StringName, point: Vector2) -> bool:
 		return false
 	_reserving_inventory = false
 	if (inventory != provider or revision != _inventory_revision or started_in_full != _active
-		or not portion.is_available() or not _can_extract_inventory()):
+		or not portion.is_available() or not _can_extract_inventory()
+		or not inventory_page.item_rect(item_id).has_area()):
 		portion.cancel()
 		return false
 	var visual := IngredientPortionVisual.new(item_id, portion.unit)
@@ -320,6 +323,13 @@ func inventory_item_screen_rect(item_id: StringName) -> Rect2:
 	var rect: Rect2 = inventory_page.item_rect(item_id)
 	if not rect.has_area():
 		return Rect2()
+	return book.get_global_transform_with_canvas() * Rect2(book._book_origin() + rect.position, rect.size)
+
+
+func inventory_navigation_screen_rect(direction: int) -> Rect2:
+	if not is_instance_valid(inventory_page): return Rect2()
+	var rect: Rect2 = inventory_page.navigation_rect(direction)
+	if not rect.has_area(): return Rect2()
 	return book.get_global_transform_with_canvas() * Rect2(book._book_origin() + rect.position, rect.size)
 
 
@@ -639,6 +649,14 @@ func _inventory_item_at(point: Vector2) -> StringName:
 func _handle_inventory_input(event: InputEvent) -> bool:
 	if not event is InputEventMouse:
 		return false
+	if _can_extract_inventory() and is_instance_valid(inventory_page):
+		var local_point: Vector2 = book.get_global_transform_with_canvas().affine_inverse() * event.position - book._book_origin()
+		var direction: int = inventory_page.navigation_at(local_point)
+		if direction != 0:
+			if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+				if inventory_page.change_item_page(direction):
+					_inventory_revision += 1
+			return true
 	var item := _inventory_item_at(event.position)
 	if item.is_empty():
 		return false
@@ -656,7 +674,7 @@ func _update_inventory_hover() -> void:
 	if _controller_is_live() and not controller.is_dragging() and not controller.has_active_action():
 		if not item.is_empty():
 			var available := inventory != null and inventory.available(item) > 0
-			var unit: StringName = PORTION_UNITS[item]
+			var unit: StringName = inventory_page.item_unit(item)
 			controller.cursor_service.set_state((&"teabag" if unit == &"teabag" else &"spoon") if available and unit != &"piece" else (&"hover_actionable" if available else &"default"))
 			book_input.mouse_default_cursor_shape = Control.CURSOR_ARROW
 			if is_peeking():

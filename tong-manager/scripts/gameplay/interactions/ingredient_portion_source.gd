@@ -159,12 +159,14 @@ func _on_mode_changed(mode: StringName) -> void:
 		get_node("/root/CursorService").set_state(&"hover_actionable")
 
 func _portion_name() -> String:
-	if unit == &"piece":
-		return "one biscuit" if item_id == &"biscuits" else "one %s" % _name()
-	return "one teabag" if unit == &"teabag" else "one spoonful of %s" % _name()
+	var item := get_node("/root/Catalog").get_portion_item(item_id) as ItemDef
+	if item != null:
+		return item.get_portion_name()
+	return "one %s of %s" % [unit, _name()]
 
 func _name() -> String:
-	return "milk" if item_id == &"condensed_milk" else ("tea" if item_id == &"black_tea" else String(item_id))
+	var item := get_node("/root/Catalog").get_portion_item(item_id) as ItemDef
+	return item.get_portion_label().to_lower() if item != null else String(item_id).replace("_", " ")
 
 func _cancel_own_portion() -> void:
 	if not is_instance_valid(controller) or controller.current_payload == null:

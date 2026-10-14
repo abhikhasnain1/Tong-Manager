@@ -220,7 +220,7 @@ func run() -> void:
 	await mouse(discard.get_global_transform_with_canvas().origin,false)
 	check(action_cup.volume_ml == 0 and action_cup.get_parent() == rail and action_cup.transform.is_equal_approx(action_pose),"Real discard empties and returns the table cup")
 	# Sample customer remains a fixture; evaluate temperature at the actual drop.
-	action_cup.receive_liquid(&"black_tea",170,35)
+	action_cup.receive_liquid(&"black_tea",preview.service_zone.SERVING_RECIPE.minimum_serving_volume_ml,35)
 	await mouse(action_cup.get_global_transform_with_canvas().origin,true)
 	await mouse(preview.service_zone.get_global_transform_with_canvas().origin,false)
 	check(action_cup.state == Cup.CupState.SERVED and preview.service_zone.review.bad_review_count() == 1,"Transferred cold cup is accepted with one unhappy sample review")

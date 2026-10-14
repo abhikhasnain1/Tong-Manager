@@ -19,7 +19,6 @@ enum CupState {
 	DIRTY,
 }
 
-const MAX_RELISH_ITEMS := 3
 const ALLOWED_TRANSITIONS: Dictionary = {
 	CupState.CLEAN: [CupState.IN_USE, CupState.FILLED],
 	CupState.IN_USE: [CupState.FILLED],
@@ -44,27 +43,67 @@ var liquid_type: StringName = &""
 var temperature := 20.0
 var controller: InteractionController
 var _hovered := false
+var _inherited_ingredient_amounts: Dictionary[StringName, float] = {}
+var _pending_state_from := -1
 
 func can_receive_liquid(kind: StringName) -> bool:
 	return (
 		not kind.is_empty() and state in [CupState.CLEAN, CupState.IN_USE, CupState.FILLED]
+		and is_finite(volume_ml) and is_finite(capacity_ml) and is_finite(temperature)
+		and volume_ml >= 0.0 and capacity_ml > 0.0
 		and volume_ml < capacity_ml - 0.0001
 		and (liquid_type.is_empty() or liquid_type == kind)
 	)
 
-func receive_liquid(kind: StringName, amount_ml: float, liquid_temperature: float = 20.0) -> float:
+func receive_liquid(kind: StringName, amount_ml: float, liquid_temperature: float = 20.0, carried_amounts: Dictionary[StringName, float] = {}, notify := true) -> float:
 	if not is_finite(amount_ml) or not is_finite(liquid_temperature) or amount_ml <= 0.0 or not can_receive_liquid(kind):
 		return 0.0
+	for item_id in carried_amounts:
+		if item_id.is_empty() or not is_finite(carried_amounts[item_id]) or carried_amounts[item_id] < 0.0:
+			return 0.0
 	var accepted := minf(amount_ml, maxf(0.0, capacity_ml - volume_ml))
+	var next_amounts := _inherited_ingredient_amounts.duplicate()
+	for item_id in carried_amounts:
+		var next: float = next_amounts.get(item_id, 0.0) + carried_amounts[item_id] * accepted / amount_ml
+		if not is_finite(next):
+			return 0.0
+		next_amounts[item_id] = next
+	_remember_state_change()
 	temperature = (temperature * volume_ml + liquid_temperature * accepted) / (volume_ml + accepted)
 	volume_ml += accepted
 	liquid_type = kind
 	contents_base_id = kind
-	set_state(CupState.FILLED)
-	liquid_changed.emit(volume_ml)
-	temperature_changed.emit(temperature)
-	contents_changed.emit(contents_base_id, relish_item_ids.duplicate(), assigned_order_id)
+	_inherited_ingredient_amounts = next_amounts
+	state = CupState.FILLED
+	if notify:
+		notify_contents_changed()
 	return accepted
+
+
+func _remember_state_change() -> void:
+	if _pending_state_from < 0:
+		_pending_state_from = state
+
+
+func notify_contents_changed(notify_liquid := true) -> void:
+	# A kettle commits both vessels before publishing either side of a pour.
+	var previous := _pending_state_from
+	_pending_state_from = -1
+	var self_ref: WeakRef = weakref(self)
+	_apply_state_visuals()
+	if self_ref.get_ref() == null:
+		return
+	if previous >= 0 and previous != state:
+		state_changed.emit(previous, state)
+	if self_ref.get_ref() == null:
+		return
+	if notify_liquid:
+		liquid_changed.emit(volume_ml)
+		if self_ref.get_ref() == null:
+			return
+		temperature_changed.emit(temperature)
+	if self_ref.get_ref() != null:
+		contents_changed.emit(contents_base_id, relish_item_ids.duplicate(), assigned_order_id)
 
 func is_cold() -> bool:
 	return volume_ml > 0.0 and temperature <= config.cold_temperature
@@ -83,23 +122,21 @@ func _process(delta: float) -> void:
 	advance_cooling(delta)
 
 func discard_contents() -> float:
-	# Notify any incoming transfer before clearing; disposal never washes a cup.
 	var discarded := volume_ml
-	contents_discarded.emit(discarded)
-	var previous_state := state
+	_remember_state_change()
 	volume_ml = 0.0
 	liquid_type = &""
 	contents_base_id = &""
 	relish_item_ids.clear()
+	_inherited_ingredient_amounts.clear()
 	temperature = config.ambient_temperature
 	if state == CupState.FILLED:
 		state = CupState.IN_USE
-	_apply_state_visuals()
-	if previous_state != state:
-		state_changed.emit(previous_state, state)
-	liquid_changed.emit(volume_ml)
-	temperature_changed.emit(temperature)
-	contents_changed.emit(contents_base_id, relish_item_ids.duplicate(), assigned_order_id)
+	var self_ref: WeakRef = weakref(self)
+	# Contents are already coherent when the incoming kettle is told to stop.
+	contents_discarded.emit(discarded)
+	if self_ref.get_ref() != null:
+		notify_contents_changed()
 	return discarded
 
 @onready var cup_sprite: Sprite2D = $Sprite2D
@@ -227,21 +264,71 @@ func set_state(next_state: CupState) -> bool:
 
 
 func can_accept_relish(item_id: StringName) -> bool:
-	if item_id.is_empty() or relish_item_ids.size() >= MAX_RELISH_ITEMS:
+	if item_id.is_empty():
 		return false
 	return state == CupState.CLEAN or state == CupState.IN_USE or state == CupState.FILLED
+
+
+func get_relish_count(item_id: StringName) -> int:
+	return 0 if item_id.is_empty() else relish_item_ids.count(item_id)
+
+
+func get_relish_counts() -> Dictionary[StringName, int]:
+	# Each entry is one committed spoon. Keep the existing list authoritative;
+	# callers receive a fresh count snapshot rather than a second mutable store.
+	var counts: Dictionary[StringName, int] = {}
+	for item_id in relish_item_ids:
+		if not item_id.is_empty():
+			counts[item_id] = counts.get(item_id, 0) + 1
+	return counts
+
+
+func get_ingredient_amounts() -> Dictionary[StringName, float]:
+	var amounts := _inherited_ingredient_amounts.duplicate()
+	for item_id in relish_item_ids:
+		if not item_id.is_empty():
+			amounts[item_id] = amounts.get(item_id, 0.0) + 1.0
+	return amounts
+
+
+func get_inherited_ingredient_amounts() -> Dictionary[StringName, float]:
+	return _inherited_ingredient_amounts.duplicate()
+
+
+func get_ingredient_stage() -> StringName:
+	return [&"clean", &"in_use", &"filled", &"served", &"dirty"][state] if state >= 0 and state <= CupState.DIRTY else &"invalid"
+
+
+func can_apply_ingredient(item_id: StringName, quantity: int, effect: StringName, output_liquid_id: StringName = &"") -> bool:
+	# The selected policy owns lifecycle permission, including any deliberate
+	# served/dirty exception. It cannot bypass physical contents validation.
+	return (is_inside_tree() and not is_queued_for_deletion() and not item_id.is_empty()
+		and quantity > 0 and effect == &"mix" and output_liquid_id.is_empty()
+		and get_ingredient_stage() != &"invalid" and is_finite(volume_ml)
+		and is_finite(capacity_ml) and is_finite(temperature) and capacity_ml > 0.0
+		and volume_ml >= 0.0 and volume_ml <= capacity_ml)
+
+
+func apply_ingredient(item_id: StringName, quantity: int, effect: StringName, output_liquid_id: StringName = &"", _restart_steeping := false) -> bool:
+	if not can_apply_ingredient(item_id, quantity, effect, output_liquid_id):
+		return false
+	_remember_state_change()
+	for index in range(quantity):
+		relish_item_ids.append(item_id)
+	if state == CupState.CLEAN:
+		state = CupState.IN_USE
+	notify_contents_changed(false)
+	return true
+
+
+func has_contents() -> bool:
+	return volume_ml > 0.0 or not contents_base_id.is_empty() or not relish_item_ids.is_empty() or not _inherited_ingredient_amounts.is_empty()
 
 
 func add_relish(item_id: StringName) -> bool:
 	if not can_accept_relish(item_id):
 		return false
-
-	relish_item_ids.append(item_id)
-	if state == CupState.CLEAN and not set_state(CupState.IN_USE):
-		relish_item_ids.pop_back()
-		return false
-	contents_changed.emit(contents_base_id, relish_item_ids.duplicate(), assigned_order_id)
-	return true
+	return apply_ingredient(item_id, 1, &"mix")
 
 
 func mark_served() -> bool:
@@ -253,20 +340,16 @@ func mark_dirty() -> bool:
 
 
 func reset_clean() -> void:
-	var previous_state := state
+	_remember_state_change()
 	contents_base_id = &""
 	volume_ml = 0.0
 	liquid_type = &""
 	temperature = config.ambient_temperature
-	liquid_changed.emit(volume_ml)
-	temperature_changed.emit(temperature)
 	relish_item_ids.clear()
+	_inherited_ingredient_amounts.clear()
 	assigned_order_id = &""
 	state = CupState.CLEAN
-	_apply_state_visuals()
-	if previous_state != CupState.CLEAN:
-		state_changed.emit(previous_state, state)
-	contents_changed.emit(contents_base_id, relish_item_ids.duplicate(), assigned_order_id)
+	notify_contents_changed()
 
 
 func _apply_state_visuals() -> void:

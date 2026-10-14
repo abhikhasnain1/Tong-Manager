@@ -1,0 +1,57 @@
+[gd_resource type="Resource" script_class="IngredientPolicy" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/ingredient_policy.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/data/ingredient_rule.gd" id="2"]
+
+[sub_resource type="Resource" id="Tea"]
+script = ExtResource("2")
+item_id = &"black_tea"
+unit = &"teabag"
+vessel_kind = "kettle"
+effect = "infuse"
+output_liquid_id = &"black_tea"
+allowed_stages = Array[StringName]([&"water", &"heating", &"boiling", &"steeping", &"liquor_ready"])
+allowed_liquid_ids = Array[StringName]([&"water", &"black_tea"])
+max_portions = 5
+requires_boiling = false
+minimum_temperature = 20.0
+
+[sub_resource type="Resource" id="SugarCup"]
+script = ExtResource("2")
+item_id = &"sugar"
+unit = &"spoonful"
+vessel_kind = "cup"
+allowed_stages = Array[StringName]([&"clean", &"in_use", &"filled"])
+allow_empty = true
+allowed_liquid_ids = Array[StringName]([&"black_tea"])
+
+[sub_resource type="Resource" id="MilkCup"]
+script = ExtResource("2")
+item_id = &"condensed_milk"
+unit = &"spoonful"
+vessel_kind = "cup"
+allowed_stages = Array[StringName]([&"clean", &"in_use", &"filled"])
+allow_empty = true
+allowed_liquid_ids = Array[StringName]([&"black_tea"])
+
+[sub_resource type="Resource" id="SugarKettle"]
+script = ExtResource("2")
+item_id = &"sugar"
+unit = &"spoonful"
+vessel_kind = "kettle"
+allowed_stages = Array[StringName]([&"steeping", &"liquor_ready"])
+allowed_liquid_ids = Array[StringName]([&"black_tea"])
+max_portions = 5
+
+[sub_resource type="Resource" id="MilkKettle"]
+script = ExtResource("2")
+item_id = &"condensed_milk"
+unit = &"spoonful"
+vessel_kind = "kettle"
+allowed_stages = Array[StringName]([&"liquor_ready"])
+allowed_liquid_ids = Array[StringName]([&"black_tea"])
+max_portions = 5
+
+[resource]
+script = ExtResource("1")
+rules = Array[ExtResource("2")]([SubResource("Tea"), SubResource("SugarCup"), SubResource("MilkCup"), SubResource("SugarKettle"), SubResource("MilkKettle")])

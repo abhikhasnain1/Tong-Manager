@@ -12,12 +12,10 @@ func _ready() -> void:
 		return
 	portion_stock = game_state.inventory
 	super._ready()
-	# Only this review scene authorizes the existing narrow ingredient/handoff
-	# fixtures. Production eligibility and commands remain separate work.
-	var targets: Array[DropZone] = [kettle.get_node("IngredientTarget") as DropZone, ready_item_zone]
-	for cup in screen.get_cups():
-		targets.append(cup.get_node("IngredientTarget") as DropZone)
-	screen.khata_modal.configure_export_targets(targets)
+	# Ingredients use the normal scene's commands. Only snack handoff still
+	# needs an explicitly authorized development target.
+	var targets: Array[DropZone] = [ready_item_zone]
+	screen.set_extra_portion_targets(targets)
 
 
 func _start_preview() -> void:
@@ -29,7 +27,7 @@ func _build_controls() -> void:
 	super._build_controls()
 	var rows := get_node("PreviewUI/Root/Panel/Margin/Rows")
 	rows.get_node("Title").text = "SHARED INVENTORY REVIEW"
-	rows.get_node("FixtureNote").text = "Live run stock · Khata pantry/export review.\nVessel and snack targets remain test fixtures."
+	rows.get_node("FixtureNote").text = "Shared stock · ingredient commands.\nCustomer and snack targets remain test fixtures."
 	reload_button = _button("ReloadScene", "Reload scene · keep supplies", _reload_scene)
 	rows.add_child(reload_button)
 
@@ -42,9 +40,8 @@ func _update_stock_label() -> void:
 	if not is_instance_valid(stock_label):
 		return
 	var lines := PackedStringArray(["Available / remaining"])
-	for pair in [[&"black_tea", "Teabags"], [&"sugar", "Sugar spoons"],
-		[&"condensed_milk", "Milk spoons"], [&"banana", "Bananas"], [&"biscuits", "Biscuits"]]:
-		lines.append("%s  %d / %d" % [pair[1], portion_stock.available(pair[0]), portion_stock.remaining(pair[0])])
+	for item: ItemDef in get_node("/root/Catalog").get_pantry_items():
+		lines.append("%s  %d / %d" % [item.get_portion_label(), portion_stock.available(item.id), portion_stock.remaining(item.id)])
 	stock_label.text = "\n".join(lines)
 
 

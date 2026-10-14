@@ -1,9 +1,10 @@
 class_name IngredientPortionTarget
 extends DropZone
 
-# Narrow review fixture: this is not the final recipe eligibility/dose policy.
+@export var policy: IngredientPolicy = preload("res://data/balance/ingredient_policy.tres")
 var controller: InteractionController
 var target: Node2D
+var _context_ref: WeakRef
 var _highlighted := false
 var _valid := false
 
@@ -15,19 +16,25 @@ func _init() -> void:
 	add_child(preview)
 
 func configure(interaction: InteractionController, owner_node: Node2D) -> void:
+	if is_instance_valid(controller) and controller != interaction:
+		controller.unregister_drop_zone(self)
 	controller = interaction
 	target = owner_node
+	_context_ref = weakref(controller.get_parent()) if is_instance_valid(controller) and controller.get_parent() != null else null
 	zone_id = &"ingredient_portion"
 	snap_radius = 30.0 if target is Cup else 44.0
-	controller.register_drop_zone(self)
+	if _belongs_to_context(target):
+		controller.register_drop_zone(self)
 
 func is_relevant_to(payload: HeldItemPayload) -> bool:
-	return payload != null and payload.metadata.get("category") == &"ingredient_portion"
+	# Pieces can be recipe ingredients too; the selected policy decides which.
+	return (payload != null and payload.metadata.get("category") in [&"ingredient_portion", &"ready_item"]
+		and payload.metadata.get("portion") is IngredientPortion)
 
 func accepts(payload: HeldItemPayload) -> DropValidation:
 	if (not is_relevant_to(payload) or not is_inside_tree() or is_queued_for_deletion()
 		or not is_instance_valid(target) or not target.is_inside_tree() or target.is_queued_for_deletion()
-		or not target.is_ancestor_of(self)):
+		or not target.is_ancestor_of(self) or not _belongs_to_context(target)):
 		return DropValidation.invalid("Ingredient target is unavailable")
 	if (not is_instance_valid(controller) or not controller.is_inside_tree() or controller.is_queued_for_deletion()
 		or not controller.can_address_drop_zone(payload, self)
@@ -36,30 +43,14 @@ func accepts(payload: HeldItemPayload) -> DropValidation:
 	var portion := payload.metadata.get("portion") as IngredientPortion
 	if portion == null or not portion.is_available():
 		return DropValidation.invalid("This ingredient portion is no longer available")
-	return _fixture_eligibility(portion.item_id)
-
-func _fixture_eligibility(item_id: StringName) -> DropValidation:
-	if target is Kettle:
-		if item_id != &"black_tea":
-			return DropValidation.invalid("This preview uses sugar and milk in tea cups")
-		var kettle := target as Kettle
-		if kettle.contains_tea:
-			return DropValidation.invalid("This kettle already contains tea")
-		if kettle.volume_ml <= 0:
-			return DropValidation.invalid("Fill the kettle with water first")
-		if kettle.temperature < kettle.config.boiling_temperature:
-			return DropValidation.invalid("Wait for the water to boil")
-		return DropValidation.invalid("Finish pouring first") if kettle.is_pouring else DropValidation.valid()
-	if target is Cup:
-		if item_id not in [&"sugar",&"condensed_milk"]:
-			return DropValidation.invalid("This preview brews teabags in the kettle")
-		var cup := target as Cup
-		if cup.volume_ml <= 0 or cup.liquid_type != &"black_tea" or cup.contents_base_id != &"black_tea":
-			return DropValidation.invalid("Pour tea into this cup first")
-		if not cup.can_accept_relish(item_id):
-			return DropValidation.invalid("This cup cannot accept another ingredient")
-		return DropValidation.valid()
-	return DropValidation.invalid("Ingredient target is unavailable")
+	if not _belongs_to_context(portion.source_ref.get_ref() as Node):
+		return DropValidation.invalid("Use an ingredient from this stall")
+	if (payload.item_id != portion.item_id or payload.quantity != portion.quantity
+		or payload.metadata.get("item_id") != portion.item_id or payload.metadata.get("unit") != portion.unit
+		or payload.metadata.get("quantity") != portion.quantity or payload.metadata.get("source_id") != portion.source_id
+		or payload.metadata.get("cleanup_callback") != Callable(portion, "cancel")):
+		return DropValidation.invalid("Use the original held portion")
+	return IngredientDropCommand.new(portion, target, policy, _context_ref.get_ref() as Node).can_execute()
 
 func apply_drop(payload: HeldItemPayload) -> void:
 	try_apply_drop(payload)
@@ -71,22 +62,35 @@ func try_apply_drop(payload: HeldItemPayload) -> bool:
 			controller.report_hint(validation.reason_key)
 		return false
 	var portion := payload.metadata.get("portion") as IngredientPortion
-	if not portion.commit(_apply_fixture.bind(portion.item_id)):
+	var item: Resource = get_node("/root/Catalog").get_portion_item(portion.item_id)
+	var label := String(portion.item_id) if item == null else String(item.get_portion_label())
+	var hint := "Added %d %s · %s" % [portion.quantity, portion.unit, label]
+	var self_ref: WeakRef = weakref(self)
+	if not IngredientDropCommand.new(portion, target, policy, _context_ref.get_ref() as Node).execute():
 		return false
-	controller.report_hint("Added one teabag" if portion.unit == &"teabag" else "Added one spoonful of %s" % ("milk" if portion.item_id == &"condensed_milk" else "sugar"))
+	if self_ref.get_ref() == null:
+		return true
 	clear_highlight()
-	drop_applied.emit(payload)
+	if is_instance_valid(controller):
+		controller.report_hint(hint)
+	if self_ref.get_ref() != null:
+		drop_applied.emit(payload)
 	return true
 
-func _apply_fixture(item_id: StringName) -> bool:
-	if (not is_instance_valid(target) or not target.is_inside_tree() or target.is_queued_for_deletion()
-		or not target.is_ancestor_of(self) or not _fixture_eligibility(item_id).is_valid):
-		return false
-	if target is Kettle:
-		return (target as Kettle).add_tea_leaves()
-	# Milk is represented as an abstract garnish here, without changing liquid
-	# volume/temperature or selecting a quantified production recipe dose.
-	return (target as Cup).add_relish(item_id)
+func _enter_tree() -> void:
+	if is_instance_valid(controller) and _belongs_to_context(target):
+		controller.register_drop_zone(self)
+
+func _exit_tree() -> void:
+	if is_instance_valid(controller):
+		controller.unregister_drop_zone(self)
+
+func _belongs_to_context(node: Node) -> bool:
+	var context := _context_ref.get_ref() as Node if _context_ref != null else null
+	return (is_instance_valid(context) and context.is_inside_tree() and not context.is_queued_for_deletion()
+		and is_instance_valid(controller) and context.is_ancestor_of(controller)
+		and is_instance_valid(node) and node.is_inside_tree() and not node.is_queued_for_deletion()
+		and context.is_ancestor_of(node))
 
 func set_highlight(valid: bool) -> void:
 	_highlighted = true

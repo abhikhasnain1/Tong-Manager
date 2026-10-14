@@ -332,7 +332,7 @@ func verify_physical_injection() -> void:
 	var cup: Cup = screen.get_cups()[0]
 	cup.set_process(false)
 	cup.receive_liquid(&"black_tea", 150.0, 65.0)
-	check(sugar.provider == inventory and other_sugar.provider == inventory, "Both placed sugar sources view the production authority when injected")
+	check(sugar.provider == inventory and other_sugar.provider == inventory, "Both placed sugar sources view the same production authority")
 	var original_counts := inventory.quantities
 	var original_units: Dictionary = {}
 	for item_id: StringName in original_counts:
@@ -343,12 +343,13 @@ func verify_physical_injection() -> void:
 	check(sugar.begin_portion(sugar.source_owner.get_global_transform_with_canvas().origin), "Existing physical source can reserve production stock")
 	var payload := controller.current_payload
 	controller.release_drop(cup.get_node("IngredientTarget").get_global_transform_with_canvas().origin)
-	check(inventory.remaining(&"sugar") == 1 and other_sugar.provider.available(&"sugar") == 1 and cup.relish_item_ids == [&"sugar"], "Provisional target applies once and both physical views see one shared debit")
+	check(inventory.remaining(&"sugar") == 1 and other_sugar.provider.available(&"sugar") == 1 and cup.relish_item_ids == [&"sugar"], "Production command applies once and both physical views see one shared debit")
 	check(not cup.get_node("IngredientTarget").try_apply_drop(payload) and inventory.remaining(&"sugar") == 1, "Repeated target delivery cannot debit production stock again")
 	check(cup.discard_contents() == 150.0 and inventory.remaining(&"sugar") == 1, "Discarding a garnished cup never refunds consumed ingredient stock")
+	cup.receive_liquid(&"water", 100, 60)
 	check(other_sugar.begin_portion(other_sugar.source_owner.get_global_transform_with_canvas().origin), "Second physical shortcut reserves the same final available spoonful")
 	controller.release_drop(cup.get_node("IngredientTarget").get_global_transform_with_canvas().origin)
-	check(inventory.remaining(&"sugar") == 1 and inventory.available(&"sugar") == 1 and cup.relish_item_ids.is_empty(), "Rejected empty-cup target returns production reservation unchanged")
+	check(inventory.remaining(&"sugar") == 1 and inventory.available(&"sugar") == 1 and cup.relish_item_ids.is_empty(), "Rejected incompatible-water target returns production reservation unchanged")
 	check(other_sugar.begin_portion(other_sugar.source_owner.get_global_transform_with_canvas().origin), "A production portion can be held across an explicit reset request")
 	var stale_payload := controller.current_payload
 	var reset_to_remaining: Resource = screen.day_config.duplicate()

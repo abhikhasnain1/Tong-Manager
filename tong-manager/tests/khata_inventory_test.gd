@@ -212,7 +212,7 @@ func check_exports(peeking: bool) -> void:
 	take(&"sugar")
 	controller.release_drop(point(target))
 	await frames()
-	check(stock.remaining(&"sugar") == before and stock.available(&"sugar") == before, "Normal scene without production targets permits only carry/cancel")
+	check(stock.remaining(&"sugar") == before and stock.available(&"sugar") == before, "Explicitly disabling every allowed target permits only carry/cancel")
 	reading(peeking, "No configured targets")
 	allow_target()
 

@@ -674,7 +674,8 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 		hovered_drop_zone.set_highlight(is_valid)
 		_apply_drag_cursor(_drag_cursor() if is_valid else CURSOR_STATE_INVALID)
 		if is_portion_drag():
-			var accepted_hint := "Release to hand over this item · Esc cancels" if current_payload.metadata.get("category") == &"ready_item" else "Release to add this portion · Esc cancels"
+			var adding_ingredient := hovered_drop_zone.zone_id == &"ingredient_portion"
+			var accepted_hint := "Release to add this portion · Esc cancels" if adding_ingredient else "Release to hand over this item · Esc cancels"
 			report_hint(accepted_hint if is_valid else validation.reason_key)
 	else:
 		_apply_drag_cursor(_drag_cursor())

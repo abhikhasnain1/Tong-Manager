@@ -3,7 +3,7 @@ extends DropZone
 signal sample_served(result: Dictionary)
 
 const Review := preload("res://scripts/gameplay/brewing_service_review.gd")
-const MINIMUM_VOLUME_ML := 150.0
+const SERVING_RECIPE := preload("res://data/recipes/cha_no_sugar.tres")
 
 var controller: InteractionController
 var screen_root: Node
@@ -50,7 +50,7 @@ func next_sample() -> void:
 	sample_index += 1
 	order_id = StringName("preview_order_%d" % sample_index)
 	_last_result = {}
-	_heading.text = "SAMPLE CUSTOMER %d\nPlain black tea · at least 150 ml" % sample_index
+	_heading.text = "SAMPLE CUSTOMER %d\nPlain black tea · at least %d ml" % [sample_index, SERVING_RECIPE.minimum_serving_volume_ml]
 	_show_order_hint()
 	queue_redraw()
 
@@ -70,7 +70,7 @@ func accepts(payload: HeldItemPayload) -> DropValidation:
 		return DropValidation.invalid("preview.use_mode_required")
 	if not controller.is_dragging() or controller.current_payload != payload:
 		return DropValidation.invalid("preview.active_drag_required")
-	var result := review.inspect(order_id, _snapshot(payload.world_node as Cup), MINIMUM_VOLUME_ML)
+	var result := review.inspect(order_id, _snapshot(payload.world_node as Cup), SERVING_RECIPE.minimum_serving_volume_ml)
 	return DropValidation.valid() if bool(result.accepted) else DropValidation.invalid(String(result.reason))
 
 func _belongs_to_live_screen(node: Node) -> bool:
@@ -85,7 +85,7 @@ func apply_drop(payload: HeldItemPayload) -> void:
 		return
 	var cup := payload.world_node as Cup
 	# Capture at the accepted drop, not when filled or first hovered.
-	var result := review.accept(order_id, _snapshot(cup), MINIMUM_VOLUME_ML)
+	var result := review.accept(order_id, _snapshot(cup), SERVING_RECIPE.minimum_serving_volume_ml)
 	if not bool(result.accepted):
 		return
 	cup.assigned_order_id = order_id
@@ -106,7 +106,7 @@ func _snapshot(cup: Cup) -> Dictionary:
 		"available": cup.state == Cup.CupState.FILLED,
 		"clean": cup.state != Cup.CupState.DIRTY,
 		"recipe_id": cup.contents_base_id,
-		"garnish_count": cup.relish_item_ids.size(),
+		"garnish_count": cup.get_ingredient_amounts().size(),
 		"volume_ml": cup.volume_ml,
 		"temperature": cup.temperature,
 		"cold_threshold": cup.config.cold_temperature,
@@ -118,7 +118,7 @@ func set_highlight(valid: bool) -> void:
 	if _last_result.is_empty() and controller.current_payload != null:
 		var cup := controller.current_payload.world_node as Cup
 		if is_instance_valid(cup):
-			var result := review.inspect(order_id, _snapshot(cup), MINIMUM_VOLUME_ML)
+			var result := review.inspect(order_id, _snapshot(cup), SERVING_RECIPE.minimum_serving_volume_ml)
 			if bool(result.accepted):
 				_feedback.text = "Release to serve\nCold tea is accepted, with a bad review." if bool(result.cold) else "Release to serve\nWarm tea · happy customer"
 			else:

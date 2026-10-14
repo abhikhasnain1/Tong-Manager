@@ -2,9 +2,17 @@
 
 [ext_resource type="Script" uid="uid://davlrsy31k3cs" path="res://scripts/data/item_def.gd" id="1_item_def"]
 
+[ext_resource type="Texture2D" path="res://assets/art/icons/biscuits_ready_provisional.png" id="2_icon"]
+
 [resource]
+
 script = ExtResource("1_item_def")
 id = &"biscuits"
+pantry_enabled = true
+pantry_order = 40
+portion_label = "Biscuit"
+portion_visual = "biscuit"
+icon = ExtResource("2_icon")
 display_name_key = "item.biscuits.name"
 category = &"ready_item"
 unit = &"piece"

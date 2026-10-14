@@ -39,6 +39,9 @@ position = Vector2(25, 11)
 [node name="SteamAnchor" type="Marker2D" parent="."]
 position = Vector2(26, -78)
 
+[node name="IngredientAnchor" type="Marker2D" parent="."]
+position = Vector2(26, -70)
+
 [node name="Spout" type="Marker2D" parent="."]
 position = Vector2(-118, -29)
 

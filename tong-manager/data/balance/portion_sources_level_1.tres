@@ -1,0 +1,54 @@
+[gd_resource type="Resource" script_class="PortionSourceLayout" load_steps=11 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/portion_source_layout.gd" id="1_layout"]
+[ext_resource type="Script" path="res://scripts/data/portion_source_binding.gd" id="2_physical"]
+[ext_resource type="Script" path="res://scripts/data/hanging_source_binding.gd" id="3_hanging"]
+
+[sub_resource type="Resource" id="Tea"]
+script = ExtResource("2_physical")
+node_path = NodePath("WorldRoot/ToolLayer/ReadyItemRail/TeaBox")
+item_id = &"black_tea"
+
+[sub_resource type="Resource" id="Sugar"]
+script = ExtResource("2_physical")
+node_path = NodePath("WorldRoot/ToolLayer/ReadyItemRail/SugarCan")
+item_id = &"sugar"
+
+[sub_resource type="Resource" id="SugarEnglish"]
+script = ExtResource("2_physical")
+node_path = NodePath("WorldRoot/ToolLayer/ReadyItemRail/SugarCanEnglish")
+item_id = &"sugar"
+
+[sub_resource type="Resource" id="Milk"]
+script = ExtResource("2_physical")
+node_path = NodePath("WorldRoot/ToolLayer/ReadyItemRail/CondensedMilkCan")
+item_id = &"condensed_milk"
+
+[sub_resource type="Resource" id="BananaLeft"]
+script = ExtResource("3_hanging")
+art_path = NodePath("WorldRoot/ToolLayer/ReadyItemRail/Banana")
+node_name = "BananaLeft"
+item_id = &"banana"
+region = Rect2(0, 0, 192, 367)
+pivot = Vector2(76, 0)
+
+[sub_resource type="Resource" id="BananaRight"]
+script = ExtResource("3_hanging")
+art_path = NodePath("WorldRoot/ToolLayer/ReadyItemRail/Banana")
+node_name = "BananaRight"
+item_id = &"banana"
+region = Rect2(192, 0, 120, 367)
+pivot = Vector2(249, 51)
+
+[sub_resource type="Resource" id="Biscuits"]
+script = ExtResource("3_hanging")
+art_path = NodePath("WorldRoot/ToolLayer/ReadyItemRail/Biscuits")
+node_name = "BiscuitBag"
+item_id = &"biscuits"
+region = Rect2(0, 0, 398, 686)
+pivot = Vector2(245, 12)
+
+[resource]
+script = ExtResource("1_layout")
+physical_sources = Array[ExtResource("2_physical")]([SubResource("Tea"), SubResource("Sugar"), SubResource("SugarEnglish"), SubResource("Milk")])
+hanging_sources = Array[ExtResource("3_hanging")]([SubResource("BananaLeft"), SubResource("BananaRight"), SubResource("Biscuits")])

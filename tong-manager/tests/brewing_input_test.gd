@@ -169,6 +169,8 @@ func run() -> void:
 	await mouse(discard.get_global_transform_with_canvas().origin, false)
 	check(kettle.volume_ml == volume_before_click, "Clicking discard area alone never empties a vessel")
 	# Configure temperature fixtures, then exercise the actual pour and serve gestures.
+	var serving_minimum: float = preview.service_zone.SERVING_RECIPE.minimum_serving_volume_ml
+	var serving_pour_seconds: float = serving_minimum / kettle.config.pour_rate_ml + 0.15
 	kettle.apply_heat(10, 1)
 	kettle.add_tea_leaves()
 	kettle.advance_brewing(kettle.config.steep_seconds)
@@ -177,10 +179,10 @@ func run() -> void:
 	target = first_cup.get_node("PourTarget").get_global_transform_with_canvas().origin
 	await move_pointer(aim_pointer(kettle, target))
 	await pour_key(true)
-	await create_timer(1.1).timeout
+	await create_timer(serving_pour_seconds).timeout
 	await pour_key(false)
 	await mouse(aim_pointer(kettle, target), false)
-	check(first_cup.volume_ml >= 150 and first_cup.is_cold(), "Cold kettle tea pours into a cold serviceable cup")
+	check(first_cup.volume_ml >= serving_minimum and first_cup.is_cold(), "Cold kettle tea reaches the recipe serving minimum in a cold serviceable cup")
 	await mouse(first_cup.get_global_transform_with_canvas().origin, true)
 	await mouse(preview.service_zone.get_global_transform_with_canvas().origin, false)
 	check(first_cup.state == Cup.CupState.SERVED, "Ordinary sample customer accepts cold tea")
@@ -197,7 +199,7 @@ func run() -> void:
 	target = second_cup.get_node("PourTarget").get_global_transform_with_canvas().origin
 	await move_pointer(aim_pointer(kettle, target))
 	await pour_key(true)
-	await create_timer(1.1).timeout
+	await create_timer(serving_pour_seconds).timeout
 	await pour_key(false)
 	await mouse(aim_pointer(kettle, target), false)
 	await mouse(second_cup.get_global_transform_with_canvas().origin, true)
