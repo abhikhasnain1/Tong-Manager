@@ -14,7 +14,8 @@ func _init() -> void:
 	add_child(preview)
 
 func is_relevant_to(payload: HeldItemPayload) -> bool:
-	return payload != null and is_instance_valid(payload.world_node) and payload.world_node is Kettle
+	return (payload != null and is_instance_valid(payload.world_node) and payload.world_node is Kettle
+		and not (is_cup_target and bool(payload.metadata.get("kettle_move", false))))
 
 func get_probe_position(payload: HeldItemPayload, viewport_position: Vector2) -> Vector2:
 	if is_cup_target and is_relevant_to(payload):
@@ -26,7 +27,9 @@ func accepts(payload: HeldItemPayload) -> DropValidation:
 		or not payload.world_node is Kettle or not is_inside_tree() or not target.is_inside_tree()
 		or target.is_queued_for_deletion() or not target.is_ancestor_of(self)):
 		return DropValidation.invalid("brewing.kettle_required")
-	if not is_instance_valid(controller) or controller.current_mode != InteractionController.MODE_INTERACT:
+	var moving := bool(payload.metadata.get("kettle_move", false)) and not is_cup_target and is_instance_valid(controller) and controller.direct_mouse_gestures
+	var intended_mode := InteractionController.MODE_ORGANIZE if moving else InteractionController.MODE_INTERACT
+	if not is_instance_valid(controller) or controller.current_mode != intended_mode:
 		return DropValidation.invalid("brewing.use_mode_required")
 	var kettle := payload.world_node as Kettle
 	var valid := kettle.can_pour_into(target as Cup) if is_cup_target else bool(target.call("can_seat", kettle))

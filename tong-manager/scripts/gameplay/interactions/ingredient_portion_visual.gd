@@ -5,6 +5,11 @@ extends Node2D
 var item_id: StringName
 var unit: StringName
 var definition: ItemDef
+# Drawing only: the cursor/drop probe and transaction keep their original origin.
+var ready_item_scale := 1.0:
+	set(value):
+		ready_item_scale = clampf(value, 0.5, 2.0) if is_finite(value) else 1.0
+		queue_redraw()
 
 func _init(p_item_id: StringName = &"", p_unit: StringName = &"teabag") -> void:
 	item_id = p_item_id
@@ -60,6 +65,7 @@ func _draw_icon(outline: Color) -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(-16, 5), label.substr(0, 2), HORIZONTAL_ALIGNMENT_CENTER, 32, 14, outline)
 
 func _draw_ready_item(outline: Color, style: String) -> void:
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE * ready_item_scale)
 	if style == "banana":
 		# Separate temporary piece; the hanging bunch artwork stays on its pin.
 		var crescent := PackedVector2Array([
@@ -75,10 +81,10 @@ func _draw_ready_item(outline: Color, style: String) -> void:
 		draw_line(Vector2(-24,-14),Vector2(-26,-19),outline,4,true)
 		draw_line(Vector2(25,-10),Vector2(29,-11),outline,4,true)
 	else:
-		draw_set_transform(Vector2.ZERO,-0.16,Vector2(1.2,0.85))
+		draw_set_transform(Vector2.ZERO,-0.16,Vector2(1.2,0.85) * ready_item_scale)
 		draw_circle(Vector2.ZERO,23,outline)
 		draw_circle(Vector2.ZERO,21,Color("b87839"))
 		draw_circle(Vector2.ZERO,18,Color("dfb46a"))
 		for point in [Vector2(-8,-8),Vector2(4,-10),Vector2(11,0),Vector2(4,10),Vector2(-9,8),Vector2(-2,0)]:
 			draw_circle(point,1.7,Color("926033"))
-		draw_set_transform(Vector2.ZERO)
+	draw_set_transform(Vector2.ZERO)

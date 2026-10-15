@@ -553,6 +553,16 @@ func _notification(what: int) -> void:
 func _input(event: InputEvent) -> void:
 	if _active and not _controller_is_live():
 		hide()
+	if _controller_is_live() and controller.direct_mouse_gestures:
+		if event.is_action_pressed(InteractionController.INPUT_ORGANIZE_TOGGLE) or event.is_action_pressed(InteractionController.INPUT_USE_TOGGLE):
+			get_viewport().set_input_as_handled()
+			return
+		if (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT
+			and (_active or exporting or (is_peeking() and controller.is_pointer_over_ui_at(event.position)))):
+			# Right is reserved for world movement in this demo. It neither turns
+			# a pantry press into extraction nor cancels an owned left export.
+			get_viewport().set_input_as_handled()
+			return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_K:
 		if _active:
 			close()

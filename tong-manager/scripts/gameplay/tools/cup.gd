@@ -302,8 +302,12 @@ func _on_hover(entered: bool) -> void:
 	if _can_interact():
 		get_node("/root/CursorService").set_state(&"hover_actionable" if entered else &"default")
 		if entered:
-			controller.report_hint("Use · drag dirty cup to wash bucket · Organize to rearrange" if state == CupState.DIRTY
-				else "Use · drag cup to serve or discard · Organize to rearrange")
+			if controller.direct_mouse_gestures:
+				controller.report_hint("Left drag to wash · right drag to move" if state == CupState.DIRTY
+					else "Left drag to serve or discard · right drag to move")
+			else:
+				controller.report_hint("Use · drag dirty cup to wash bucket · Organize to rearrange" if state == CupState.DIRTY
+					else "Use · drag cup to serve or discard · Organize to rearrange")
 
 
 func _refresh_hover(_mode: StringName) -> void:
