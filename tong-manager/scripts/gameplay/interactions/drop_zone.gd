@@ -10,7 +10,19 @@ const INVALID_HIGHLIGHT := Color(1.0, 0.25, 0.25, 0.45)
 @export var accepted_categories: Array[StringName] = []
 @export_range(0.0, 2048.0, 1.0, "or_greater") var snap_radius: float = 64.0
 
+# Optional presentation filter: (payload, viewport_position) -> bool. It only
+# resolves visible pointer ownership; eligibility remains in accepts().
+var pointer_gate := Callable()
+
 @onready var debug_preview: Sprite2D = $DebugPreview
+
+
+func allows_pointer(payload: HeldItemPayload, viewport_position: Vector2) -> bool:
+	if pointer_gate.is_null(): return true
+	if not pointer_gate.is_valid(): return false
+	var allowed: Variant = pointer_gate.call(payload, viewport_position)
+	return allowed is bool and allowed
+
 
 func is_relevant_to(_payload: HeldItemPayload) -> bool:
 	return true

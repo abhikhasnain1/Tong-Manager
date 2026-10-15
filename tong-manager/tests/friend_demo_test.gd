@@ -118,6 +118,22 @@ func presentation_check() -> void:
 func native_direct_gestures() -> void:
 	if DisplayServer.get_name() == "headless": return
 	await setup()
+	var basket: DiscardDropZone = screen.get_node("WorldRoot/DropZoneRoot/DiscardArea")
+	var bottle_shape: CollisionPolygon2D = screen.get_node("WorldRoot/ToolLayer/WaterDrum/CollisionPolygon2D")
+	var overlap := Vector2.INF
+	for y in range(930, 986, 2):
+		for x in range(1704, 1724, 2):
+			var candidate: Vector2 = screen.world_root.get_global_transform_with_canvas() * Vector2(x, y)
+			if screen.hover_feedback.get_utility_at(candidate) == basket and Geometry2D.is_point_in_polygon(
+				bottle_shape.get_global_transform_with_canvas().affine_inverse() * candidate, bottle_shape.polygon):
+				overlap = candidate
+				break
+		if overlap.is_finite(): break
+	check(overlap.is_finite(), "Visible basket overlaps the bottle's physical input area")
+	if overlap.is_finite():
+		await mouse(overlap, true)
+		check(not controller.is_dragging() and not controller.has_active_action(), "Bare click on visible basket cannot pick the bottle behind it")
+		await mouse(overlap, false)
 	var cup: Cup = screen.get_cups()[0]
 	var origin := cup.get_global_transform_with_canvas().origin
 	await mouse_button(origin, true, MOUSE_BUTTON_RIGHT)
@@ -165,6 +181,42 @@ func native_direct_gestures() -> void:
 	check(modal.cover.is_visible_in_tree(), "Notebook returns to its actual grouped cover position")
 
 
+func overlapping_utilities() -> void:
+	await fixture()
+	var cups: Array[Cup] = screen.get_cups().slice(0, 2)
+	var overlap: Vector2 = screen.world_root.get_global_transform_with_canvas() * Vector2(1650, 977)
+	var waste: DiscardDropZone = screen.get_node("WorldRoot/DropZoneRoot/DiscardArea")
+	var waste_scale := waste.get_global_transform_with_canvas().get_scale()
+	check(bucket.contains_pointer(overlap) and overlap.distance_to(waste.get_global_transform_with_canvas().origin)
+		< waste.snap_radius * maxf(absf(waste_scale.x), absf(waste_scale.y)), "Fan fixture exercises both overlapping utility drop regions")
+	fill(cups[0])
+	await take_cup(cups[0])
+	await move_pointer(overlap)
+	controller.update_drag(overlap)
+	check(controller.hovered_drop_zone is BucketDropZone, "Visible bucket wins over the hidden discard region for a filled cup")
+	if DisplayServer.get_name() == "headless": controller.release_drop(overlap)
+	else: await mouse(overlap, false)
+	check(cups[0].has_contents() and cups[0].get_node("PlacementHandle").surface.is_registered(cups[0]),
+		"Rejected filled cup returns intact instead of emptying into the basket behind")
+	bucket.config.capacity = 1
+	check(cups[0].mark_served() and cups[0].finish_consumption(), "Overlap fixture consumes the first cup normally")
+	await take_cup(cups[0])
+	check(await drop_bucket(), "Overlap fixture fills the bucket to its configured capacity")
+	fill(cups[1])
+	check(cups[1].mark_served() and cups[1].finish_consumption(), "Overlap fixture consumes the second cup normally")
+	await take_cup(cups[1])
+	var payload := controller.current_payload
+	await move_pointer(overlap)
+	controller.update_drag(overlap)
+	check(controller.hovered_drop_zone is BucketDropZone and not bucket.can_receive(payload).is_valid,
+		"Full visible bucket stays selected instead of falling through to discard")
+	if DisplayServer.get_name() == "headless": controller.release_drop(overlap)
+	else: await mouse(overlap, false)
+	check(not bool(payload.metadata.get("discard_committed", false)) and not bucket.has_cup(cups[1])
+		and cups[1].get_node("PlacementHandle").surface.is_registered(cups[1]),
+		"Full bucket rejection preserves the same dirty cup on its original surface")
+
+
 func run() -> void:
 	if DisplayServer.get_name() == "headless": root.size = Vector2i(1920, 1080)
 	var args := OS.get_cmdline_user_args()
@@ -173,6 +225,7 @@ func run() -> void:
 	await frames()
 	await presentation_check()
 	await native_direct_gestures()
+	await overlapping_utilities()
 	await three_cup_batch()
 	await seven_reuse_cycles()
 	if is_instance_valid(screen): screen.queue_free()

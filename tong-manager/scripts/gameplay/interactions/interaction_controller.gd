@@ -758,6 +758,8 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 	var best_invalid: DropZone
 	var best_invalid_distance := INF
 	var cup_placement: DropZone
+	var owner_ref: WeakRef = weakref(self)
+	var selection_payload := current_payload
 
 	for zone in _get_available_drop_zones():
 		if not is_instance_valid(zone) or not zone.is_inside_tree() or zone.is_queued_for_deletion():
@@ -765,6 +767,11 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 		if not can_address_drop_zone(current_payload, zone):
 			continue
 		if not zone.is_relevant_to(current_payload):
+			continue
+		var pointer_allowed := zone.allows_pointer(selection_payload, viewport_position)
+		if owner_ref.get_ref() == null or not is_inside_tree() or current_payload != selection_payload:
+			return
+		if not pointer_allowed or not is_instance_valid(zone) or not zone.is_inside_tree() or zone.is_queued_for_deletion():
 			continue
 		# Returning cups can be parked in Use, but a deliberate station drop
 		# (including a full bucket) takes precedence over surface placement.

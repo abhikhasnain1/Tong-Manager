@@ -54,6 +54,16 @@ func get_hovered_owner() -> Node2D:
 	return owner_node as Node2D if _live(owner_node) else null
 
 
+func get_utility_at(pointer: Vector2) -> Node2D:
+	var selected: Dictionary = {}
+	for entry in _entries:
+		var owner_node: Variant = (entry.owner as WeakRef).get_ref()
+		if not bool(entry.utility) or not _eligible(entry, owner_node, null): continue
+		if not _contains(entry, pointer): continue
+		if selected.is_empty() or _in_front(entry, selected): selected = entry
+	return null if selected.is_empty() else (selected.owner as WeakRef).get_ref() as Node2D
+
+
 func _process(delta: float) -> void:
 	update_feedback(delta)
 
