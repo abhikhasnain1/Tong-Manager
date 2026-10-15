@@ -177,5 +177,8 @@ func run() -> void:
 	await seven_reuse_cycles()
 	if is_instance_valid(screen): screen.queue_free()
 	await frames()
+	# Accelerated handoffs can leave the final MP3 stop queued on the audio
+	# mixer after all scene nodes are freed. Drain it before this test exits.
+	await create_timer(0.35).timeout
 	print("FRIEND_DEMO: %d checks; %d failures" % [checks, failures.size()])
 	quit(0 if failures.is_empty() else 1)
