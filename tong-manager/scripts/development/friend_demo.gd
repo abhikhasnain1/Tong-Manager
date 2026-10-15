@@ -22,6 +22,7 @@ func _ready() -> void:
 	_hide_station_copy($WorldRoot/ToolLayer)
 	_hide_station_copy($WorldRoot/DropZoneRoot)
 	super._ready()
+	if cup_returns != null: cup_returns.return_badges_enabled = true
 	presentation = FriendDemoPresentation.new()
 	presentation.name = "DemoPresentation"
 	add_child(presentation)

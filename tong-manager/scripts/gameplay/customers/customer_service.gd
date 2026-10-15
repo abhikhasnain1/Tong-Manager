@@ -93,14 +93,7 @@ func pick_customer_at(viewport_position: Vector2) -> Customer:
 
 func pick_visible_customer_at(viewport_position: Vector2) -> Customer:
 	if not _live(screen) or not _live(queue) or not viewport_position.is_finite(): return null
-	# Modal export has its own input policy in the controller. Geometry must not
-	# globally block it just because the full notebook is still open.
-	if _live(_frame) and _frame.is_visible_in_tree() and _frame_image != null:
-		var point := _frame.get_global_transform_with_canvas().affine_inverse() * viewport_position
-		if Rect2(Vector2.ZERO, _frame_image.get_size()).has_point(point) and _frame_image.get_pixelv(Vector2i(point)).a > 0.1:
-			return null
-	for hanging: HangingSourceBody in screen.hanging_sources:
-		if _live(hanging) and hanging.is_visible_in_tree() and hanging.contains_pointer(viewport_position): return null
+	if is_stall_occluding(viewport_position): return null
 	var front: Customer
 	for actor in queue.get_active_customers():
 		if not _belongs(actor) or not actor.is_visible_in_tree(): continue
@@ -110,6 +103,19 @@ func pick_visible_customer_at(viewport_position: Vector2) -> Customer:
 			front = actor
 	# Arriving/departing bodies still occlude a customer standing behind them.
 	return front
+
+
+func is_stall_occluding(viewport_position: Vector2) -> bool:
+	if not _live(screen) or not viewport_position.is_finite(): return true
+	# Modal export has its own input policy in the controller. Geometry must not
+	# globally block it just because the full notebook is still open.
+	if _live(_frame) and _frame.is_visible_in_tree() and _frame_image != null:
+		var point := _frame.get_global_transform_with_canvas().affine_inverse() * viewport_position
+		if Rect2(Vector2.ZERO, _frame_image.get_size()).has_point(point) and _frame_image.get_pixelv(Vector2i(point)).a > 0.1:
+			return true
+	for hanging: HangingSourceBody in screen.hanging_sources:
+		if _live(hanging) and hanging.is_visible_in_tree() and hanging.contains_pointer(viewport_position): return true
+	return false
 
 
 func validate(zone: CustomerServiceZone, payload: HeldItemPayload, reservation_claimed := false) -> DropValidation:

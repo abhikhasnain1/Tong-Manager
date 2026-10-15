@@ -44,6 +44,9 @@ func refresh_targets() -> void:
 		var handle := node as TablePlaceable
 		if handle != null and _live(handle.item) and screen.is_ancestor_of(handle.item):
 			_add_target(handle.item, false, handle)
+	for node in get_tree().get_nodes_in_group(&"hanging_sources"):
+		if node is HangingSourceBody and _live(node) and screen.is_ancestor_of(node):
+			_add_target(node, false)
 	for path in FIXED_TARGETS:
 		var owner_node := screen.get_node_or_null(path) as Node2D
 		if owner_node != null:
@@ -141,6 +144,11 @@ func _eligible(entry: Dictionary, owner_node: Variant, held: Node2D) -> bool:
 
 
 func _contains(entry: Dictionary, pointer: Vector2) -> bool:
+	var owner_node: Variant = (entry.owner as WeakRef).get_ref()
+	if owner_node is HangingSourceBody:
+		# Use the moving opaque artwork and the source's existing extraction
+		# priority, rather than the stationary joint owner's authored bounds.
+		return owner_node.contains_pointer(pointer) and owner_node.is_frontmost_at(pointer)
 	for reference: WeakRef in entry.sprites:
 		var sprite := reference.get_ref() as Sprite2D
 		if not _live(sprite) or not sprite.is_visible_in_tree() or sprite.texture == null or sprite.modulate.a <= 0.0 or sprite.self_modulate.a <= 0.0:
@@ -154,9 +162,16 @@ func _contains(entry: Dictionary, pointer: Vector2) -> bool:
 func _in_front(candidate: Dictionary, current: Dictionary) -> bool:
 	var a := (candidate.owner as WeakRef).get_ref() as Node2D
 	var b := (current.owner as WeakRef).get_ref() as Node2D
+	if a is HangingSourceBody: a = a.body
+	if b is HangingSourceBody: b = b.body
 	var za := _effective_z(a)
 	var zb := _effective_z(b)
 	if za != zb: return za > zb
+	# Hanging bodies render outside the rail's Y sort. Match their real
+	# top-level draw order without changing their physics or parentage.
+	if a.is_set_as_top_level() or b.is_set_as_top_level():
+		if a.is_set_as_top_level() != b.is_set_as_top_level(): return a.is_set_as_top_level()
+		return a.is_greater_than(b)
 	if a.is_ancestor_of(b): return false
 	if b.is_ancestor_of(a): return true
 	var common := a.get_parent()
@@ -218,7 +233,7 @@ func _update_materials(owner_node: Node2D, utility: bool) -> void:
 	var pivot := owner_node.get_global_transform_with_canvas().origin
 	var radio := owner_node.name == &"RadioStation"
 	var pop := utility_pop_scale if utility else item_pop_scale
-	if owner_node is Stove or owner_node is StoveDial or owner_node is TrayStation or radio: pop = 1.0
+	if owner_node is Stove or owner_node is StoveDial or owner_node is TrayStation or owner_node is HangingSourceBody or radio: pop = 1.0
 	# A small settling wiggle responds to entering the radio, without moving
 	# its real transform, anchors or hit silhouette.
 	var envelope := 1.0 - _hover_elapsed / 1.2
