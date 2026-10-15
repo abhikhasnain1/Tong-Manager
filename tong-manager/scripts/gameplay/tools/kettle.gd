@@ -325,6 +325,9 @@ func update_held_pour(pour_pressed: bool) -> void:
 		_pour_requires_release = false
 	if not is_held or controller == null:
 		return
+	if controller.is_move_drag():
+		stop_pour()
+		return
 	var cup := _held_cup_target()
 	if not pour_pressed or cup != pour_target:
 		stop_pour()
@@ -345,17 +348,20 @@ func _position_grip_at(viewport_position: Vector2) -> void:
 func _on_drag_moved(payload: HeldItemPayload, viewport_position: Vector2) -> void:
 	if payload.world_node == self and is_held:
 		# Keep a stable aiming pose so starting/stopping flow never shifts the spout.
-		rotation = HELD_TILT
+		rotation = 0.0 if bool(payload.metadata.get("kettle_move", false)) else HELD_TILT
 		_position_grip_at(viewport_position)
 
-func begin_drag(viewport_position: Vector2) -> bool:
-	if controller == null or controller.current_mode != InteractionController.MODE_INTERACT or not controller.can_start_world_action():
+func begin_drag(viewport_position: Vector2, move_only := false) -> bool:
+	var intended_mode := InteractionController.MODE_ORGANIZE if move_only else InteractionController.MODE_INTERACT
+	if controller == null or controller.current_mode != intended_mode or not controller.can_start_world_action():
+		return false
+	if move_only and not controller.direct_mouse_gestures:
 		return false
 	if controller.is_dragging() or controller.has_active_action() or is_pouring:
 		return false
 	_remember_origin()
 	is_held = true
-	var payload := HeldItemPayload.new(&"workstation", &"kettle", 1, self, {"category": &"kettle"})
+	var payload := HeldItemPayload.new(&"workstation", &"kettle", 1, self, {"category": &"kettle", "kettle_move": move_only})
 	if controller.start_drag(payload, self, viewport_position):
 		return true
 	is_held = false
@@ -455,8 +461,9 @@ func _changed() -> void:
 	contents_changed.emit()
 
 func _on_input(_viewport: Node, event: InputEvent, _shape_index: int) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		if begin_drag(event.position):
+	if event is InputEventMouseButton and event.pressed:
+		var moving: bool = controller != null and controller.direct_mouse_gestures and event.button_index == MOUSE_BUTTON_RIGHT
+		if (moving or event.button_index == MOUSE_BUTTON_LEFT) and begin_drag(event.position, moving):
 			get_viewport().set_input_as_handled()
 
 func _on_hover(entered: bool) -> void:
@@ -465,7 +472,8 @@ func _on_hover(entered: bool) -> void:
 		var actionable := entered and controller.current_mode == InteractionController.MODE_INTERACT and controller.can_start_world_action()
 		get_node("/root/CursorService").set_state(&"hover_actionable" if actionable else &"default")
 		if actionable:
-			controller.report_hint("Use · drag kettle by handle · hold Space to pour · drop on Discard to empty")
+			controller.report_hint("Left drag + Space to pour · right drag to move between burners" if controller.direct_mouse_gestures
+				else "Use · drag kettle by handle · hold Space to pour · drop on Discard to empty")
 
 func _on_drag_canceled(payload: HeldItemPayload) -> void:
 	if payload.world_node == self:

@@ -7,6 +7,7 @@ signal return_changed(order_id: StringName)
 signal cup_returned(order_id: StringName, cup: Cup)
 
 @export var config: CupReturnConfig = preload("res://data/balance/cup_returns.tres")
+@export var return_badges_enabled := false
 const RETRY_SECONDS := 0.4
 
 var screen: Node2D
@@ -57,6 +58,12 @@ func register_accepted_cup(receipt: Dictionary, actor: Customer, cup: Cup) -> bo
 		"retry_remaining": 0.0, "basis": basis, "last_position": basis.origin,
 		"started_frame": Engine.get_process_frames(), "origin": Vector2.ZERO}
 	_entries[order_id] = entry
+	if return_badges_enabled:
+		var badge := CupReturnBadge.new()
+		badge.name = "ReturnBadge_" + String(order_id)
+		badge.hide()
+		_display.add_child(badge)
+		entry.badge = badge
 	cup.reparent(_display, true)
 	cup.input_pickable = false
 	cup.process_mode = Node.PROCESS_MODE_DISABLED
@@ -89,8 +96,10 @@ func _advance(delta: float, automatic: bool) -> void:
 		var cup: Variant = entry.cup.get_ref()
 		if not _live(cup) or not screen.is_ancestor_of(cup):
 			entry.phase = &"missing"
+			_sync_badge(entry, null)
 			continue
 		if transfers.is_transferring(cup):
+			_sync_badge(entry, cup)
 			# The collection clock stays live; only automatic custody transfer is
 			# deferred while the player's gesture owns the cup.
 			entry.attention_remaining = maxf(0.0, entry.attention_remaining - delta)
@@ -112,6 +121,7 @@ func _advance(delta: float, automatic: bool) -> void:
 				entry.phase = &"missing"
 				continue
 			cup.show()
+			_sync_badge(entry, cup)
 			var actor: Variant = _actor(entry)
 			if _live(actor): actor.show_cup_return(true)
 			return_changed.emit(order_id)
@@ -159,7 +169,11 @@ func begin_return(order_id: StringName, viewport_point: Vector2) -> bool:
 		or controller.current_mode != InteractionController.MODE_INTERACT or not controller.can_start_world_action()
 		or controller.is_pointer_over_ui_at(viewport_point)):
 		return false
-	return transfers.begin_transfer(cup, viewport_point, self, _validate_return.bind(order_id), _commit_return.bind(order_id))
+	var self_ref: WeakRef = weakref(self)
+	var started: bool = transfers.begin_transfer(cup, viewport_point, self, _validate_return.bind(order_id), _commit_return.bind(order_id))
+	if self_ref.get_ref() != null and _context_live() and _entries.has(order_id):
+		_sync_badge(_entries[order_id], cup)
+	return started
 
 
 func _validate_return(cup: Cup, order_id: StringName) -> bool:
@@ -181,6 +195,7 @@ func _commit_return(cup: Cup, order_id: StringName) -> void:
 	# Authorize the immutable receipt now; money and departure publish later.
 	service.authorize_returned_cup(self, order_id, cup, entry.origin)
 	_finish_return.call_deferred(order_id)
+	_sync_badge(entry, cup)
 
 
 func _finish_return(order_id: StringName) -> void:
@@ -218,6 +233,16 @@ func _position_entry(entry: Dictionary, cup: Cup) -> void:
 	transform.origin = _world.to_global(entry.last_position)
 	cup.global_transform = transform
 	entry.origin = cup.get_global_transform_with_canvas().origin
+	_sync_badge(entry, cup)
+
+
+func _sync_badge(entry: Dictionary, cup: Cup) -> void:
+	var badge := entry.get("badge") as CupReturnBadge
+	if not is_instance_valid(badge): return
+	var show_badge: bool = (_live(cup) and cup.visible and entry.phase in [&"attention", &"waiting_for_space"]
+		and not transfers.is_transferring(cup))
+	if show_badge: badge.configure(cup)
+	badge.visible = show_badge
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -229,12 +254,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		if cup == null or not cup.is_visible_in_tree(): continue
 		var actor: Variant = _actor(_entries[order_id])
 		if front != null and front != actor: continue
+		var badge := _entries[order_id].get("badge") as CupReturnBadge
 		var sprite := cup.get_node("Sprite2D") as Sprite2D
 		var transform := sprite.get_global_transform_with_canvas()
 		if not transform.is_finite() or is_zero_approx(transform.determinant()): continue
-		if not sprite.get_rect().has_point(transform.affine_inverse() * event.position): continue
+		if is_instance_valid(badge):
+			if not badge.contains_pointer(event.position) or service.is_stall_occluding(event.position): continue
+		elif not sprite.get_rect().has_point(transform.affine_inverse() * event.position): continue
 		# The front counter/hanging items also own input before the offered cup.
-		if _live(actor) and front != actor: continue
+		if _live(actor) and (not actor.is_visible_in_tree() or (badge == null and front != actor)): continue
 		if begin_return(order_id, event.position):
 			get_viewport().set_input_as_handled()
 			return

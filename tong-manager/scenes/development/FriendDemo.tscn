@@ -1,0 +1,13 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/gameplay/tong/TongDayScreen.tscn" id="1"]
+[ext_resource type="Script" path="res://scripts/development/friend_demo.gd" id="2"]
+[ext_resource type="Resource" path="res://data/examples/customer_days/cup_reuse_review.tres" id="3"]
+
+[node name="FriendDemo" instance=ExtResource("1")]
+script = ExtResource("2")
+day_config = ExtResource("3")
+customer_queue_auto_start = true
+
+[node name="InteractionController" parent="." index="0"]
+direct_mouse_gestures = true

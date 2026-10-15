@@ -25,6 +25,7 @@ const FORWARDED_ACTIONS: Array[StringName] = [INPUT_ROTATE_ITEM, INPUT_POUR, INP
 
 @export_node_path("Node2D") var drag_layer_path: NodePath
 @export_node_path("Node2D") var drop_zone_root_path: NodePath
+@export var direct_mouse_gestures := false
 
 @onready var drag_layer := get_node_or_null(drag_layer_path) as Node2D
 @onready var drop_zone_root := get_node_or_null(drop_zone_root_path) as Node2D
@@ -49,6 +50,35 @@ var _modal_export_targets: Array[DropZone] = []
 var _modal_export_ignored_ui: Array[Control] = []
 var _active_drag_layer: Node2D
 var _starting_modal_export := false
+var _direct_press_button := 0
+var _drag_button := MOUSE_BUTTON_LEFT
+var _direct_mode_change := false
+
+
+func configure_direct_mouse_gestures(enabled: bool) -> void:
+	cancel_world_action()
+	direct_mouse_gestures = enabled
+	_direct_press_button = 0
+	if enabled:
+		_set_direct_mode(MODE_INTERACT)
+
+
+func is_move_drag() -> bool:
+	return direct_mouse_gestures and is_dragging() and _drag_button == MOUSE_BUTTON_RIGHT
+
+
+func _set_direct_mode(mode: StringName) -> void:
+	_direct_mode_change = true
+	set_mode(mode)
+	_direct_mode_change = false
+
+
+func _restore_direct_idle() -> void:
+	if not direct_mouse_gestures or _direct_mode_change or current_mode == MODE_INTERACT:
+		return
+	current_mode = MODE_INTERACT
+	_report_mode_hint()
+	mode_changed.emit(current_mode)
 
 
 func report_hint(text: String) -> void:
@@ -158,6 +188,12 @@ func can_address_drop_zone(payload: HeldItemPayload, zone: DropZone) -> bool:
 		return false
 	if _modal_export_payload != null:
 		return is_modal_export_active() and payload == _modal_export_payload and _modal_export_targets.has(zone) and zone.is_visible_in_tree()
+	if is_move_drag():
+		# Moving an object cannot also serve it, discard its contents or pour.
+		if payload.metadata.get("category") == &"table_placeable":
+			return zone is TablePlacementDropZone and not is_world_input_blocked()
+		return (bool(payload.metadata.get("kettle_move", false)) and zone is BrewingDropZone
+			and not zone.is_cup_target and not is_world_input_blocked())
 	return current_mode != MODE_NEUTRAL and not is_world_input_blocked()
 
 
@@ -259,6 +295,7 @@ func cancel_world_action() -> void:
 	Input.action_release(INPUT_POUR)
 	if is_instance_valid(cursor_service):
 		cursor_service.reset()
+	_restore_direct_idle()
 
 func has_active_action() -> bool:
 	return is_instance_valid(action_owner)
@@ -288,12 +325,18 @@ func _enter_tree() -> void:
 	_resolving_drag = false
 	_queued_mode = &""
 	_was_world_blocked = false
+	_direct_press_button = 0
+	if direct_mouse_gestures:
+		current_mode = MODE_INTERACT
 
 
 func _ready() -> void:
 	assert(drag_layer != null, "InteractionController requires a DragLayer reference.")
 	assert(drop_zone_root != null, "InteractionController requires a DropZoneRoot reference.")
 	get_viewport().size_changed.connect(_on_export_viewport_resized)
+	if direct_mouse_gestures:
+		_set_direct_mode(MODE_INTERACT)
+		_report_mode_hint()
 
 
 func _on_export_viewport_resized() -> void:
@@ -310,11 +353,19 @@ func _exit_tree() -> void:
 	_dispose_transient_drag()
 	_clear_drag_state()
 	Input.action_release(INPUT_POUR)
+	_direct_press_button = 0
 	if is_instance_valid(cursor_service):
 		cursor_service.reset()
 
 
 func _input(event: InputEvent) -> void:
+	if direct_mouse_gestures:
+		if event.is_action_pressed(INPUT_ORGANIZE_TOGGLE) or event.is_action_pressed(INPUT_USE_TOGGLE):
+			get_viewport().set_input_as_handled()
+			return
+		if event is InputEventMouseButton and _handle_direct_mouse_button(event):
+			get_viewport().set_input_as_handled()
+			return
 	# Cancellation and mode switches must work even when a GUI control has focus.
 	if (is_dragging() or has_active_action()) and event.is_action_pressed(INPUT_CANCEL):
 		cancel_world_action()
@@ -323,7 +374,7 @@ func _input(event: InputEvent) -> void:
 		return
 	# Gameplay owns both edges of Space during a drag, before focused GUI buttons.
 	if (is_dragging() or has_active_action()) and event.is_action(INPUT_POUR):
-		if _modal_export_payload == null and event.is_action_pressed(INPUT_POUR):
+		if _modal_export_payload == null and not is_move_drag() and event.is_action_pressed(INPUT_POUR):
 			action_requested.emit(INPUT_POUR)
 		get_viewport().set_input_as_handled()
 		return
@@ -334,19 +385,57 @@ func _input(event: InputEvent) -> void:
 			update_drag(event.position)
 			# Let GUI hover tracking see motion; release still belongs to this drag.
 			# Otherwise gui_get_hovered_control retains the control from pickup.
-		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		elif event is InputEventMouseButton and event.button_index == _drag_button and not event.pressed:
 			var viewport := get_viewport()
 			release_drop(event.position)
 			if is_instance_valid(viewport): viewport.set_input_as_handled()
 
 
+func _handle_direct_mouse_button(event: InputEventMouseButton) -> bool:
+	if event.button_index not in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT]:
+		return false
+	if event.pressed:
+		if _resolving_drag:
+			return true
+		if is_dragging() or has_active_action():
+			var owned_button: int = _drag_button if is_dragging() else MOUSE_BUTTON_LEFT
+			return event.button_index != owned_button
+		# Esc can finish an action before its mouse button is released. Do not
+		# reinterpret the second button as a fresh gesture during that press.
+		if _direct_press_button != 0:
+			return true
+		if event.button_index == MOUSE_BUTTON_RIGHT:
+			if is_world_input_blocked() or is_pointer_over_ui_at(event.position):
+				return false
+			_direct_press_button = MOUSE_BUTTON_RIGHT
+			_set_direct_mode(MODE_ORGANIZE)
+		else:
+			_direct_press_button = MOUSE_BUTTON_LEFT
+			_set_direct_mode(MODE_INTERACT)
+		return false
+	if is_dragging() and event.button_index != _drag_button:
+		return true
+	if event.button_index == _direct_press_button:
+		_direct_press_button = 0
+		if not is_dragging():
+			_restore_direct_idle()
+	return false
+
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT and is_node_ready():
 		cancel_world_action()
+		_direct_press_button = 0
 		_report_mode_hint()
 
 
 func _process(_delta: float) -> void:
+	# A modal may consume a release before it reaches this node's input hook.
+	# Forget that completed press without resolving a drag at an invented point.
+	if direct_mouse_gestures and _direct_press_button != 0 and not Input.is_mouse_button_pressed(_direct_press_button):
+		_direct_press_button = 0
+		if not is_dragging() and not has_active_action():
+			_restore_direct_idle()
 	var blocked := is_world_input_blocked()
 	var valid_export := _modal_export_payload != null and _drag_input_allowed()
 	if blocked and not valid_export and (not _was_world_blocked or has_active_action() or current_payload != null):
@@ -366,6 +455,9 @@ func _process(_delta: float) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if is_world_input_blocked():
+		return
+	if direct_mouse_gestures and (event.is_action_pressed(INPUT_ORGANIZE_TOGGLE) or event.is_action_pressed(INPUT_USE_TOGGLE)):
+		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed(INPUT_ORGANIZE_TOGGLE):
 		toggle_mode()
@@ -393,7 +485,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion:
 		update_drag(event.position)
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+	elif event is InputEventMouseButton and event.button_index == _drag_button and not event.pressed:
 		var viewport := get_viewport()
 		release_drop(event.position)
 		if is_instance_valid(viewport): viewport.set_input_as_handled()
@@ -429,6 +521,7 @@ func start_drag(payload: HeldItemPayload, drag_node: Node2D, viewport_position: 
 
 func _start_drag_in_layer(payload: HeldItemPayload, drag_node: Node2D, viewport_position: Vector2, layer: Node2D) -> void:
 
+	_drag_button = MOUSE_BUTTON_RIGHT if direct_mouse_gestures and _direct_press_button == MOUSE_BUTTON_RIGHT and _modal_export_payload == null else MOUSE_BUTTON_LEFT
 	current_payload = payload
 	current_drag_node = drag_node
 	_active_drag_layer = layer
@@ -575,6 +668,10 @@ func release_drop(viewport_position: Vector2) -> void:
 
 func _finish_drag_resolution() -> void:
 	_resolving_drag = false
+	if direct_mouse_gestures:
+		_queued_mode = &""
+		_restore_direct_idle()
+		return
 	if not _queued_mode.is_empty():
 		var mode := _queued_mode
 		_queued_mode = &""
@@ -586,12 +683,16 @@ func toggle_mode() -> void:
 
 
 func select_mode(mode: StringName) -> void:
+	if direct_mouse_gestures:
+		return
 	if not is_world_input_blocked():
 		set_mode(MODE_NEUTRAL if current_mode == mode else mode)
 
 
 func set_mode(mode: StringName) -> void:
 	assert(mode in [MODE_NEUTRAL, MODE_INTERACT, MODE_ORGANIZE], "Unsupported interaction mode: %s" % mode)
+	if direct_mouse_gestures and not _direct_mode_change:
+		mode = MODE_INTERACT
 	if _resolving_drag:
 		_queued_mode = mode
 		return
@@ -604,7 +705,9 @@ func set_mode(mode: StringName) -> void:
 
 
 func _report_mode_hint() -> void:
-	if current_mode == MODE_NEUTRAL:
+	if direct_mouse_gestures:
+		report_hint("Left click or drag to use · right drag to move · Esc cancels")
+	elif current_mode == MODE_NEUTRAL:
 		report_hint("Neutral · select Organize or Use")
 	elif current_mode == MODE_ORGANIZE:
 		report_hint("Organize · drag whole objects · select again for Neutral")
@@ -655,6 +758,8 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 	var best_invalid: DropZone
 	var best_invalid_distance := INF
 	var cup_placement: DropZone
+	var owner_ref: WeakRef = weakref(self)
+	var selection_payload := current_payload
 
 	for zone in _get_available_drop_zones():
 		if not is_instance_valid(zone) or not zone.is_inside_tree() or zone.is_queued_for_deletion():
@@ -662,6 +767,11 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 		if not can_address_drop_zone(current_payload, zone):
 			continue
 		if not zone.is_relevant_to(current_payload):
+			continue
+		var pointer_allowed := zone.allows_pointer(selection_payload, viewport_position)
+		if owner_ref.get_ref() == null or not is_inside_tree() or current_payload != selection_payload:
+			return
+		if not pointer_allowed or not is_instance_valid(zone) or not zone.is_inside_tree() or zone.is_queued_for_deletion():
 			continue
 		# Returning cups can be parked in Use, but a deliberate station drop
 		# (including a full bucket) takes precedence over surface placement.
@@ -780,6 +890,7 @@ func _clear_drag_state() -> void:
 	_drag_start_pointer = Vector2.ZERO
 	_drag_start_position = Vector2.ZERO
 	_active_drag_layer = null
+	_drag_button = MOUSE_BUTTON_LEFT
 	_modal_export_owner = null
 	_modal_export_payload = null
 	_modal_export_targets.clear()

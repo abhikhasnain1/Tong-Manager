@@ -161,7 +161,8 @@ func commit(payload: HeldItemPayload) -> bool:
 
 
 func _on_input_event(_viewport: Node, event: InputEvent, _shape: int) -> void:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+	var move_button := MOUSE_BUTTON_RIGHT if is_instance_valid(controller) and controller.direct_mouse_gestures else MOUSE_BUTTON_LEFT
+	if event is InputEventMouseButton and event.button_index == move_button and event.pressed:
 		if _is_frontmost_at(event.position) and begin_drag(event.position):
 			get_viewport().set_input_as_handled()
 

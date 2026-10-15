@@ -27,7 +27,7 @@ func _draw() -> void:
 	var right := page_index % 2 == 1
 	var titles := [["Pantry", "Ready to serve"], ["Recipes", "Preparation notes"],
 		["Day's accounts", "The ledger"], ["Requests", "Notes to keep"]]
-	draw_string(_font, Vector2(44, 55), "TONG KHATA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, SOFT_INK)
+	draw_string(_font, Vector2(44, 55), "KHATA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, SOFT_INK)
 	draw_string(_title_font, Vector2(44, 108), titles[section][1 if right else 0], HORIZONTAL_ALIGNMENT_LEFT, -1, 29, INK)
 	draw_line(Vector2(44, 137), Vector2(436, 137), Color(0.38, 0.29, 0.20, 0.28), 1)
 	if section == 0:

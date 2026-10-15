@@ -262,41 +262,27 @@ func _draw() -> void:
 	draw_rect(Rect2(0, 0, 480, 660), Color("f0e4c8"))
 	if paper != null:
 		draw_texture_rect(paper, Rect2(0, 0, 480, 660), false)
-	draw_string(_font, Vector2(44, 55), "TONG KHATA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, SOFT_INK)
-	draw_string(_title_font, Vector2(44, 108), "Pantry" if page_index == 1 else "Pantry notes", HORIZONTAL_ALIGNMENT_LEFT, -1, 29, INK)
+	if page_index != 1:
+		return
+	draw_string(_font, Vector2(44, 55), "KHATA", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, SOFT_INK)
+	draw_string(_title_font, Vector2(44, 108), "Pantry", HORIZONTAL_ALIGNMENT_LEFT, -1, 29, INK)
 	draw_line(Vector2(44, 137), Vector2(436, 137), Color(0.38, 0.29, 0.20, 0.28), 1)
-	if page_index == 1:
-		draw_string(_font, Vector2(46, 157), "In stock", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, SOFT_INK)
-		draw_string(_font, Vector2(260, 157), "One portion per grab", HORIZONTAL_ALIGNMENT_RIGHT, 158, 14, SOFT_INK)
-		var hint := ""
-		if _slots.has(_hovered_item):
-			var slot: KhataItemSlot = _slots[_hovered_item]
-			hint = String(slot.display_snapshot().status)
-			if hint.is_empty():
-				hint = "%s · 1 %s" % [slot.item_label, slot.unit]
-		draw_string(_font, Vector2(46, 535), hint, HORIZONTAL_ALIGNMENT_LEFT, 374, 16, SOFT_INK)
-		if page_count > 1:
-			for direction: int in [-1, 1]:
-				var rect := navigation_rect(direction)
-				var enabled: bool = _interaction_enabled and item_page_index + direction >= 0 and item_page_index + direction < page_count
-				var ink := INK if enabled else Color(SOFT_INK, 0.4)
-				var center := rect.get_center()
-				var arrow := PackedVector2Array([center + Vector2(-direction * 5, -9), center + Vector2(direction * 5, 0), center + Vector2(-direction * 5, 9)])
-				draw_polyline(arrow, ink, 2, true)
-			draw_string(_font, Vector2(328, 574), "%d / %d" % [item_page_index + 1, page_count], HORIZONTAL_ALIGNMENT_CENTER, 48, 14, SOFT_INK)
-	else:
-		draw_string(_title_font, Vector2(47, 185), "A portion at a time.", HORIZONTAL_ALIGNMENT_LEFT, 380, 23, SOFT_INK)
-		var units := ["one teabag", "one spoonful", "one piece"]
-		var unit_ids := [&"teabag", &"spoonful", &"piece"]
-		for index in range(3):
-			var labels: Array[String] = []
-			for item in _items:
-				if item.unit == unit_ids[index]: labels.append(item.get_portion_label())
-			var label := "No items" if labels.is_empty() else labels[0]
-			if labels.size() == 2: label += " & " + labels[1].to_lower()
-			elif labels.size() > 2: label += " + %d more" % (labels.size() - 1)
-			var y := 260.0 + index * 91.0
-			draw_string(_title_font, Vector2(48, y), label, HORIZONTAL_ALIGNMENT_LEFT, 380, 21, INK)
-			draw_string(_font, Vector2(48, y + 28), units[index], HORIZONTAL_ALIGNMENT_LEFT, 380, 16, SOFT_INK)
-		draw_string(_title_font, Vector2(48, 550), "The same pantry, in either view.", HORIZONTAL_ALIGNMENT_LEFT, 380, 17, SOFT_INK)
+	draw_string(_font, Vector2(46, 157), "In stock", HORIZONTAL_ALIGNMENT_LEFT, -1, 15, SOFT_INK)
+	draw_string(_font, Vector2(260, 157), "One portion per grab", HORIZONTAL_ALIGNMENT_RIGHT, 158, 14, SOFT_INK)
+	var hint := ""
+	if _slots.has(_hovered_item):
+		var slot: KhataItemSlot = _slots[_hovered_item]
+		hint = String(slot.display_snapshot().status)
+		if hint.is_empty():
+			hint = "%s · 1 %s" % [slot.item_label, slot.unit]
+	draw_string(_font, Vector2(46, 535), hint, HORIZONTAL_ALIGNMENT_LEFT, 374, 16, SOFT_INK)
+	if page_count > 1:
+		for direction: int in [-1, 1]:
+			var rect := navigation_rect(direction)
+			var enabled: bool = _interaction_enabled and item_page_index + direction >= 0 and item_page_index + direction < page_count
+			var ink := INK if enabled else Color(SOFT_INK, 0.4)
+			var center := rect.get_center()
+			var arrow := PackedVector2Array([center + Vector2(-direction * 5, -9), center + Vector2(direction * 5, 0), center + Vector2(-direction * 5, 9)])
+			draw_polyline(arrow, ink, 2, true)
+		draw_string(_font, Vector2(328, 574), "%d / %d" % [item_page_index + 1, page_count], HORIZONTAL_ALIGNMENT_CENTER, 48, 14, SOFT_INK)
 	draw_string(_font, Vector2(220, 615), str(page_index + 1), HORIZONTAL_ALIGNMENT_CENTER, 40, 16, SOFT_INK)
