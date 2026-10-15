@@ -43,6 +43,7 @@ var volume_ml := 0.0
 var liquid_type: StringName = &""
 var temperature := 20.0
 var controller: InteractionController
+var returning_to_surface := false
 var _hovered := false
 var _inherited_ingredient_amounts: Dictionary[StringName, float] = {}
 var _brew_batches: Array[Dictionary] = []
@@ -59,7 +60,7 @@ var _water_contents_texture: GradientTexture2D
 
 func can_receive_liquid(kind: StringName) -> bool:
 	return (
-		not kind.is_empty() and state in [CupState.CLEAN, CupState.IN_USE, CupState.FILLED]
+		not returning_to_surface and not kind.is_empty() and state in [CupState.CLEAN, CupState.IN_USE, CupState.FILLED]
 		and is_finite(volume_ml) and is_finite(capacity_ml) and is_finite(temperature)
 		and volume_ml >= 0.0 and capacity_ml > 0.0
 		and volume_ml < capacity_ml - 0.0001
@@ -133,7 +134,7 @@ func get_service_snapshot() -> Dictionary:
 
 func commit_served(order_id: StringName) -> bool:
 	# The handoff command stages all authorities before publishing any signals.
-	if (not is_inside_tree() or is_queued_for_deletion() or not OrderRequestDef.valid_identity(order_id)
+	if (returning_to_surface or not is_inside_tree() or is_queued_for_deletion() or not OrderRequestDef.valid_identity(order_id)
 		or state not in [CupState.CLEAN, CupState.IN_USE, CupState.FILLED]
 		or not assigned_order_id.is_empty() or not is_finite(volume_ml) or volume_ml < 0.0):
 		return false
@@ -277,7 +278,7 @@ func begin_interaction_drag(viewport_position: Vector2) -> bool:
 
 
 func _can_interact() -> bool:
-	if (not is_inside_tree() or is_queued_for_deletion()
+	if (returning_to_surface or not is_inside_tree() or is_queued_for_deletion()
 		or not is_instance_valid(controller) or not controller.is_inside_tree() or controller.is_queued_for_deletion()
 		or controller.current_mode != InteractionController.MODE_INTERACT
 		or not controller.can_start_world_action()
@@ -301,7 +302,8 @@ func _on_hover(entered: bool) -> void:
 	if _can_interact():
 		get_node("/root/CursorService").set_state(&"hover_actionable" if entered else &"default")
 		if entered:
-			controller.report_hint("Use · drag cup to serve or discard · Organize to rearrange")
+			controller.report_hint("Use · drag dirty cup to wash bucket · Organize to rearrange" if state == CupState.DIRTY
+				else "Use · drag cup to serve or discard · Organize to rearrange")
 
 
 func _refresh_hover(_mode: StringName) -> void:
@@ -394,7 +396,7 @@ func get_ingredient_stage() -> StringName:
 func can_apply_ingredient(item_id: StringName, quantity: int, effect: StringName, output_liquid_id: StringName = &"") -> bool:
 	# The selected policy owns lifecycle permission, including any deliberate
 	# served/dirty exception. It cannot bypass physical contents validation.
-	return (is_inside_tree() and not is_queued_for_deletion() and not item_id.is_empty()
+	return (not returning_to_surface and is_inside_tree() and not is_queued_for_deletion() and not item_id.is_empty()
 		and quantity > 0 and effect == &"mix" and output_liquid_id.is_empty()
 		and get_ingredient_stage() != &"invalid" and is_finite(volume_ml)
 		and is_finite(capacity_ml) and is_finite(temperature) and capacity_ml > 0.0
@@ -429,6 +431,25 @@ func mark_served() -> bool:
 
 func mark_dirty() -> bool:
 	return set_state(CupState.DIRTY)
+
+
+func finish_consumption() -> bool:
+	# Consumption preserves cup/order identity. Washing alone clears its dirty
+	# lifecycle; this transition never refunds stock or records another serving.
+	if not is_inside_tree() or is_queued_for_deletion() or state != CupState.SERVED:
+		return false
+	_remember_state_change()
+	volume_ml = 0.0
+	liquid_type = &""
+	contents_base_id = &""
+	relish_item_ids.clear()
+	_inherited_ingredient_amounts.clear()
+	_brew_batches.clear()
+	_brew_history_complete = true
+	temperature = config.ambient_temperature
+	state = CupState.DIRTY
+	notify_contents_changed()
+	return true
 
 
 func reset_clean() -> void:

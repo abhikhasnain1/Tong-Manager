@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="BucketConfig" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/bucket_config.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+capacity = 6
+wash_seconds = 2.4
+first_output_fraction = 0.2
+output_travel_seconds = 0.35

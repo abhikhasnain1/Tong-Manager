@@ -97,7 +97,7 @@ func _on_hover(entered: bool) -> void:
 		var actionable := entered and controller.can_start_world_action() and controller.current_mode == InteractionController.MODE_INTERACT and supply.remaining_ml > 0.0
 		get_node("/root/CursorService").set_state(&"hover_actionable" if actionable else &"default")
 		if actionable:
-			controller.report_hint("Use · drag water drum to kettle to fill")
+			controller.report_hint("Use · drag water jug to kettle to fill")
 
 
 func _refresh_hover(_mode: StringName) -> void:

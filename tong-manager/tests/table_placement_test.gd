@@ -116,7 +116,9 @@ func run() -> void:
 	check(surface.is_registered(tray) and tray.get_cup_count() == 6, "Populated tray begins registered with existing supply")
 	check(tray.get_node_or_null("InternalGrid") == null and tray.get_node_or_null("InteriorSurface") is PlacementSurface, "Tray retains a continuous interior instead of legacy slots")
 	check(not surface.is_registered(preview.kettle), "Kettle retains special burner seating, not table parking")
-	check(not surface.is_registered(screen.get_node("WorldRoot/ToolLayer/WaterDrum")), "Water remains a utility source, not an ordinary placeable")
+	var water_utility := screen.get_node("WorldRoot/ToolLayer/WaterDrum")
+	check(surface.is_registered(water_utility) and water_utility.get_node_or_null("PlacementHandle") == null,
+		"Fixed water utility reserves its occupied base without gaining ordinary Organize placement")
 	controller.set_mode(InteractionController.MODE_ORGANIZE)
 	var tea := handles[0]
 	var tea_start := world.to_local(tea.item.global_position)

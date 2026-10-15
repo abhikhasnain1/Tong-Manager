@@ -11,6 +11,7 @@ func setup() -> void:
 	await super.setup()
 	finance = root.get_node("GameState").finance
 	payments = screen.customer_payments
+	screen.cup_returns.set_process(false)
 	cues.clear()
 	sounds.clear()
 	watch_feedback()
@@ -21,6 +22,20 @@ func setup() -> void:
 func watch_feedback() -> void:
 	screen.payment_feedback.feedback_started.connect(func(id: StringName): cues.append(id))
 	screen.payment_feedback.sound_requested.connect(func(id: StringName): sounds.append(id))
+
+
+func return_drink(order: OrderState, cup: Cup) -> void:
+	var before := finance.get_snapshot()
+	var receipt: Dictionary = service.get_records().back()
+	check(service.get_served_cup(order.order_id) == cup and not service.is_payment_due(receipt), "Accepted drink retains the actual cup and defers payment")
+	check(not payments.enqueue_accepted(service, receipt, Vector2.ZERO), "Direct enqueue cannot bypass the cup-return gate")
+	var config: CupReturnConfig = screen.cup_returns.config
+	screen.cup_returns.advance(config.safe_drinking_seconds())
+	check(cup.state == Cup.CupState.DIRTY and not cup.has_contents(), "Drinking empties and dirties the same cup")
+	check(finance.get_snapshot() == before, "Offering a dirty cup does not pay before custody is returned")
+	screen.cup_returns.advance(config.safe_attention_seconds())
+	await frames()
+	check(screen.get_cups().has(cup) and service.get_served_cup(order.order_id) == null, "Timer returns the same dirty cup to a valid free surface")
 
 
 func assert_payment(order: OrderState, before: int, expected_bad: bool) -> Dictionary:
@@ -48,6 +63,7 @@ func correct_and_replays() -> void:
 	fill(cup)
 	await take_cup(cup)
 	await release_at(actor)
+	await return_drink(order, cup)
 	var transaction := await assert_payment(order, 100, false)
 	var receipt := service.get_records()[0]
 	var original := finance.get_snapshot()
@@ -63,7 +79,7 @@ func correct_and_replays() -> void:
 	check(not payments.enqueue_accepted(service, edited, Vector2.ZERO), "Rewritten handoff identity is not accepted")
 	await frames()
 	check(finance.get_snapshot() == original and cues.size() == 1 and sounds.size() == 2, "Signal replay and conflicting receipts change neither money nor cues")
-	check(not screen.get_cups().has(cup) and service.get_served_cup(order.order_id) == cup, "Payment preserves the accepted cup custody")
+	check(screen.get_cups().has(cup) and cup.state == Cup.CupState.DIRTY, "Payment preserves the returned cup identity and dirty state")
 	await capture("01-paid-tea")
 
 
@@ -78,6 +94,7 @@ func accepted_mistakes() -> void:
 		fill(cup, sample[0], sample[1], sample[2], sample[3])
 		await take_cup(cup)
 		await release_at(actor)
+		await return_drink(order, cup)
 		await assert_payment(order, 100, true)
 		check(finance.day_expenses == 0 and finance.transaction_log.size() == 1, "Poor quality has no invented fine or refund")
 	await capture("02-cold-paid")

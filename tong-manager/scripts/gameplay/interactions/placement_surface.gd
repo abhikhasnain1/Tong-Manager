@@ -13,6 +13,7 @@ const TRANSFORM_EPSILON := 0.000000000001
 # Weak identity plus copied geometry prevents stale instance IDs and caller edits
 # from changing reservations. A drag leaves its old committed polygons occupied.
 var _items: Dictionary = {}
+var _vacated_positions := PackedVector2Array()
 
 
 func get_placement_parent() -> Node2D:
@@ -73,6 +74,7 @@ func commit_item(item: Node2D) -> bool:
 	# Revalidate at commit; an invalid move never releases the prior reservation.
 	if not validate_item(item).is_valid:
 		return false
+	_remember_vacancy(_items[item.get_instance_id()]["committed"])
 	_items[item.get_instance_id()]["committed"] = get_candidate_polygons(item)
 	return true
 
@@ -80,7 +82,24 @@ func commit_item(item: Node2D) -> bool:
 func unregister_item(item: Node2D) -> void:
 	_purge_invalid_items()
 	if _has_identity(item):
+		_remember_vacancy(_items[item.get_instance_id()]["committed"])
 		_items.erase(item.get_instance_id())
+
+
+func get_vacated_positions() -> PackedVector2Array:
+	return _vacated_positions.duplicate()
+
+
+func _remember_vacancy(polygons: Array[PackedVector2Array]) -> void:
+	# A just-freed cup position may fit exactly between neighbours. Keep its
+	# continuous coordinates so automatic returns need not hit a sampled grid.
+	for polygon in polygons:
+		if polygon.is_empty(): continue
+		var center := Vector2.ZERO
+		for point in polygon: center += point
+		center /= polygon.size()
+		_vacated_positions.append(center)
+	while _vacated_positions.size() > 64: _vacated_positions.remove_at(0)
 
 
 func get_candidate_polygons(item: Node2D) -> Array[PackedVector2Array]:
@@ -95,6 +114,25 @@ func get_committed_polygons(item: Node2D) -> Array[PackedVector2Array]:
 	if not _has_identity(item):
 		return []
 	return _copy_polygons(_items[item.get_instance_id()]["committed"])
+
+
+func get_free_regions() -> Array[PackedVector2Array]:
+	# Broad-phase search regions only; every returned position still uses the
+	# exact footprint validator, including any hole contours from clipping.
+	_purge_invalid_items()
+	var regions: Array[PackedVector2Array] = [usable_polygon.duplicate()]
+	var blockers: Array[PackedVector2Array] = []
+	var exclusions := get_node_or_null("Exclusions")
+	if exclusions != null and not _collect_exclusions(exclusions, blockers): return []
+	for record: Dictionary in _items.values():
+		blockers.append_array(_copy_polygons(record.committed))
+	for blocker in blockers:
+		var next: Array[PackedVector2Array] = []
+		for region in regions:
+			next.append_array(Geometry2D.clip_polygons(region, blocker))
+		regions = next
+		if regions.is_empty(): break
+	return regions
 
 
 func _validate_candidates(item: Node2D, candidates: Array[PackedVector2Array]) -> DropValidation:

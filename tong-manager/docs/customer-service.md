@@ -11,7 +11,7 @@ Open `scenes/development/CustomerHandoffPreview.tscn` and press **F6**. Its auth
 
 The kettle can now pour any non-empty liquid state. Ingredient placement still follows the selected ingredient policy: the default teabag goes in the boiling kettle, and sugar/milk go in cups. This change does not add cup steeping, mixing different liquids, or refilling brewed tea with water.
 
-Both refusals restore the same filled cup to its previous position. Contents, ingredients and brew history remain; there is no refund, emptying or automatic washing. A refused untouched banana/biscuit releases its reservation without consuming stock. Each new drag is a new attempt; repeating the old command cannot return or consume twice. Immediate refusal is separate from the held dirty-return/washing flow.
+Both refusals restore the same filled cup to its previous position. Contents, ingredients and brew history remain; there is no refund, emptying or automatic washing. A refused untouched banana/biscuit releases its reservation without consuming stock. Each new drag is a new attempt; repeating the old command cannot return or consume twice. Immediate refusal is separate from the accepted-drink dirty-return/washing flow.
 
 The review's **Restart this schedule** restarts customers only. Supplies, prepared contents, served cups and money remain as they are. Recreating the scene reconstructs scene-local cups/kettle/service history, as before; shared stock, water and finance keep their existing run behavior. Stopping and restarting the process begins a new run. This is not save/load persistence.
 
@@ -21,7 +21,7 @@ The review's **Restart this schedule** restarts customers only. Supplies, prepar
 - Preparation permissions remain in the selected `IngredientPolicy`; see [Ingredient rules](ingredient-rules.md).
 - Brewing and cold thresholds remain in `BrewingConfig`. Cold is assessed at release using the cup's current temperature.
 - Arrival spacing, requested orders and patience remain in `CustomerSchedule`; see [Customer days](customer-days.md). The review schedule is `data/examples/customer_days/service_review.tres`.
-- `CustomerQueueManager.served_reaction_seconds` controls the short reaction before departure.
+- `CustomerQueueManager.served_reaction_seconds` controls the short reaction before snack departure. Accepted drinks use the drinking and collection timings in `CupReturnConfig`, then depart after the cup is returned.
 - Customer profiles expose **Unhappy Response** (Accept, Refuse Leave, Refuse Retry) and **Remake Patience** (Continue or Reset). Authored arrival entries can override either; **Inherit (-1)** uses the profile. Continue keeps remaining time; Reset restores the visit allowance after a new retry refusal. Khata pauses neither. See [Inspector steps](payments.md#set-a-customers-response-in-the-inspector).
 - `CustomerQueueManager.refused_reaction_seconds` controls Refuse Leave's brief reaction before departure (default 0.25 seconds).
 
@@ -33,8 +33,8 @@ At pour time, cups retain each distinct contributing brew state, batch infusion 
 
 Accepted ready servings use `IngredientPortion.commit()`; refused ready portions only release the reservation. Cup ingredients were consumed during preparation, so serving or returning does not debit or refund them. The order/result and cup ownership are committed before presentation callbacks. Duplicate attempts cannot fulfil, return or consume twice.
 
-A served cup moves into the screen-owned `CustomerService/ServedCups` holder. It retains its object identity, contents and assigned order; its table footprint and interaction targets are released. Customer departure, queue restart and detaching/re-adding the same screen preserve it. Dirty return and washing remain separate work.
+A served cup enters screen-owned custody, releasing its table footprint and interaction targets. After drinking, that same cup becomes empty and dirty and appears beside the customer for collection. A valid table/tray/bucket return releases the customer and authorizes payment. If automatic return finds no space, the customer keeps waiting. Queue restart and detaching/re-adding the same screen preserve cup identity; destroying the screen retains the existing scene-local reset boundary. See [Cup reuse](cup-reuse.md) for the full loop and editable timings.
 
-`CustomerService.service_resolved(record)` publishes each real response once after input cleanup; `service_accepted(record)` additionally publishes accepted fulfillment only. `get_records()` returns copied attempt records containing handoff/order/customer IDs, the saved request, its quote, result and served/returned cup identity. The run-owned `CustomerPayments` receives only payable accepted receipts before presentation callbacks and credits once. See [Automatic payment](payments.md) for its ledger, cue, reset boundary and review scene.
+`CustomerService.service_resolved(record)` publishes each real response once after input cleanup; `service_accepted(record)` additionally publishes accepted fulfillment only. `get_records()` returns copied attempt records containing handoff/order/customer IDs, the saved request, its quote, result and served/returned cup identity. The run-owned `CustomerPayments` receives accepted snack receipts immediately and accepted cup receipts after dirty return, before payment presentation callbacks, and credits once. See [Automatic payment](payments.md) for its ledger, cue, reset boundary and review scene.
 
 The older `CustomerScenePreview` uses labelled synthetic presentation tokens and historical rejection samples. Use `CustomerHandoffPreview` to test the current production serving policy.

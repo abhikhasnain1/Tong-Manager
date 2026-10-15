@@ -141,5 +141,6 @@ constructor above remains available to isolated component fixtures.
 Automatic payment consumes the committed service receipt through the shared run
 ledger; see [Automatic payment](payments.md). The isolated order-data preview
 still never changes cash. Day-end feedback (#73), the Khata Finance page (#74),
-review aggregation and preference dialogue remain separate. Bucket and dirty-cup
-return remain on hold.
+review aggregation and preference dialogue remain separate. Accepted cup servings
+now pay after dirty return; snacks pay on acceptance. See [Cup reuse](cup-reuse.md)
+for collection, batch washing and progressive automatic return to tray/table space.

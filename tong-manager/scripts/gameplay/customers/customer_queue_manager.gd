@@ -162,6 +162,9 @@ func _advance(delta: float, automatic: bool) -> void:
 		if entry.phase == &"waiting":
 			_consume_recorded_responses(entry, automatic)
 			if entry.order.closed:
+				if entry.get("awaiting_cup_return", false):
+					entry.phase = &"cup_return"
+					continue
 				var accepted: bool = entry.order.fulfilled
 				entry.reason = &"fulfilled" if accepted else &"refused"
 				entry.phase = &"served_reaction" if accepted else &"refused_reaction"
@@ -232,6 +235,25 @@ func get_order_for_customer(customer: Variant) -> OrderState:
 	for entry: Dictionary in _active.values():
 		if entry.actor == customer and _actor_live(customer): return entry.order
 	return null
+
+
+func hold_for_cup_return(order_id: StringName) -> bool:
+	for entry: Dictionary in _active.values():
+		if entry.order.order_id != order_id or not entry.order.fulfilled: continue
+		entry.awaiting_cup_return = true
+		entry.phase = &"cup_return"
+		entry.reason = &"fulfilled"
+		return true
+	return false
+
+
+func complete_cup_return(order_id: StringName) -> bool:
+	for entry: Dictionary in _active.values():
+		if entry.order.order_id != order_id or not entry.get("awaiting_cup_return", false): continue
+		entry.awaiting_cup_return = false
+		if _actor_live(entry.actor): _begin_departure(entry)
+		return true
+	return false
 
 
 func _spawn_due(epoch: int) -> void:

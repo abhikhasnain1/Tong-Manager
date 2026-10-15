@@ -654,6 +654,7 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 	var best_valid_distance := INF
 	var best_invalid: DropZone
 	var best_invalid_distance := INF
+	var cup_placement: DropZone
 
 	for zone in _get_available_drop_zones():
 		if not is_instance_valid(zone) or not zone.is_inside_tree() or zone.is_queued_for_deletion():
@@ -661,6 +662,11 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 		if not can_address_drop_zone(current_payload, zone):
 			continue
 		if not zone.is_relevant_to(current_payload):
+			continue
+		# Returning cups can be parked in Use, but a deliberate station drop
+		# (including a full bucket) takes precedence over surface placement.
+		if zone is CupTransferDropZone:
+			cup_placement = zone
 			continue
 		var zone_viewport_position := zone.get_global_transform_with_canvas().origin
 		var zone_belongs_to_drag_node := (
@@ -682,6 +688,7 @@ func _update_hovered_drop_zone(viewport_position: Vector2) -> void:
 			best_invalid_distance = distance
 
 	var next_zone := best_valid if best_valid != null else best_invalid
+	if next_zone == null: next_zone = cup_placement
 	# A portion aimed at an unavailable target must not jump to a valid neighbour.
 	if (is_portion_drag()
 		and best_invalid != null and best_invalid_distance <= best_valid_distance):
@@ -741,6 +748,10 @@ func restore_drag_origin() -> void:
 func _restore_drag_origin() -> void:
 	if not is_instance_valid(current_drag_node):
 		return
+	if current_payload != null:
+		var transfers: Variant = current_payload.metadata.get("cup_transfer")
+		if transfers is CupTransfer and is_instance_valid(transfers) and transfers.restore_transfer_origin(current_payload):
+			return
 	if is_instance_valid(_drag_origin_parent):
 		if current_drag_node.get_parent() != _drag_origin_parent:
 			current_drag_node.reparent(_drag_origin_parent, false)

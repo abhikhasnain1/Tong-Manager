@@ -1,0 +1,83 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/tools/bucket_station.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/art/toolkit/bucket_clean_provisional.png" id="2"]
+[ext_resource type="Texture2D" path="res://assets/art/toolkit/cup_clean_provisional.png" id="3"]
+[ext_resource type="Resource" path="res://data/balance/bucket_config.tres" id="4"]
+
+[sub_resource type="CircleShape2D" id="CleanShape"]
+radius = 22.0
+
+[node name="BucketStation" type="Node2D"]
+script = ExtResource("1")
+config = ExtResource("4")
+
+[node name="Sprite" type="Sprite2D" parent="."]
+scale = Vector2(0.22, 0.22)
+texture = ExtResource("2")
+
+[node name="Body" type="Area2D" parent="."]
+
+[node name="CollisionPolygon2D" type="CollisionPolygon2D" parent="Body"]
+polygon = PackedVector2Array(-63, -52, -44, -66, 0, -72, 44, -66, 63, -52, 71, -31, 53, 44, 32, 66, 0, 73, -32, 66, -53, 44, -71, -31)
+
+[node name="Cups" type="Node2D" parent="."]
+visible = false
+
+[node name="Counts" type="Label" parent="."]
+offset_left = -73.0
+offset_top = -48.0
+offset_right = 73.0
+offset_bottom = -26.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.96, 0.94, 0.84, 1)
+theme_override_colors/font_outline_color = Color(0.16, 0.19, 0.16, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 14
+text = "0 dirty · 0 clean"
+horizontal_alignment = 1
+
+[node name="Progress" type="Node2D" parent="."]
+position = Vector2(0, 11)
+
+[node name="CleanPickup" type="Area2D" parent="."]
+visible = false
+position = Vector2(29, 7)
+z_index = 1
+input_pickable = false
+
+[node name="Icon" type="Sprite2D" parent="CleanPickup"]
+scale = Vector2(0.075, 0.075)
+texture = ExtResource("3")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="CleanPickup"]
+shape = SubResource("CleanShape")
+
+[node name="Label" type="Label" parent="CleanPickup"]
+offset_left = -38.0
+offset_top = 20.0
+offset_right = 38.0
+offset_bottom = 37.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.96, 0.94, 0.84, 1)
+theme_override_colors/font_outline_color = Color(0.16, 0.19, 0.16, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 12
+text = ""
+horizontal_alignment = 1
+
+[node name="Hint" type="Label" parent="."]
+offset_left = -76.0
+offset_top = 51.0
+offset_right = 76.0
+offset_bottom = 72.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.96, 0.94, 0.84, 1)
+theme_override_colors/font_outline_color = Color(0.16, 0.19, 0.16, 1)
+theme_override_constants/outline_size = 4
+theme_override_font_sizes/font_size = 13
+text = "Drop dirty cups"
+horizontal_alignment = 1
+
+[node name="InteractionAnchor" type="Marker2D" parent="." groups=["critical_interaction_anchor"]]
+position = Vector2(0, -25)

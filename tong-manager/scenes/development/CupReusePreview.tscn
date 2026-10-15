@@ -1,0 +1,15 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/development/customer_queue_preview.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/gameplay/tong/TongDayScreen.tscn" id="2"]
+[ext_resource type="Resource" path="res://data/examples/customer_days/cup_reuse_review.tres" id="3"]
+
+[node name="CupReusePreview" type="Node"]
+script = ExtResource("1")
+initial_day = 5
+show_finance_review = true
+show_cup_reuse_review = true
+
+[node name="TongDayScreen" parent="." instance=ExtResource("2")]
+day_config = ExtResource("3")
+customer_queue_auto_start = false

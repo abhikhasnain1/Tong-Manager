@@ -487,6 +487,30 @@ godot --path tong-manager --script res://tests/customer_queue_preview_test.gd
 The existing `CustomerScenePreview` remains an isolated presentation fixture
 with its queue explicitly disabled.
 
+## Cup return and washing
+
+Open `scenes/development/CupReusePreview.tscn` and press F6. Its eight drink
+requests require reuse of the six initial cups. In Use, serve, collect the
+offered dirty cup, drop it into the bucket, hold to wash, and drag the clean
+cup back to clear table/tray space. Check cancellation at each transfer,
+partial wash/resume, a full bucket, and automatic dirty return after waiting.
+Drinks pay on dirty return; accepted snacks pay immediately. Full table/tray
+space makes the customer keep the cup without another penalty. Khata does not
+pause either timer. See `docs/cup-reuse.md` for editable timings and boundaries.
+
+```text
+godot --headless --path tong-manager --script res://tests/bucket_station_test.gd
+godot --headless --path tong-manager --script res://tests/customer_cup_return_test.gd
+godot --headless --path tong-manager --script res://tests/cup_reuse_integration_test.gd
+godot --headless --path tong-manager --script res://tests/customer_payment_test.gd
+```
+
+The integration suite uses real custody, geometry, controller and payment code;
+prepared liquid is an explicit Cup fixture. The focused return suite uses a
+labelled transfer double to isolate timers and ledger binding. Rendered pointer
+and visual review supplements these deterministic checks. This slice adds no
+save/load: destroying the whole scene reconstructs scene-local vessels as before.
+
 ## Live customer order cues
 
 Use the same `CustomerQueuePreview.tscn` review scene. Across its two authored
