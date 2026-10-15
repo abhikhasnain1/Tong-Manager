@@ -8,11 +8,13 @@ const FIXED_TARGETS := [
 	"WorldRoot/ToolLayer/StoveStation/DialA", "WorldRoot/ToolLayer/StoveStation/DialB",
 	"WorldRoot/ToolLayer/BucketStation", "WorldRoot/ToolLayer/WaterDrum",
 	"WorldRoot/DropZoneRoot/DiscardArea", "WorldRoot/ToolLayer/KhataStation/KhataHotspot",
+	"WorldRoot/ToolLayer/RadioStation",
 ]
 
 @export_range(1.0, 1.15, 0.005) var item_pop_scale := 1.04
 @export_range(1.0, 1.2, 0.005) var utility_pop_scale := 1.08
 @export_range(1.0, 5.0, 0.25) var stroke_pixels := 2.5
+@export_range(0.0, 4.0, 0.1) var radio_wiggle_degrees := 2.0
 
 var _screen: WeakRef
 var _controller: WeakRef
@@ -22,6 +24,7 @@ var _applied: Array[Dictionary] = []
 var _lifted: Dictionary = {}
 var _focused := true
 var _refresh_elapsed := 0.0
+var _hover_elapsed := 0.0
 
 
 func configure(screen: Node2D) -> void:
@@ -102,7 +105,9 @@ func update_feedback(delta: float, viewport_pointer := Vector2.INF) -> void:
 		if next != null:
 			_hovered = weakref(next)
 			_apply(selected)
-	if next != null: _update_materials(next, bool(selected.utility))
+	if next != null:
+		_hover_elapsed = minf(_hover_elapsed + maxf(delta, 0.0), 1.2)
+		_update_materials(next, bool(selected.utility))
 
 
 func _add_target(owner_node: Node2D, utility: bool, handle: TablePlaceable = null) -> void:
@@ -211,6 +216,13 @@ func _apply(entry: Dictionary) -> void:
 
 func _update_materials(owner_node: Node2D, utility: bool) -> void:
 	var pivot := owner_node.get_global_transform_with_canvas().origin
+	var radio := owner_node.name == &"RadioStation"
+	var pop := utility_pop_scale if utility else item_pop_scale
+	if owner_node is Stove or owner_node is StoveDial or owner_node is TrayStation or radio: pop = 1.0
+	# A small settling wiggle responds to entering the radio, without moving
+	# its real transform, anchors or hit silhouette.
+	var envelope := 1.0 - _hover_elapsed / 1.2
+	var tilt := sin(_hover_elapsed * TAU * 1.4) * deg_to_rad(radio_wiggle_degrees) * envelope * envelope if radio else 0.0
 	for entry in _applied:
 		var sprite := (entry.sprite as WeakRef).get_ref() as Sprite2D
 		if not _live(sprite): continue
@@ -218,7 +230,8 @@ func _update_materials(owner_node: Node2D, utility: bool) -> void:
 		if is_zero_approx(projection.determinant()): continue
 		var material: ShaderMaterial = entry.material
 		material.set_shader_parameter("pop_pivot", projection.affine_inverse() * pivot)
-		material.set_shader_parameter("pop_scale", utility_pop_scale if utility else item_pop_scale)
+		material.set_shader_parameter("pop_scale", pop)
+		material.set_shader_parameter("hover_tilt", tilt)
 		material.set_shader_parameter("outline_texels", Vector2(stroke_pixels / maxf(projection.x.length(), 0.001),
 			stroke_pixels / maxf(projection.y.length(), 0.001)))
 
@@ -236,6 +249,7 @@ func _clear_feedback() -> void:
 	_lifted.clear()
 	_applied.clear()
 	_hovered = null
+	_hover_elapsed = 0.0
 
 
 func _notification(what: int) -> void:
