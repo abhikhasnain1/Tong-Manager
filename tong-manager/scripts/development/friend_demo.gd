@@ -4,8 +4,14 @@ extends "res://scripts/gameplay/tong/tong_day_screen.gd"
 const WATER_ART: Texture2D = preload("res://assets/art/toolkit/water_jar_drawn.png")
 const BASKET_ART: Texture2D = preload("res://assets/art/toolkit/wastebasket_drawn.png")
 
+@export var utility_edge_margin := Vector2(16, 16)
+@export_range(0.05, 0.3, 0.01) var khata_edge_crop_fraction := 0.12
+
 var hover_feedback: DemoHoverFeedback
 var presentation: FriendDemoPresentation
+var _utility_items: Array[Dictionary] = []
+var _utility_bases: Array[Dictionary] = []
+var _dock_ready := false
 
 
 func _ready() -> void:
@@ -16,7 +22,6 @@ func _ready() -> void:
 	_hide_station_copy($WorldRoot/ToolLayer)
 	_hide_station_copy($WorldRoot/DropZoneRoot)
 	super._ready()
-	_register_notebook_base()
 	presentation = FriendDemoPresentation.new()
 	presentation.name = "DemoPresentation"
 	add_child(presentation)
@@ -29,6 +34,58 @@ func _ready() -> void:
 		zone.pointer_gate = _utility_pointer_allowed.bind(bucket)
 	var waste := $WorldRoot/DropZoneRoot/DiscardArea as DiscardDropZone
 	waste.pointer_gate = _utility_pointer_allowed.bind(waste)
+	_dock_ready = true
+	_anchor_utilities()
+
+
+func _fit_authored_world() -> void:
+	# Cancel and restore any held water bottle before changing its home.
+	super._fit_authored_world()
+	if _dock_ready: _anchor_utilities()
+
+
+func _anchor_utilities() -> void:
+	var bounds := Rect2()
+	var first := true
+	for item in _utility_items:
+		if item.owner == $WorldRoot/ToolLayer/KhataStation: continue
+		var owner_node: Node2D = item.owner
+		var sprite: Sprite2D = item.sprite
+		var rect := sprite.get_rect()
+		for corner in [rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)]:
+			var relative: Vector2 = world_root.to_local(sprite.to_global(corner)) - owner_node.position
+			var point: Vector2 = item.home + relative * hover_feedback.utility_pop_scale
+			if first:
+				bounds = Rect2(point, Vector2.ZERO)
+				first = false
+			else: bounds = bounds.expand(point)
+	var viewport_corner := get_viewport_rect().end - utility_edge_margin
+	var corner_in_world := world_root.get_global_transform_with_canvas().affine_inverse() * viewport_corner
+	var offset := corner_in_world - bounds.end
+	for item in _utility_items:
+		(item.owner as Node2D).position = item.home + offset
+	_anchor_closed_khata()
+	$WorldRoot/DropZoneRoot/BucketDropZoneAnchor.position = bucket.position + Vector2(0, -25)
+	$WorldRoot/StatusBadgeAnchors/BucketStatus.position = bucket.position + Vector2(0, -75)
+	_sync_utility_bases()
+
+
+func _anchor_closed_khata() -> void:
+	# Tuck actual painted cover pixels beyond the edge, not its transparent
+	# texture padding. The utility dock is independent of movable table items.
+	var notebook := $WorldRoot/ToolLayer/KhataStation as Node2D
+	var cover := notebook.get_node("KhataHotspot/Sprite") as Sprite2D
+	var painted := Rect2(cover.texture.get_image().get_used_rect())
+	if cover.region_enabled:
+		painted = painted.intersection(cover.region_rect)
+		painted.position -= cover.region_rect.position
+	painted.position += cover.get_rect().position
+	var canvas := cover.get_global_transform_with_canvas()
+	var left := canvas * painted.position
+	var right := canvas * painted.end
+	var target_right := get_viewport_rect().end.x + (right.x - left.x) * khata_edge_crop_fraction
+	var inverse := world_root.get_global_transform_with_canvas().affine_inverse()
+	notebook.position += inverse * Vector2(target_right, right.y) - inverse * right
 
 
 func _input(event: InputEvent) -> void:
@@ -43,8 +100,8 @@ func _input(event: InputEvent) -> void:
 
 func _layout_utilities() -> void:
 	var water := $WorldRoot/ToolLayer/WaterDrum as Node2D
-	# Upright silhouettes form a shallow fan beneath the notebook. Keep the
-	# hover pop inside the 16:10 crop, with separate physical tabletop bases.
+	# These authored positions define the fan's relative spacing. Its actual
+	# home is fitted to the visible screen edge after the world is laid out.
 	water.position = Vector2(1748, 932)
 	water.scale = Vector2.ONE * 1.2
 	_set_utility_layer(water, 80)
@@ -68,6 +125,9 @@ func _layout_utilities() -> void:
 	shape.size = Vector2(75, 208)
 	(hotspot.get_node("CollisionShape2D") as CollisionShape2D).shape = shape
 	(hotspot.get_node("InteractionAnchor") as Node2D).position = Vector2(-25, 0)
+	for entry in [[water, water.get_node("Icon")], [waste, waste.get_node("Basket")],
+		[washing, washing.get_node("Sprite")], [notebook, hotspot.get_node("Sprite")]]:
+		_utility_items.append({"owner": entry[0], "sprite": entry[1], "home": entry[0].position})
 
 
 func _utility_pointer_allowed(_payload: HeldItemPayload, point: Vector2, utility: Node2D) -> bool:
@@ -94,11 +154,31 @@ func _hide_station_copy(node: Node) -> void:
 	for child in node.get_children(): _hide_station_copy(child)
 
 
-func _register_notebook_base() -> void:
-	var notebook := $WorldRoot/ToolLayer/KhataStation/KhataHotspot as Area2D
-	var footprint := PackedVector2Array()
-	for index in 24:
-		var angle := TAU * index / 24.0
-		footprint.append(Vector2(0, 98) + Vector2(cos(angle), sin(angle)) * Vector2(33, 6))
-	var registered := table_surface.register_item(notebook, [footprint])
-	assert(registered, "Notebook base must fit clear tabletop")
+func _register_station_bases() -> void:
+	# Screen-anchored bases are live exclusions, not cached item reservations.
+	# Relayout frees the previous home without moving or losing placed cups.
+	var definitions := [
+		[bucket, Vector2(0, 45), Vector2(57, 17)],
+		[$WorldRoot/ToolLayer/WaterDrum, Vector2(0, 61), Vector2(36, 8)],
+		[$WorldRoot/DropZoneRoot/DiscardArea, Vector2(0, 61), Vector2(45, 12)],
+		[$WorldRoot/ToolLayer/KhataStation/KhataHotspot, Vector2(0, 98), Vector2(33, 6)],
+	]
+	for definition in definitions:
+		var footprint := PackedVector2Array()
+		for index in 24:
+			var angle := TAU * index / 24.0
+			footprint.append(definition[1] + Vector2(cos(angle), sin(angle)) * definition[2])
+		var shape := Polygon2D.new()
+		shape.name = String(definition[0].name) + "DockBase"
+		shape.polygon = footprint
+		shape.hide()
+		table_surface.get_node("Exclusions").add_child(shape)
+		_utility_bases.append({"owner": definition[0], "shape": shape})
+	_sync_utility_bases()
+
+
+func _sync_utility_bases() -> void:
+	# Only relayout updates these homes: a dragged bottle keeps its resting
+	# footprint reserved until it returns, just like the other fixed utilities.
+	for entry in _utility_bases:
+		(entry.shape as Polygon2D).global_transform = (entry.owner as Node2D).global_transform

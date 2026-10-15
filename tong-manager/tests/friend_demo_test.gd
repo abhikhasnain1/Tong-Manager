@@ -121,9 +121,11 @@ func native_direct_gestures() -> void:
 	var basket: DiscardDropZone = screen.get_node("WorldRoot/DropZoneRoot/DiscardArea")
 	var bottle_shape: CollisionPolygon2D = screen.get_node("WorldRoot/ToolLayer/WaterDrum/CollisionPolygon2D")
 	var overlap := Vector2.INF
-	for y in range(930, 986, 2):
-		for x in range(1704, 1724, 2):
-			var candidate: Vector2 = screen.world_root.get_global_transform_with_canvas() * Vector2(x, y)
+	var bottle_bounds := Rect2(bottle_shape.polygon[0], Vector2.ZERO)
+	for vertex in bottle_shape.polygon: bottle_bounds = bottle_bounds.expand(vertex)
+	for y in range(ceili(bottle_bounds.position.y), floori(bottle_bounds.end.y), 2):
+		for x in range(ceili(bottle_bounds.position.x), floori(bottle_bounds.end.x), 2):
+			var candidate: Vector2 = bottle_shape.get_global_transform_with_canvas() * Vector2(x, y)
 			if screen.hover_feedback.get_utility_at(candidate) == basket and Geometry2D.is_point_in_polygon(
 				bottle_shape.get_global_transform_with_canvas().affine_inverse() * candidate, bottle_shape.polygon):
 				overlap = candidate
@@ -184,7 +186,7 @@ func native_direct_gestures() -> void:
 func overlapping_utilities() -> void:
 	await fixture()
 	var cups: Array[Cup] = screen.get_cups().slice(0, 2)
-	var overlap: Vector2 = screen.world_root.get_global_transform_with_canvas() * Vector2(1650, 977)
+	var overlap: Vector2 = bucket.get_global_transform_with_canvas() * Vector2(50, -18)
 	var waste: DiscardDropZone = screen.get_node("WorldRoot/DropZoneRoot/DiscardArea")
 	var waste_scale := waste.get_global_transform_with_canvas().get_scale()
 	check(bucket.contains_pointer(overlap) and overlap.distance_to(waste.get_global_transform_with_canvas().origin)
