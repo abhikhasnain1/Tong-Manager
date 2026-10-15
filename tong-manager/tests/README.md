@@ -491,12 +491,17 @@ with its queue explicitly disabled.
 
 Open `scenes/development/CupReusePreview.tscn` and press F6. Its eight drink
 requests require reuse of the six initial cups. In Use, serve, collect the
-offered dirty cup, drop it into the bucket, hold to wash, and drag the clean
-cup back to clear table/tray space. Check cancellation at each transfer,
-partial wash/resume, a full bucket, and automatic dirty return after waiting.
+offered dirty cup, drop it into the bucket, and hold to wash the captured batch.
+Clean cups return automatically to free tray space first, then table space;
+when both are full, they wait safely in the bucket until space opens. Check
+cancellation at each transfer, partial batch wash/resume, late deposits, a full
+bucket, and automatic dirty return after waiting.
 Drinks pay on dirty return; accepted snacks pay immediately. Full table/tray
 space makes the customer keep the cup without another penalty. Khata does not
 pause either timer. See `docs/cup-reuse.md` for editable timings and boundaries.
+
+The normal F5 entry point opens the accepted friend demo. Use left-click/drag
+for interactions and right-click/drag for rearrangement; no mode panel is needed.
 
 ```text
 godot --headless --path tong-manager --script res://tests/bucket_station_test.gd
